@@ -1,0 +1,12 @@
+# Dépendances cœur — toutes disponibles dans le wheelhouse Alliance Canada.
+torch>=2.1
+torchvision
+numpy
+pillow
+scipy         # métriques d'évaluation (SCDD_eval de référence)
+
+# Kernels Mamba : OPTIONNELS. Le modèle tourne sans eux (backend='ref', PyTorch
+# pur, CPU). Ne pas les mettre en dépendance dure : ils exigent une compilation
+# CUDA et leur présence dans le wheelhouse Alliance n'est pas garantie.
+#   mamba-ssm
+#   causal-conv1d

@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Dépôts de référence clonés localement (cf. scripts/setup_third_party.sh)
+third_party/
+
+# Poids pré-entraînés téléchargés (cf. scripts/download_pretrained.sh)
+pretrained_weight/
+
+# Sorties d'entraînement
+runs/
+logs/
+*.pt
+*.pth
