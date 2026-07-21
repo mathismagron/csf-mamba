@@ -1,0 +1,11 @@
+[project]
+name = "csf-mamba"
+version = "0.0.1"
+description = "Change-aware Spatio-Frequency Mamba pour la détection sémantique de changements"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+include = ["csf_mamba*"]
+
+[tool.ruff]
+line-length = 100
