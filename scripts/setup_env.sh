@@ -44,6 +44,13 @@ pip install --no-index numpy pillow scipy einops timm fvcore triton
 # Kernel fusionné mamba_ssm pour notre C²S² (torch déjà en 2.5.1 -> pas d'upgrade).
 pip install --no-index mamba_ssm causal_conv1d
 
+# mamba_ssm/__init__.py importe des modèles LM (MambaLMHeadModel -> transformers)
+# qu'on n'utilise PAS et qui cassent avec transformers récent
+# (GreedySearchDecoderOnlyOutput supprimé). On neutralise ces imports : importer
+# n'importe quel sous-module exécute __init__.py, donc ce patch est nécessaire.
+MAMBA_INIT="$VENV/lib/python3.11/site-packages/mamba_ssm/__init__.py"
+sed -i '/^from mamba_ssm\.models/s/^/# /' "$MAMBA_INIT"
+
 # Kernel CUDA selective_scan du backbone VMamba, compilé EN DERNIER (contre le
 # torch définitif). En CUDA 12 les symboles CUB existent : compile tel quel.
 echo "== compilation du kernel selective_scan (peut prendre plusieurs minutes) =="

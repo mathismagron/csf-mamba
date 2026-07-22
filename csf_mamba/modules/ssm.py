@@ -21,10 +21,7 @@ from torch import nn
 
 def mamba_ssm_available() -> bool:
     try:
-        # Import direct du sous-module : le `mamba_ssm/__init__.py` tire un modèle
-        # LM + transformers (souvent cassé par une version transformers récente).
-        # On ne veut que la classe Mamba, donc on court-circuite l'__init__.
-        from mamba_ssm.modules.mamba_simple import Mamba  # noqa: F401
+        from mamba_ssm import Mamba  # noqa: F401
     except Exception:
         return False
     return True
@@ -96,7 +93,7 @@ class SSMScan(nn.Module):
         use_kernel = backend == "mamba" or (backend == "auto" and mamba_ssm_available())
         if use_kernel:
             try:
-                from mamba_ssm.modules.mamba_simple import Mamba
+                from mamba_ssm import Mamba
             except ImportError as exc:
                 raise ImportError(
                     "backend='mamba' demandé mais mamba_ssm est introuvable. "
