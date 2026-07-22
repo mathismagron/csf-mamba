@@ -12,6 +12,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from csf_mamba.datasets.hi_ucd import NUM_SEMANTIC_CLASSES, HiUCDDataset
+from csf_mamba.datasets.transforms import train_transform
 from csf_mamba.evaluation.metrics import SCDEvaluator, SCDMetrics
 from csf_mamba.losses.composite import CSFMambaLoss
 from csf_mamba.model import CSFMamba, count_parameters
@@ -31,16 +32,22 @@ def parse_args():
     p.add_argument("--limit-batches", type=int, default=None,
                    help="Plafonne le nb de batches train/val par époque (run de test).")
     p.add_argument("--batch-size", type=int, default=8)
+    p.add_argument("--crop-size", type=int, default=256,
+                   help="Crop d'entraînement (256 = rapide). 0 = pleine résolution 512.")
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--output", default="runs/dev")
+    p.add_argument("--resume", default="auto",
+                   help="'auto' reprend last.pt de --output ; un chemin ; '' pour repartir de zéro.")
     return p.parse_args()
 
 
 def build_dataset(args, split):
-    if args.dataset == "hi_ucd":
-        return HiUCDDataset(args.data_root, split=split)
-    raise ValueError(args.dataset)
+    if args.dataset != "hi_ucd":
+        raise ValueError(args.dataset)
+    # Crop + augmentation à l'entraînement ; validation en pleine résolution.
+    transform = train_transform(args.crop_size) if split == "train" else None
+    return HiUCDDataset(args.data_root, split=split, transform=transform)
 
 
 def main():
@@ -72,8 +79,21 @@ def main():
         shuffle=False, num_workers=4, pin_memory=True,
     )
 
-    best_sek = -1.0
-    for epoch in range(args.epochs):
+    out_dir = Path(args.output)
+    best_sek, start_epoch = -1.0, 0
+    # Reprise : --resume auto -> reprend last.pt du même --output si présent.
+    resume_path = out_dir / "last.pt" if args.resume == "auto" else (
+        Path(args.resume) if args.resume else None
+    )
+    if resume_path and resume_path.exists():
+        ckpt = torch.load(resume_path, map_location=device)
+        model.load_state_dict(ckpt["model"])
+        optimizer.load_state_dict(ckpt["optimizer"])
+        start_epoch = ckpt["epoch"] + 1
+        best_sek = ckpt["best_sek"]
+        print(f"Reprise depuis {resume_path} : époque {start_epoch}, best SeK {best_sek:.4f}")
+
+    for epoch in range(start_epoch, args.epochs):
         model.train()
         for step, batch in enumerate(train_loader):
             if args.limit_batches is not None and step >= args.limit_batches:
@@ -94,11 +114,17 @@ def main():
         print(f"[val] epoch {epoch} | SeK {metrics.sek:.4f} Fscd {metrics.fscd:.4f} "
               f"mIoU {metrics.miou:.4f} OA {metrics.oa:.4f} kappa {metrics.kappa:.4f}")
 
-        torch.save(model.state_dict(), Path(args.output) / f"epoch_{epoch}.pt")
+        # Checkpoint complet (reprise possible) écrasé à chaque époque.
+        ckpt = {
+            "model": model.state_dict(), "optimizer": optimizer.state_dict(),
+            "epoch": epoch, "best_sek": best_sek,
+        }
         if metrics.sek > best_sek:
             best_sek = metrics.sek
-            torch.save(model.state_dict(), Path(args.output) / "best.pt")
+            ckpt["best_sek"] = best_sek
+            torch.save(model.state_dict(), out_dir / "best.pt")
             print(f"  -> nouveau meilleur SeK {best_sek:.4f}, sauvé dans best.pt")
+        torch.save(ckpt, out_dir / "last.pt")
 
 
 def _targets_from_batch(batch: dict) -> dict:
