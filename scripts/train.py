@@ -28,13 +28,19 @@ def parse_args():
     p.add_argument("--core", default="chess", choices=["chess", "l1"])
     p.add_argument("--backend", default="auto", choices=["auto", "mamba", "ref"])
     p.add_argument("--val-split", default="val")
-    p.add_argument("--epochs", type=int, default=50)
+    p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--limit-batches", type=int, default=None,
                    help="Plafonne le nb de batches train/val par époque (run de test).")
     p.add_argument("--batch-size", type=int, default=8)
     p.add_argument("--crop-size", type=int, default=256,
                    help="Crop d'entraînement (256 = rapide). 0 = pleine résolution 512.")
     p.add_argument("--lr", type=float, default=1e-4)
+    p.add_argument("--min-lr", type=float, default=1e-6, help="Plancher de la décroissance cosine.")
+    p.add_argument("--warmup-iters", type=int, default=1500, help="Montée linéaire du LR.")
+    p.add_argument("--sek-warmup-iters", type=int, default=20000,
+                   help="Itérations avant d'activer la loss SeK (la sémantique apprend d'abord).")
+    p.add_argument("--amp", action="store_true", default=True, help="Precision mixte bf16 (défaut).")
+    p.add_argument("--no-amp", dest="amp", action="store_false")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--output", default="runs/dev")
     p.add_argument("--resume", default="auto",
@@ -79,8 +85,13 @@ def main():
         shuffle=False, num_workers=4, pin_memory=True,
     )
 
+    steps_per_epoch = args.limit_batches or len(train_loader)
+    total_iters = args.epochs * steps_per_epoch
+    scheduler = _warmup_cosine(optimizer, args.warmup_iters, total_iters, args.lr, args.min_lr)
+    use_amp = args.amp and device == "cuda"
+
     out_dir = Path(args.output)
-    best_sek, start_epoch = -1.0, 0
+    best_sek, start_epoch, global_step = -1.0, 0, 0
     # Reprise : --resume auto -> reprend last.pt du même --output si présent.
     resume_path = out_dir / "last.pt" if args.resume == "auto" else (
         Path(args.resume) if args.resume else None
@@ -89,9 +100,12 @@ def main():
         ckpt = torch.load(resume_path, map_location=device)
         model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optimizer"])
+        scheduler.load_state_dict(ckpt["scheduler"])
         start_epoch = ckpt["epoch"] + 1
         best_sek = ckpt["best_sek"]
-        print(f"Reprise depuis {resume_path} : époque {start_epoch}, best SeK {best_sek:.4f}")
+        global_step = ckpt["global_step"]
+        print(f"Reprise depuis {resume_path} : époque {start_epoch}, step {global_step}, "
+              f"best SeK {best_sek:.4f}")
 
     for epoch in range(start_epoch, args.epochs):
         model.train()
@@ -99,25 +113,34 @@ def main():
             if args.limit_batches is not None and step >= args.limit_batches:
                 break
             batch = {k: v.to(device) for k, v in batch.items()}
-            outputs = model(batch["img_t1"], batch["img_t2"])
-            losses = criterion(outputs, _targets_from_batch(batch))
+            apply_sek = global_step >= args.sek_warmup_iters
+
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_amp):
+                outputs = model(batch["img_t1"], batch["img_t2"])
+            # Loss en fp32 (SeK/log sensibles à la précision) : on caste les sorties.
+            outputs = {k: (v.float() if torch.is_tensor(v) else v) for k, v in outputs.items()}
+            losses = criterion(outputs, _targets_from_batch(batch), apply_sek=apply_sek)
 
             optimizer.zero_grad()
             losses["total"].backward()
             optimizer.step()
+            scheduler.step()
+            global_step += 1
 
-            if step % 20 == 0:
+            if step % 50 == 0:
                 flat = {k: round(v.item(), 4) for k, v in losses.items()}
-                print(f"epoch {epoch} step {step} {flat}")
+                lr = scheduler.get_last_lr()[0]
+                print(f"epoch {epoch} step {step} lr {lr:.2e} sek={'on' if apply_sek else 'off'} {flat}")
 
-        metrics = validate(model, val_loader, device, limit=args.limit_batches)
+        metrics = validate(model, val_loader, device, limit=args.limit_batches, use_amp=use_amp)
         print(f"[val] epoch {epoch} | SeK {metrics.sek:.4f} Fscd {metrics.fscd:.4f} "
               f"mIoU {metrics.miou:.4f} OA {metrics.oa:.4f} kappa {metrics.kappa:.4f}")
 
         # Checkpoint complet (reprise possible) écrasé à chaque époque.
         ckpt = {
             "model": model.state_dict(), "optimizer": optimizer.state_dict(),
-            "epoch": epoch, "best_sek": best_sek,
+            "scheduler": scheduler.state_dict(), "epoch": epoch,
+            "best_sek": best_sek, "global_step": global_step,
         }
         if metrics.sek > best_sek:
             best_sek = metrics.sek
@@ -125,6 +148,20 @@ def main():
             torch.save(model.state_dict(), out_dir / "best.pt")
             print(f"  -> nouveau meilleur SeK {best_sek:.4f}, sauvé dans best.pt")
         torch.save(ckpt, out_dir / "last.pt")
+
+
+def _warmup_cosine(optimizer, warmup_iters, total_iters, base_lr, min_lr):
+    """Montée linéaire jusqu'à base_lr, puis décroissance cosine jusqu'à min_lr."""
+    import math
+
+    def lr_lambda(it):
+        if it < warmup_iters:
+            return (it + 1) / max(1, warmup_iters)
+        progress = (it - warmup_iters) / max(1, total_iters - warmup_iters)
+        cosine = 0.5 * (1 + math.cos(math.pi * min(1.0, progress)))
+        return (min_lr + (base_lr - min_lr) * cosine) / base_lr
+
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 
 def _targets_from_batch(batch: dict) -> dict:
@@ -136,14 +173,15 @@ def _targets_from_batch(batch: dict) -> dict:
 
 
 @torch.no_grad()
-def validate(model, loader, device, limit=None) -> SCDMetrics:
+def validate(model, loader, device, limit=None, use_amp=False) -> SCDMetrics:
     model.eval()
     evaluator = SCDEvaluator(num_classes=NUM_SEMANTIC_CLASSES)
     for step, batch in enumerate(loader):
         if limit is not None and step >= limit:
             break
         batch = {k: v.to(device) for k, v in batch.items()}
-        outputs = model(batch["img_t1"], batch["img_t2"])
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_amp):
+            outputs = model(batch["img_t1"], batch["img_t2"])
         evaluator.add(outputs, _targets_from_batch(batch))
     return evaluator.compute()
 

@@ -7,8 +7,9 @@
 #SBATCH --time=24:00:00
 #SBATCH --output=csf-mamba-%j.out
 #
-# Vrai entraînement (crops 256, batch 8, 50 époques). Reprise auto : si le job
-# atteint la limite de temps, resoumettre le MÊME script reprend depuis last.pt.
+# Vrai entraînement (crops 256, batch 8, 100 époques, AMP bf16, LR cosine+warmup,
+# warmup SeK). Reprise auto : si le job atteint la limite de temps, resoumettre le
+# MÊME script reprend depuis last.pt (relancer autant de fois que nécessaire).
 #
 # Prérequis (faits UNE fois sur un nœud de connexion) :
 #   bash scripts/setup_env.sh
@@ -42,7 +43,7 @@ python -m scripts.train \
     --backend mamba \
     --crop-size 256 \
     --batch-size 8 \
-    --epochs 50 \
+    --epochs 100 \
     --seed 42 \
     --resume auto \
     --output "$OUT"
