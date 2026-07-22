@@ -24,6 +24,6 @@ python -m scripts.train \
     --dataset hi_ucd \
     --encoder vmamba_mini \
     --encoder-pretrained "$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth" \
-    --backend auto \
+    --backend mamba \
     --epochs 1 --limit-batches 10 --batch-size 2 \
     --output "$SCRATCH/csf-test"
