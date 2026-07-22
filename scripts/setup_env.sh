@@ -11,16 +11,16 @@
 #     data   -> $SCRATCH/hi-ucd/           (grand)
 #     poids  -> $SCRATCH/pretrained_weight/
 #
-# POURQUOI torch 2.4.1 (et pas le défaut 2.13) :
-#   `pip install --no-index torch` prend la version vedette 2.13 = CUDA 13, qui a
-#   retiré des symboles CUB utilisés par le kernel selective_scan -> ne compile
-#   pas. On épingle torch 2.4.1 (CUDA 12), pour lequel le kernel compile. On
-#   charge cuda/12.2 (le CUB de CUDA 12 contient encore ces symboles).
-#
-#   torch ET torchvision doivent être le MÊME build (+computecanada). C'est
-#   pourquoi on les installe ENSEMBLE en premier, en --no-index : sinon une install
-#   ultérieure (timm) peut tirer un torchvision PyPI dépareillé -> erreur
-#   `torchvision::nms does not exist`.
+# CHOIX DE VERSIONS (durement gagnés) :
+#   - torch 2.5.1 (CUDA 12) : imposé par mamba_ssm (torch~=2.5). CUDA 12 (pas 13)
+#     car le kernel selective_scan utilise des symboles CUB retirés en CUDA 13.
+#   - torch + torchvision doivent être le MÊME build : on les installe ENSEMBLE en
+#     premier (sinon une install ultérieure tire un torchvision dépareillé ->
+#     `torchvision::nms does not exist`).
+#   - mamba_ssm : kernel fusionné pour NOTRE C²S². Sans lui, backend='ref' (scan
+#     Python) = trop lent pour du 512² (le step ne finit jamais). Son __init__ est
+#     cassé (transformers récent) mais on l'importe par sous-module dans le code.
+#   - selective_scan : kernel du backbone VMamba, compilé contre le torch installé.
 #
 # Usage :  cd $HOME/csf-mamba && bash scripts/setup_env.sh
 set -euo pipefail
@@ -36,24 +36,23 @@ source "$VENV/bin/activate"
 pip install --no-index --upgrade pip
 
 # torch + torchvision APPARIÉS, en premier, tout du wheelhouse.
-pip install --no-index torch==2.4.1 torchvision==0.19.1
+pip install --no-index torch==2.5.1 torchvision==0.20.1
 
-# Reste des dépendances (wheelhouse). triton est importé par VMamba au chargement
-# (même si notre forward_type ne l'utilise pas) -> obligatoire.
+# Reste des dépendances de base (triton importé par VMamba au chargement).
 pip install --no-index numpy pillow scipy einops timm fvcore triton
 
-# Kernel CUDA selective_scan du backbone VMamba (VMamba ne tourne PAS sans lui).
-# En CUDA 12, les symboles CUB existent et compute_70 est supporté : compile tel quel.
+# Kernel fusionné mamba_ssm pour notre C²S² (torch déjà en 2.5.1 -> pas d'upgrade).
+pip install --no-index mamba_ssm causal_conv1d
+
+# Kernel CUDA selective_scan du backbone VMamba, compilé EN DERNIER (contre le
+# torch définitif). En CUDA 12 les symboles CUB existent : compile tel quel.
 echo "== compilation du kernel selective_scan (peut prendre plusieurs minutes) =="
 pip install --no-build-isolation "$REPO/third_party/ChangeMamba/kernels/selective_scan"
 
-# Kernel fusionné pour NOTRE C²S² (optionnel). S'il échoue, backend='ref' (plus lent).
-pip install --no-index mamba_ssm causal_conv1d \
-    || echo "== mamba_ssm indisponible : utiliser --backend ref =="
-
-python - <<'PY'
+# Vérif non bloquante (les kernels CUDA ne s'importent qu'avec un GPU : un échec
+# ici sur le nœud de connexion est NORMAL, le vrai test se fait dans un job GPU).
+python - <<'PY' || true
 import torch, torchvision, torchvision.ops  # noqa: F401
 print("torch", torch.__version__, "| torchvision", torchvision.__version__)
 PY
-echo "venv prêt : $VENV"
-echo "NB : tester le forward GPU dans un JOB (le kernel ne s'importe qu'avec un GPU)."
+echo "venv prêt : $VENV — tester le forward GPU dans un job."
