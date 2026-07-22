@@ -69,7 +69,7 @@ class CSFMambaLoss(nn.Module):
             num_classes=num_semantic_classes, non_change_class=sek_non_change_class
         )
 
-    def forward(self, outputs: dict, targets: dict) -> dict:
+    def forward(self, outputs: dict, targets: dict, apply_sek: bool = True) -> dict:
         loss_bcd = self.ce(outputs["bcd"], targets["change"])
         loss_sem = 0.5 * (
             self.ce(outputs["sem_t1"], targets["sem_t1"])
@@ -79,12 +79,14 @@ class CSFMambaLoss(nn.Module):
         terms = {"ce_bcd": loss_bcd, "ce_sem": loss_sem}
 
         # SeK (verbatim Mamba-FCS) : pilotée par le change_mask, opère sur les deux
-        # branches sémantiques. change_mask = (label changement != 0).
-        change_mask = (targets["change"] != 0).float()
-        terms["sek"] = self.lambda_sek * self.sek(
-            outputs["sem_t1"], outputs["sem_t2"],
-            targets["sem_t1"], targets["sem_t2"], change_mask,
-        )
+        # branches sémantiques. `apply_sek=False` pendant le warmup (la sémantique
+        # doit d'abord apprendre avant que SeK, qui la suppose correcte, aide).
+        if apply_sek:
+            change_mask = (targets["change"] != 0).float()
+            terms["sek"] = self.lambda_sek * self.sek(
+                outputs["sem_t1"], outputs["sem_t2"],
+                targets["sem_t1"], targets["sem_t2"], change_mask,
+            )
 
         if "feat_t1" in outputs and "unchanged" in targets:
             terms["sc"] = self.lambda_sc * semantic_consistency_loss(
