@@ -1,22 +1,26 @@
 #!/bin/bash
 # Setup de l'environnement sur Narval (Alliance) — À LANCER SUR UN NŒUD DE CONNEXION.
 #
-# Pourquoi le nœud de connexion : c'est là qu'il y a internet (télécharger torch
-# PyPI + compiler le kernel). Le venv est persistant dans $SCRATCH (on ne le
-# reconstruit pas à chaque job — on ne veut pas recompiler le kernel CUDA).
+# Tout vient du wheelhouse Alliance (--no-index) : builds `+computecanada`
+# cohérents entre eux et avec les modules CUDA du cluster. Le venv est persistant
+# dans $SCRATCH (on ne recompile pas le kernel à chaque job).
 #
-#   Layout retenu :
+#   Layout :
 #     repo   -> $HOME/csf-mamba            (code, sauvegardé)
 #     venv   -> $SCRATCH/csf-venv-cu12     (grand, non sauvegardé)
-#     data   -> $SCRATCH/hi-ucd(.tar)      (grand)
+#     data   -> $SCRATCH/hi-ucd/           (grand)
 #     poids  -> $SCRATCH/pretrained_weight/
 #
-# IMPORTANT — pourquoi CUDA 12 et pas le wheelhouse :
-#   Le wheelhouse Alliance ne fournit QUE torch 2.13 (compilé CUDA 13.2). Or CUDA
-#   13 a retiré des symboles CUB (cub::LaneId, CTA_SYNC, ShuffleDown...) utilisés
-#   par le kernel selective_scan de ChangeMamba -> il ne compile pas. On installe
-#   donc torch CUDA 12 depuis PyPI (le kernel a été écrit pour CUDA 12) et on
-#   charge cuda/12.2 dont le CUB contient encore ces symboles. Combo validé.
+# POURQUOI torch 2.4.1 (et pas le défaut 2.13) :
+#   `pip install --no-index torch` prend la version vedette 2.13 = CUDA 13, qui a
+#   retiré des symboles CUB utilisés par le kernel selective_scan -> ne compile
+#   pas. On épingle torch 2.4.1 (CUDA 12), pour lequel le kernel compile. On
+#   charge cuda/12.2 (le CUB de CUDA 12 contient encore ces symboles).
+#
+#   torch ET torchvision doivent être le MÊME build (+computecanada). C'est
+#   pourquoi on les installe ENSEMBLE en premier, en --no-index : sinon une install
+#   ultérieure (timm) peut tirer un torchvision PyPI dépareillé -> erreur
+#   `torchvision::nms does not exist`.
 #
 # Usage :  cd $HOME/csf-mamba && bash scripts/setup_env.sh
 set -euo pipefail
@@ -29,29 +33,27 @@ module load python/3.11 cuda/12.2
 echo "== création du venv persistant : $VENV =="
 virtualenv --no-download "$VENV"
 source "$VENV/bin/activate"
-pip install --upgrade pip
+pip install --no-index --upgrade pip
 
-# torch CUDA 12 depuis PyPI (PAS le wheelhouse, qui n'a que du CUDA 13).
-# 2.4.1/0.19.1 = paire appariée, compatible ChangeMamba.
-pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu121
+# torch + torchvision APPARIÉS, en premier, tout du wheelhouse.
+pip install --no-index torch==2.4.1 torchvision==0.19.1
 
-# Reste des dépendances (torch tire triton tout seul en version compatible).
-pip install numpy pillow scipy einops timm fvcore
+# Reste des dépendances (wheelhouse). triton est importé par VMamba au chargement
+# (même si notre forward_type ne l'utilise pas) -> obligatoire.
+pip install --no-index numpy pillow scipy einops timm fvcore triton
 
 # Kernel CUDA selective_scan du backbone VMamba (VMamba ne tourne PAS sans lui).
-# En CUDA 12, compute_70 est encore supporté et les symboles CUB existent : le
-# setup.py de ChangeMamba compile tel quel, aucun patch nécessaire.
+# En CUDA 12, les symboles CUB existent et compute_70 est supporté : compile tel quel.
 echo "== compilation du kernel selective_scan (peut prendre plusieurs minutes) =="
 pip install --no-build-isolation "$REPO/third_party/ChangeMamba/kernels/selective_scan"
 
-# Kernel fusionné pour NOTRE C²S² (optionnel). S'il échoue, backend='ref' (plus
-# lent mais fonctionnel sur GPU aussi).
-pip install mamba_ssm causal_conv1d \
+# Kernel fusionné pour NOTRE C²S² (optionnel). S'il échoue, backend='ref' (plus lent).
+pip install --no-index mamba_ssm causal_conv1d \
     || echo "== mamba_ssm indisponible : utiliser --backend ref =="
 
 python - <<'PY'
-import torch
-print("torch", torch.__version__, "| version CUDA de torch:", torch.version.cuda)
+import torch, torchvision, torchvision.ops  # noqa: F401
+print("torch", torch.__version__, "| torchvision", torchvision.__version__)
 PY
 echo "venv prêt : $VENV"
-echo "NB : tester l'import du kernel dans un JOB GPU (pas sur le nœud de connexion)."
+echo "NB : tester le forward GPU dans un JOB (le kernel ne s'importe qu'avec un GPU)."
