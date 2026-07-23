@@ -31,8 +31,9 @@ tar -xf "$SCRATCH/hi-ucd.tar" -C "$SLURM_TMPDIR/hi-ucd"
 DATA_ROOT="$SLURM_TMPDIR/hi-ucd"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
-# Sortie FIXE (pas $SLURM_JOB_ID) pour que la reprise retrouve last.pt.
-OUT="$SCRATCH/csf-mamba-runs/hiucd_mini_chess"
+# Sortie nommée par la config (pas $SLURM_JOB_ID) : reprise fidèle ENTRE jobs de
+# la même config, mais un changement de recette -> nouveau dossier = run neuf.
+OUT="$SCRATCH/csf-mamba-runs/hiucd_mini_chess_w15"
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
