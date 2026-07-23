@@ -43,6 +43,7 @@ python -m scripts.train \
     --backend mamba \
     --crop-size 256 \
     --batch-size 8 \
+    --bcd-change-weight 15 \
     --epochs 100 \
     --seed 42 \
     --resume auto \
