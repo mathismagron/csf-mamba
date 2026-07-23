@@ -50,6 +50,19 @@ def semantic_consistency_loss(
     return pull + push
 
 
+def dice_loss_change(logits: torch.Tensor, target: torch.Tensor, eps: float = 1.0) -> torch.Tensor:
+    """Dice sur la classe 'changement' (indice 1) du BCD. Robuste au déséquilibre :
+    optimise le recouvrement prédiction/vérité, pas la justesse pixel par pixel.
+    """
+    prob = logits.softmax(dim=1)[:, 1]                 # P(changement), (B,H,W)
+    valid = (target != IGNORE_INDEX).float()
+    tgt = (target == 1).float() * valid
+    prob = prob * valid
+    intersection = (prob * tgt).sum()
+    denom = prob.sum() + tgt.sum()
+    return 1 - (2 * intersection + eps) / (denom + eps)
+
+
 class CSFMambaLoss(nn.Module):
     """Assemble les cinq termes. `scd_target` est la carte SCD (0 = no-change)."""
 
@@ -58,6 +71,7 @@ class CSFMambaLoss(nn.Module):
         num_semantic_classes: int,
         lambda_sek: float = 0.5,
         lambda_sc: float = 0.1,
+        lambda_dice: float = 1.0,
         sek_non_change_class: int = 0,
         bcd_change_weight: float = 1.0,
     ):
@@ -65,6 +79,7 @@ class CSFMambaLoss(nn.Module):
         self.num_semantic_classes = num_semantic_classes
         self.lambda_sek = lambda_sek
         self.lambda_sc = lambda_sc
+        self.lambda_dice = lambda_dice
         self.ce = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
         # BCD pondéré : la classe 1 (changement) est rare -> on la sur-pondère
         # pour éviter que le modèle collapse vers « aucun changement » (SeK=0).
@@ -82,6 +97,10 @@ class CSFMambaLoss(nn.Module):
         )
 
         terms = {"ce_bcd": loss_bcd, "ce_sem": loss_sem}
+
+        # Dice sur le changement : complète la CE pondérée contre le déséquilibre.
+        if self.lambda_dice > 0:
+            terms["dice"] = self.lambda_dice * dice_loss_change(outputs["bcd"], targets["change"])
 
         # SeK (verbatim Mamba-FCS) : pilotée par le change_mask, opère sur les deux
         # branches sémantiques. `apply_sek=False` pendant le warmup (la sémantique
