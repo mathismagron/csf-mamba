@@ -39,6 +39,8 @@ def parse_args():
     p.add_argument("--warmup-iters", type=int, default=1500, help="Montée linéaire du LR.")
     p.add_argument("--sek-warmup-iters", type=int, default=20000,
                    help="Itérations avant d'activer la loss SeK (la sémantique apprend d'abord).")
+    p.add_argument("--bcd-change-weight", type=float, default=10.0,
+                   help="Poids de la classe 'changement' (rare) dans la loss BCD. Contre le déséquilibre.")
     p.add_argument("--amp", action="store_true", default=True, help="Precision mixte bf16 (défaut).")
     p.add_argument("--no-amp", dest="amp", action="store_false")
     p.add_argument("--seed", type=int, default=42)
@@ -73,7 +75,10 @@ def main():
     ).to(device)
     print("Paramètres :", count_parameters(model))
 
-    criterion = CSFMambaLoss(num_semantic_classes=NUM_SEMANTIC_CLASSES)
+    criterion = CSFMambaLoss(
+        num_semantic_classes=NUM_SEMANTIC_CLASSES,
+        bcd_change_weight=args.bcd_change_weight,
+    ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
 
     train_loader = DataLoader(
@@ -135,6 +140,14 @@ def main():
         metrics = validate(model, val_loader, device, limit=args.limit_batches, use_amp=use_amp)
         print(f"[val] epoch {epoch} | SeK {metrics.sek:.4f} Fscd {metrics.fscd:.4f} "
               f"mIoU {metrics.miou:.4f} OA {metrics.oa:.4f} kappa {metrics.kappa:.4f}")
+
+        # Log CSV persistant (à côté des checkpoints : survit à un rm du .out).
+        csv_path = out_dir / "metrics.csv"
+        if not csv_path.exists():
+            csv_path.write_text("epoch,sek,fscd,miou,oa,kappa\n")
+        with csv_path.open("a") as f:
+            f.write(f"{epoch},{metrics.sek:.5f},{metrics.fscd:.5f},"
+                    f"{metrics.miou:.5f},{metrics.oa:.5f},{metrics.kappa:.5f}\n")
 
         # Checkpoint complet (reprise possible) écrasé à chaque époque.
         ckpt = {

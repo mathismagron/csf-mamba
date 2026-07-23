@@ -59,18 +59,23 @@ class CSFMambaLoss(nn.Module):
         lambda_sek: float = 0.5,
         lambda_sc: float = 0.1,
         sek_non_change_class: int = 0,
+        bcd_change_weight: float = 1.0,
     ):
         super().__init__()
         self.num_semantic_classes = num_semantic_classes
         self.lambda_sek = lambda_sek
         self.lambda_sc = lambda_sc
         self.ce = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
+        # BCD pondéré : la classe 1 (changement) est rare -> on la sur-pondère
+        # pour éviter que le modèle collapse vers « aucun changement » (SeK=0).
+        bcd_w = torch.tensor([1.0, float(bcd_change_weight)])
+        self.ce_bcd = nn.CrossEntropyLoss(weight=bcd_w, ignore_index=IGNORE_INDEX)
         self.sek = SeKLossMambaFCS(
             num_classes=num_semantic_classes, non_change_class=sek_non_change_class
         )
 
     def forward(self, outputs: dict, targets: dict, apply_sek: bool = True) -> dict:
-        loss_bcd = self.ce(outputs["bcd"], targets["change"])
+        loss_bcd = self.ce_bcd(outputs["bcd"], targets["change"])
         loss_sem = 0.5 * (
             self.ce(outputs["sem_t1"], targets["sem_t1"])
             + self.ce(outputs["sem_t2"], targets["sem_t2"])
