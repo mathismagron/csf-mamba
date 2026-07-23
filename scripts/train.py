@@ -41,6 +41,8 @@ def parse_args():
                    help="Itérations avant d'activer la loss SeK (la sémantique apprend d'abord).")
     p.add_argument("--bcd-change-weight", type=float, default=10.0,
                    help="Poids de la classe 'changement' (rare) dans la loss BCD. Contre le déséquilibre.")
+    p.add_argument("--lambda-dice", type=float, default=1.0,
+                   help="Poids de la loss Dice sur le changement (0 pour désactiver).")
     p.add_argument("--amp", action="store_true", default=True, help="Precision mixte bf16 (défaut).")
     p.add_argument("--no-amp", dest="amp", action="store_false")
     p.add_argument("--seed", type=int, default=42)
@@ -78,6 +80,7 @@ def main():
     criterion = CSFMambaLoss(
         num_semantic_classes=NUM_SEMANTIC_CLASSES,
         bcd_change_weight=args.bcd_change_weight,
+        lambda_dice=args.lambda_dice,
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
 

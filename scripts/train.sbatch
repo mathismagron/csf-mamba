@@ -33,7 +33,7 @@ DATA_ROOT="$SLURM_TMPDIR/hi-ucd"
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 # Sortie nommée par la config (pas $SLURM_JOB_ID) : reprise fidèle ENTRE jobs de
 # la même config, mais un changement de recette -> nouveau dossier = run neuf.
-OUT="$SCRATCH/csf-mamba-runs/hiucd_mini_chess_w15"
+OUT="$SCRATCH/csf-mamba-runs/hiucd_mini_chess_v2"
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
@@ -44,7 +44,8 @@ python -m scripts.train \
     --backend mamba \
     --crop-size 256 \
     --batch-size 8 \
-    --bcd-change-weight 15 \
+    --bcd-change-weight 20 \
+    --lambda-dice 1.0 \
     --epochs 100 \
     --seed 42 \
     --resume auto \
