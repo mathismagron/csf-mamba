@@ -1,88 +1,96 @@
-# Lancer csf-mamba sur tamIA
+# Lancer csf-mamba sur Narval (Alliance Canada)
 
-Cluster IA dédié (H100 80G). **Particularités qui dictent la marche à suivre :**
-- Compte = allocation **AIP** : `--account=aip-<nom_du_prof>` (ton prof doit t'ajouter).
-- Nœuds de calcul **sans internet** → tout téléchargement/compilation sur un
-  **nœud de connexion**.
-- Jobs = **nœuds entiers**.
+Cluster GPU **A100**. Allocation classique **`def-hervete`** (Prof. Eric Hervet).
 
 **Layout retenu :**
-| Quoi | Où | Pourquoi |
-|---|---|---|
-| Code (repo git) | `$HOME/csf-mamba` | 50 Go, sauvegardé |
-| venv + kernel compilé | `$SCRATCH/csf-venv` | grand, persistant (compilé une fois) |
-| Dataset | `$SCRATCH/hi-ucd.tar` | 20 To |
-| Poids ImageNet | `$SCRATCH/pretrained_weight/` | — |
+| Quoi | Où |
+|---|---|
+| Code (repo git) | `$HOME/csf-mamba` |
+| venv + kernels compilés | `$SCRATCH/csf-venv-cu12` (persistant) |
+| Dataset | `/scratch/<user>/hi-ucd/` + `$SCRATCH/hi-ucd.tar` |
+| Poids ImageNet | `$SCRATCH/pretrained_weight/` |
 
 ---
 
-## Une fois pour toutes (sur un nœud de connexion)
+## Installation (une fois, sur un nœud de CONNEXION — internet requis)
 
 ```bash
-# 1. Récupérer le code dans $HOME
-cd $HOME
-git clone <url-de-ton-repo> csf-mamba
-cd csf-mamba
-
-# 2. Cloner les dépôts de référence (VMamba) — a besoin d'internet
-bash scripts/setup_third_party.sh
-
-# 3. Créer le venv + compiler le kernel selective_scan (dans $SCRATCH)
-bash scripts/setup_env.sh
-#    -> vérifie à la fin : "selective_scan compilé : OK"
-
-# 4. Télécharger les poids ImageNet du backbone (dans $SCRATCH)
+cd $HOME && git clone <url-du-repo> csf-mamba && cd csf-mamba
+bash scripts/setup_third_party.sh                       # VMamba (ChangeMamba)
+bash scripts/setup_env.sh                               # venv cu12 + kernels
 bash scripts/download_pretrained.sh $SCRATCH/pretrained_weight
-
-# 5. Dataset Hi-UCD dans $SCRATCH. Le zip officiel se dézippe en train/ val/ test/
-#    (paire annotée 2018→2019 ; test/ sans masque). Créer l'archive ainsi :
-#      cd <dossier Hi-UCD dézippé>          # là où sont train/ val/ test/
-#      tar -cf $SCRATCH/hi-ucd.tar train val test
-#    Transfert depuis ton PC (le zip fait ~33 Go) :
-#      rsync -avP Hi-UCD.zip <user>@tamia:/scratch/<user>/   # puis dézipper là-bas
-ls $SCRATCH/hi-ucd.tar
 ```
 
-## Éditer `scripts/train.sbatch`
+`setup_env.sh` installe la stack **torch 2.5.1 / CUDA 12** (le wheelhouse par défaut
+est en CUDA 13, incompatible avec le kernel `selective_scan`), compile
+`selective_scan`, installe `mamba_ssm` et corrige son `__init__.py` cassé. Tout est
+automatique — voir les commentaires du script pour le détail des pièges.
 
-- Remplacer `aip-CHANGEME` par ton allocation (`aip-<nom_du_prof>`).
-- Vérifier le nombre de GPU/nœud sur la page tamIA et ajuster `--gres` si besoin.
+### Dataset
 
-## Run de TEST d'abord (fortement conseillé)
-
-Avant un run de plusieurs heures, valider que tout tourne sur GPU en ~minutes.
-En interactif :
+Le zip officiel Hi-UCD-S se dézippe en `train/ val/ test/` (paire annotée
+**2018→2019** ; `test/` **sans masque** → on valide sur `val/`). Transfert + archive :
 
 ```bash
-salloc --account=aip-<prof> --gres=gpu:h100:1 --cpus-per-task=12 --mem=64G --time=0:30:0
-source $SCRATCH/csf-venv/bin/activate
-tar -xf $SCRATCH/hi-ucd.tar -C $SLURM_TMPDIR
-cd $HOME/csf-mamba
-python -m scripts.train \
-    --data-root $SLURM_TMPDIR/hi-ucd --dataset hi_ucd \
-    --encoder vmamba_mini \
-    --encoder-pretrained $SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth \
-    --backend auto --epochs 1 --limit-batches 20 --output $SCRATCH/csf-test
+# depuis ton PC :
+rsync -avP Hi-UCD.zip <user>@narval.alliancecan.ca:/scratch/<user>/
+# sur le cluster :
+cd /scratch/<user> && unzip Hi-UCD.zip -d hi-ucd
+# archive pour le staging rapide (train+val seulement, ~15 Go) :
+tar -cf $SCRATCH/hi-ucd.tar -C /scratch/<user>/hi-ucd train val
 ```
 
-**À vérifier :** le kernel se charge (pas d'erreur `selective_scan_cuda`), la loss
-`total` descend d'un step à l'autre, une ligne `[val]` s'affiche à la fin. Si oui,
-la plomberie GPU est bonne.
+---
 
-## Le vrai run
+## Run de test rapide (QOS debug, quelques minutes)
+
+`scripts/test.sbatch` (`--qos=cc-debug`, 10 batches) vérifie que le kernel + le
+pipeline tournent sur GPU. `sbatch scripts/test.sbatch`, puis lire `csf-test-*.out` :
+on veut voir `epoch 0 step 0 {...}` puis une ligne `[val]`.
+
+## Le vrai entraînement
 
 ```bash
-cd $HOME/csf-mamba
-sbatch scripts/train.sbatch
-squeue -u $USER              # suivre l'état (PD = en file, R = en cours)
-tail -f logs/csf-mamba-*.out # suivre les logs
+cd $HOME/csf-mamba && sbatch scripts/train.sbatch
+squeue -u $USER
 ```
 
-Sorties dans `$SCRATCH/csf-mamba-runs/<jobid>/` : checkpoints par époque +
-`best.pt` (meilleur SeK sur validation).
+Recette (dans `train.sbatch`) : backbone VMamba-mini pré-entraîné, crops 256, batch 8,
+AMP bf16, LR cosine+warmup, warmup SeK, **loss BCD pondérée + Dice** (contre le
+déséquilibre : ~2,5 % de pixels changés seulement), 100 époques (~14 h).
 
-## Ce qu'on regarde
+**Reprise automatique** : si le job atteint la limite de 24 h, resoumets le même
+`sbatch` — il repart depuis `last.pt` (modèle + optimiseur + scheduler + step).
+Sortie dans `$SCRATCH/csf-mamba-runs/<config>/` : `best.pt`, `last.pt`, `metrics.csv`.
 
-- Pendant l'entraînement : la loss `total` doit **descendre**.
-- Après chaque époque, la ligne `[val]` : **c'est le SeK qu'on cherche à maximiser**
-  (+ Fscd, mIoU, OA). C'est le chiffre à comparer au SOTA.
+**Suivre la courbe** (le CSV survit à un `rm` du `.out`) :
+```bash
+tail -f $SCRATCH/csf-mamba-runs/<config>/metrics.csv
+```
+On veut le **SeK monter au-dessus de 0** (le modèle détecte enfin les changements).
+
+## Évaluer un checkpoint
+
+Tableau complet des métriques + diagnostic collapse + visualisations, dans un job GPU :
+
+```bash
+python -m scripts.evaluate \
+    --data-root /scratch/<user>/hi-ucd \
+    --checkpoint $SCRATCH/csf-mamba-runs/<config>/best.pt \
+    --encoder vmamba_mini --output eval_<config>
+```
+Affiche SeK/Fscd/mIoU/OA/kappa, le % de changement prédit vs vérité (repère un
+collapse « aucun changement »), et sauve des panneaux T1|T2|changement|sémantique.
+
+---
+
+## Pièges connus (déjà gérés par les scripts)
+
+| Symptôme | Cause | Où c'est réglé |
+|---|---|---|
+| `CUDA version mismatch 12/13` | wheelhouse torch = CUDA 13 | `setup_env.sh` : torch 2.5.1 cu12, `cuda/12.2` |
+| `torchvision::nms does not exist` | torch/torchvision dépareillés | installés appariés en `--no-index` |
+| `GreedySearchDecoderOnlyOutput` | `mamba_ssm/__init__` tire transformers | patch sed dans `setup_env.sh` |
+| step qui ne finit jamais | backend `ref` (scan Python) | `--backend mamba` (kernel) |
+| `CUDA out of memory` | 512² batch 8 | crops 256 + `PYTORCH_CUDA_ALLOC_CONF` |
+| SeK bloqué à 0 | déséquilibre (2,5 % de changement) | loss BCD pondérée + Dice |

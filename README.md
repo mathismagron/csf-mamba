@@ -5,7 +5,17 @@
 battre le SOTA (Mamba-FCS, 189M) sur Hi-UCD et SECOND.
 
 Le raisonnement de conception complet est dans `documentation/plan_recap_CSF-Mamba2.md`.
-Ce README ne couvre que la mise en route du code.
+Pour **lancer** un entraînement/évaluation, voir `RUN.md`.
+
+## État actuel (juillet 2026)
+
+- **Pipeline complet validé de bout en bout sur GPU** (Narval, A100). Modèle
+  ~20,8 M params, backbone ImageNet chargé, kernels CUDA opérationnels.
+- **Run n°1 (100 époques) terminé.** Résultat : SeK = 0 → le modèle collapse vers
+  « aucun changement », à cause du **déséquilibre extrême** (2,45 % de pixels
+  changés sur Hi-UCD). Diagnostic clair, pas un bug.
+- **Correctif en cours (run n°2)** : loss BCD **pondérée + Dice** contre le
+  déséquilibre. Puis itérations et **ablations** (chess vs L1, ±FFT, ±L_sc).
 
 ## Idée directrice
 
@@ -20,7 +30,7 @@ Garder les *idées* de Mamba-FCS (qui coûtent ~0 paramètre) et remplacer sa
 | Injection FFT2 + CGA résiduelle | Mamba-FCS | ✅ implémenté |
 | Décodeur SCD partagé + embedding τ | ChessMamba | ✅ implémenté |
 | DySample | ChessMamba | ✅ implémenté |
-| Loss composite (CE+mIoU+SeK+L_sc) | Mamba-FCS + AtrousMamba | ✅ implémenté (SeK à valider) |
+| Loss composite (CE+SeK+L_sc+Dice) | Mamba-FCS + AtrousMamba | ✅ SeK validé verbatim ; +Dice/pondération BCD |
 
 ## Décision : code propre + références isolées
 
@@ -55,16 +65,20 @@ csf_mamba/
 scripts/       setup_env.sh, setup_third_party.sh, train.py, train.sbatch
 ```
 
-## Ordre des opérations (prérequis §12.2, risque décroissant)
+## Feuille de route (mise à jour)
 
-1. **Reproduire Mamba-FCS (189M)** et matcher SeK 25,50 sur SECOND via les poids
-   HF — prérequis absolu de comparabilité. *(à faire dans `third_party/`)*
-2. **Figer le protocole unique** (split SECOND 2968/1694, crops, itérations,
-   seed=42, métriques) ; ré-entraîner ChangeMamba + ChessMamba dedans.
-3. **Intégrer Hi-UCD** — dataloader fait ; valider sur un dump réel.
-4. **Baseline C²S²-cœur qui tourne** (VMamba-Tiny + chessboard + S6).
-5. **Lire `method/` de CSSM** pour confirmer les 2 détails du portage L1
-   (voir `csf_mamba/modules/cssm.py`).
+La priorité est **csf-mamba sur Hi-UCD** (reproduire Mamba-FCS sur SECOND n'est
+plus prioritaire pour l'instant). Étapes :
+
+1. ✅ **Pipeline qui tourne sur GPU** (fait).
+2. 🔄 **Baseline qui apprend** : régler le déséquilibre pour sortir le SeK de 0
+   (loss pondérée + Dice), calibrer poids/époques via `metrics.csv`.
+3. **Optimiser** : Lovász, EMA, résolution, LR — selon la courbe de validation.
+4. **Ablations** (la contribution) : chess vs L1, ±FFT, ±L_sc, mini vs tiny.
+5. **Comparaison efficience/SOTA** : params/FLOPs/temps vs ChangeMamba, Mamba-FCS.
+
+Reste à confirmer avant l'ablation L1 : les 2 détails du portage CSSM (axe de
+réduction, RMSNorm) — voir `csf_mamba/modules/cssm.py`.
 
 ## Choix de backbone : mini vs tiny (impacte la cible 15M)
 
@@ -123,21 +137,21 @@ Les seuls poids frais sont les `outnorm*` (normes d'extraction, hors backbone
 ImageNet). Config alignée sur le checkpoint : `depths=[2,2,5,2]`, MLP présent.
 Passer `--encoder-pretrained <chemin>` à `scripts/train.py`.
 
-## Ce qui reste à câbler (marqué TODO dans le code, pas masqué)
+## Entraînement & évaluation
 
-- **Confirmer les 2 détails de portage L1** (axe de réduction, RMSNorm) sur le
-  dépôt CSSM, avant l'ablation chess vs L1.
+Recette (`scripts/train.sbatch`) : crops 256, batch 8, AMP bf16, LR cosine+warmup,
+warmup SeK, loss BCD pondérée + Dice, 100 époques, reprise auto. Métriques
+persistées dans `metrics.csv`. Évaluation d'un checkpoint + visualisations :
+`python -m scripts.evaluate --checkpoint <run>/best.pt ...`.
+
+**Marche à suivre complète (installation, run, éval, pièges) : `RUN.md`.**
 
 ## Démarrage rapide (laptop, CPU)
 
 ```bash
-pip install -e .          # torch CPU suffit
-# (test de bout en bout : voir tâche « smoke test », à définir ensemble)
+pip install torch numpy pillow scipy      # CPU suffit pour les tests
+PYTHONPATH=. python tests/test_smoke.py   # forward/backward + formes (encodeur conv)
 ```
 
-## Sur Alliance Canada
-
-```bash
-bash scripts/setup_third_party.sh          # clone les références
-sbatch scripts/train.sbatch                # adapter --account et le dataset
-```
+Le forward VMamba (kernel CUDA) ne tourne que sur GPU ; en local on teste la
+plomberie avec `--encoder conv` / `--backend ref`.
