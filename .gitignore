@@ -15,3 +15,6 @@ runs/
 logs/
 *.pt
 *.pth
+
+# Instructions projet locales (non publiées)
+CLAUDE.md
