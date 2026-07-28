@@ -12,19 +12,21 @@ Conséquence notable : contrairement à Hi-UCD (sémantique pleine scène), ici 
 tête sémantique s'entraîne directement sur la population que SeK mesure. Le
 problème de kappa négatif rencontré sur Hi-UCD ne devrait pas s'y poser.
 
-Arborescence attendue (version prétraitée de ChangeMamba, cf.
-https://zenodo.org/records/14037769 — cartes sémantiques déjà en mono-canal et
-cartes de changement binaires déjà générées) :
+Arborescence réelle de la version prétraitée ChangeMamba (vérifiée sur le dump
+Zenodo 15479555) :
 
-    root/<split>/im1/<id>.png       image T1
-    root/<split>/im2/<id>.png       image T2
-    root/<split>/label1/<id>.png    sémantique T1 (mono-canal, 0..6)
-    root/<split>/label2/<id>.png    sémantique T2 (mono-canal, 0..6)
+    root/<split>/T1/<id>.png        image T1
+    root/<split>/T2/<id>.png        image T2
+    root/<split>/GT_T1/<id>.png     sémantique T1 (mono-canal, 0..6)
+    root/<split>/GT_T2/<id>.png     sémantique T2 (mono-canal, 0..6)
     root/<split>/GT_CD/<id>.png     changement binaire
+    root/<split>.txt                liste officielle des échantillons
 
-⚠️ Le dataset ORIGINAL fournit les cartes sémantiques en RGB (pour la
-visualisation) et **sans** carte de changement binaire. Utiliser la version
-prétraitée ci-dessus, ou convertir au préalable.
+Les dossiers `GT_T*_COLORED` sont les cartes RGB de visualisation : ignorés.
+
+⚠️ SECOND n'a que les splits **train** et **test** (pas de `val`) : passer
+`--val-split test`. Le dataset ORIGINAL (hors version prétraitée) fournit les
+cartes sémantiques uniquement en RGB et sans carte de changement binaire.
 """
 
 from pathlib import Path
@@ -54,23 +56,33 @@ def _map_semantic(index_map: np.ndarray) -> np.ndarray:
 
 class SECONDDataset(Dataset):
     def __init__(self, root: str, split: str = "train", transform=None):
-        self.root = Path(root) / split
+        root = Path(root)
+        self.root = root / split
         self.transform = transform
         self.dirs = {
             name: self.root / name
-            for name in ("im1", "im2", "label1", "label2", "GT_CD")
+            for name in ("T1", "T2", "GT_T1", "GT_T2", "GT_CD")
         }
         missing = [str(p) for p in self.dirs.values() if not p.is_dir()]
         if missing:
             raise FileNotFoundError(
                 "Dossiers SECOND introuvables : " + ", ".join(missing)
-                + "\nVérifier l'arborescence (cf. docstring) — utiliser de préférence "
-                "la version prétraitée de ChangeMamba (Zenodo 14037769)."
+                + "\nVérifier l'arborescence (cf. docstring). Rappel : SECOND n'a "
+                "que les splits 'train' et 'test' (pas de 'val')."
             )
 
-        self.ids = sorted(p.name for p in self.dirs["im1"].glob("*.png"))
+        # Liste officielle du split si présente (root/<split>.txt), sinon glob.
+        listing = root / f"{split}.txt"
+        if listing.is_file():
+            self.ids = [
+                line if line.endswith(".png") else f"{line}.png"
+                for line in (l.strip() for l in listing.read_text().splitlines())
+                if line
+            ]
+        else:
+            self.ids = sorted(p.name for p in self.dirs["T1"].glob("*.png"))
         if not self.ids:
-            raise RuntimeError(f"aucune image .png dans {self.dirs['im1']}")
+            raise RuntimeError(f"aucun échantillon trouvé pour le split '{split}'")
 
     def __len__(self) -> int:
         return len(self.ids)
@@ -94,11 +106,11 @@ class SECONDDataset(Dataset):
 
     def __getitem__(self, idx: int) -> dict:
         name = self.ids[idx]
-        img_t1 = self._load_rgb("im1", name)
-        img_t2 = self._load_rgb("im2", name)
+        img_t1 = self._load_rgb("T1", name)
+        img_t2 = self._load_rgb("T2", name)
 
-        sem_t1 = torch.from_numpy(_map_semantic(self._load_index_map("label1", name)))
-        sem_t2 = torch.from_numpy(_map_semantic(self._load_index_map("label2", name)))
+        sem_t1 = torch.from_numpy(_map_semantic(self._load_index_map("GT_T1", name)))
+        sem_t2 = torch.from_numpy(_map_semantic(self._load_index_map("GT_T2", name)))
 
         # Carte de changement : binarisée (certains dumps encodent 0/255).
         change_raw = self._load_index_map("GT_CD", name)
