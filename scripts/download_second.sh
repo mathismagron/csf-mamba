@@ -28,6 +28,6 @@ echo "== décompression vers $(dirname "$DEST") =="
 unzip -q -o "$ARCHIVE" -d "$(dirname "$DEST")"
 
 echo "== arborescence obtenue =="
-find "$(dirname "$DEST")" -maxdepth 3 -type d -name 'im1' -o -maxdepth 3 -type d -name 'label1' | head
+find "$(dirname "$DEST")" -maxdepth 4 -type d \( -name 'im1' -o -name 'label1' -o -name 'GT_CD' \) | head
 echo
 echo "Vérifier ensuite que le dataloader lit correctement (cf. RUN.md)."
