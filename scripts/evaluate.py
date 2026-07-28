@@ -20,7 +20,8 @@ import torch
 from PIL import Image
 from torch.utils.data import DataLoader
 
-from csf_mamba.datasets.hi_ucd import IGNORE_INDEX, NUM_SEMANTIC_CLASSES, HiUCDDataset
+from csf_mamba.datasets import DATASETS
+from csf_mamba.losses.composite import IGNORE_INDEX
 from csf_mamba.evaluation.metrics import SCDEvaluator
 from csf_mamba.model import CSFMamba
 
@@ -35,6 +36,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--data-root", required=True)
     p.add_argument("--checkpoint", required=True)
+    p.add_argument("--dataset", default="hi_ucd", choices=sorted(DATASETS))
     p.add_argument("--encoder", default="vmamba_mini", choices=["conv", "vmamba_mini", "vmamba_tiny"])
     p.add_argument("--core", default="chess", choices=["chess", "l1"])
     p.add_argument("--backend", default="mamba", choices=["auto", "mamba", "ref"])
@@ -92,14 +94,15 @@ def main():
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    model = CSFMamba(num_semantic_classes=NUM_SEMANTIC_CLASSES,
+    dataset_cls, num_classes = DATASETS[args.dataset]
+    model = CSFMamba(num_semantic_classes=num_classes,
                      encoder=args.encoder, core=args.core, backend=args.backend).to(device)
     load_checkpoint(model, args.checkpoint, device)
     model.eval()
 
-    ds = HiUCDDataset(args.data_root, split=args.split)
+    ds = dataset_cls(args.data_root, split=args.split)
     loader = DataLoader(ds, batch_size=args.batch_size, shuffle=False, num_workers=4)
-    evaluator = SCDEvaluator(num_classes=NUM_SEMANTIC_CLASSES)
+    evaluator = SCDEvaluator(num_classes=num_classes)
 
     gt_ch, pred_ch, valid_px, saved = 0, 0, 0, 0
     for batch in loader:

@@ -11,7 +11,7 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-from csf_mamba.datasets.hi_ucd import NUM_SEMANTIC_CLASSES, HiUCDDataset
+from csf_mamba.datasets import DATASETS
 from csf_mamba.datasets.transforms import train_transform
 from csf_mamba.evaluation.metrics import SCDEvaluator, SCDMetrics
 from csf_mamba.losses.composite import CSFMambaLoss
@@ -21,7 +21,7 @@ from csf_mamba.model import CSFMamba, count_parameters
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--data-root", required=True)
-    p.add_argument("--dataset", default="hi_ucd", choices=["hi_ucd"])
+    p.add_argument("--dataset", default="hi_ucd", choices=sorted(DATASETS))
     p.add_argument("--encoder", default="conv", choices=["conv", "vmamba_mini", "vmamba_tiny"])
     p.add_argument("--encoder-pretrained", default=None,
                    help="Chemin du checkpoint ImageNet VMamba (cf. download_pretrained.sh)")
@@ -56,11 +56,10 @@ def parse_args():
 
 
 def build_dataset(args, split):
-    if args.dataset != "hi_ucd":
-        raise ValueError(args.dataset)
+    dataset_cls, _ = DATASETS[args.dataset]
     # Crop + augmentation à l'entraînement ; validation en pleine résolution.
     transform = train_transform(args.crop_size) if split == "train" else None
-    return HiUCDDataset(args.data_root, split=split, transform=transform)
+    return dataset_cls(args.data_root, split=split, transform=transform)
 
 
 def main():
@@ -69,19 +68,21 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     Path(args.output).mkdir(parents=True, exist_ok=True)
 
+    _, num_classes = DATASETS[args.dataset]
+
     encoder_kwargs = {}
     if args.encoder_pretrained and args.encoder.startswith("vmamba"):
         encoder_kwargs["pretrained_path"] = args.encoder_pretrained
 
     model = CSFMamba(
-        num_semantic_classes=NUM_SEMANTIC_CLASSES,
+        num_semantic_classes=num_classes,
         encoder=args.encoder, core=args.core, backend=args.backend,
         encoder_kwargs=encoder_kwargs,
     ).to(device)
     print("Paramètres :", count_parameters(model))
 
     criterion = CSFMambaLoss(
-        num_semantic_classes=NUM_SEMANTIC_CLASSES,
+        num_semantic_classes=num_classes,
         bcd_change_weight=args.bcd_change_weight,
         lambda_dice=args.lambda_dice,
         lambda_sem_change=args.lambda_sem_change,
@@ -144,7 +145,8 @@ def main():
                 lr = scheduler.get_last_lr()[0]
                 print(f"epoch {epoch} step {step} lr {lr:.2e} sek={'on' if apply_sek else 'off'} {flat}")
 
-        metrics = validate(model, val_loader, device, limit=args.limit_batches, use_amp=use_amp)
+        metrics = validate(model, val_loader, device, num_classes,
+                           limit=args.limit_batches, use_amp=use_amp)
         print(f"[val] epoch {epoch} | SeK {metrics.sek:.4f} Fscd {metrics.fscd:.4f} "
               f"mIoU {metrics.miou:.4f} OA {metrics.oa:.4f} kappa {metrics.kappa:.4f}")
 
@@ -193,9 +195,9 @@ def _targets_from_batch(batch: dict) -> dict:
 
 
 @torch.no_grad()
-def validate(model, loader, device, limit=None, use_amp=False) -> SCDMetrics:
+def validate(model, loader, device, num_classes, limit=None, use_amp=False) -> SCDMetrics:
     model.eval()
-    evaluator = SCDEvaluator(num_classes=NUM_SEMANTIC_CLASSES)
+    evaluator = SCDEvaluator(num_classes=num_classes)
     for step, batch in enumerate(loader):
         if limit is not None and step >= limit:
             break
