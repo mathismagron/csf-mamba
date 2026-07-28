@@ -9,15 +9,27 @@ battre le SOTA (Mamba-FCS, 189M) sur Hi-UCD et SECOND.
   `documentation/journal-de-bord.md` — matière première du rapport
 - Lancer un entraînement / une évaluation : `RUN.md`
 
-## État actuel (juillet 2026)
+## État actuel (28 juillet 2026)
 
-- **Pipeline complet validé de bout en bout sur GPU** (Narval, A100). Modèle
-  ~20,8 M params, backbone ImageNet chargé, kernels CUDA opérationnels.
-- **Run n°1 (100 époques) terminé.** Résultat : SeK = 0 → le modèle collapse vers
-  « aucun changement », à cause du **déséquilibre extrême** (2,45 % de pixels
-  changés sur Hi-UCD). Diagnostic clair, pas un bug.
-- **Correctif en cours (run n°2)** : loss BCD **pondérée + Dice** contre le
-  déséquilibre. Puis itérations et **ablations** (chess vs L1, ±FFT, ±L_sc).
+Pipeline complet validé sur GPU (Narval, A100), **20,8 M paramètres**, deux datasets
+supportés et validés sur données réelles.
+
+| Run | Dataset | SeK | Fscd | mIoU | Lecture |
+|---|---|---|---|---|---|
+| 1 | Hi-UCD | 0,000 | 0,000 | ~0,50 | collapse « aucun changement » (déséquilibre 2,45 %) |
+| 2 | Hi-UCD | −0,019 | 0,227 | 0,693 | changement détecté ✅, sémantique des transitions ❌ |
+| 3 | Hi-UCD | 🔄 | | | supervision sémantique ciblée — en cours |
+| — | SECOND | — | | | prêt à lancer |
+
+**Verrou :** la sémantique **dans les zones changées** (kappa négatif). Hi-UCD annote
+la sémantique en pleine scène, donc la tête n'optimise quasiment pas les 2,5 % de
+pixels que SeK mesure.
+
+**Cibles de comparaison** (sur SECOND, où la littérature est dense — Mamba-FCS
+n'évalue **pas** sur Hi-UCD) : ChangeMamba **SeK 24,11** (~90 M params),
+Mamba-FCS **SeK 25,50** (189 M params).
+
+Chronologie détaillée, décisions et diagnostics : `documentation/journal-de-bord.md`.
 
 ## Idée directrice
 
@@ -67,17 +79,15 @@ csf_mamba/
 scripts/       setup_env.sh, setup_third_party.sh, train.py, train.sbatch
 ```
 
-## Feuille de route (mise à jour)
+## Feuille de route
 
-La priorité est **csf-mamba sur Hi-UCD** (reproduire Mamba-FCS sur SECOND n'est
-plus prioritaire pour l'instant). Étapes :
-
-1. ✅ **Pipeline qui tourne sur GPU** (fait).
-2. 🔄 **Baseline qui apprend** : régler le déséquilibre pour sortir le SeK de 0
-   (loss pondérée + Dice), calibrer poids/époques via `metrics.csv`.
-3. **Optimiser** : Lovász, EMA, résolution, LR — selon la courbe de validation.
-4. **Ablations** (la contribution) : chess vs L1, ±FFT, ±L_sc, mini vs tiny.
-5. **Comparaison efficience/SOTA** : params/FLOPs/temps vs ChangeMamba, Mamba-FCS.
+1. ✅ **Pipeline sur GPU** — fait.
+2. ✅ **Détection de changements fonctionnelle** sur Hi-UCD (Fscd 0,227).
+3. 🔄 **Sémantique des transitions** : sortir le kappa du négatif (run 3).
+4. **Premier chiffre sur SECOND** — le seul terrain de comparaison non ambigu.
+5. **Ablations** (la contribution) : damier vs CSSM-L1, ± FFT, ± L_sc, ± loss SeK,
+   mini vs tiny, crops 256 vs 512.
+6. **Comparaison efficience/SOTA** : params, FLOPs, temps d'inférence.
 
 Reste à confirmer avant l'ablation L1 : les 2 détails du portage CSSM (axe de
 réduction, RMSNorm) — voir `csf_mamba/modules/cssm.py`.

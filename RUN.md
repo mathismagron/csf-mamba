@@ -40,6 +40,26 @@ cd /scratch/<user> && unzip Hi-UCD.zip -d hi-ucd
 tar -cf $SCRATCH/hi-ucd.tar -C /scratch/<user>/hi-ucd train val
 ```
 
+### Dataset SECOND (benchmark de référence)
+
+Téléchargement direct sur un nœud de connexion (3,84 Go, version prétraitée
+ChangeMamba : cartes sémantiques mono-canal, changement binaire déjà généré) :
+
+```bash
+bash scripts/download_second.sh          # -> $SCRATCH/SECOND
+```
+
+Vérifier le loader sur les vraies données (attendu : **2 968** train / **1 694**
+test, soit le split officiel) :
+```bash
+python -c "
+from csf_mamba.datasets import DATASETS
+cls, n = DATASETS['second']
+for s in ['train','test']:
+    ds = cls('$SCRATCH/SECOND', s); print(s, len(ds), 'paires')
+"
+```
+
 ---
 
 ## Run de test rapide (QOS debug, quelques minutes)
@@ -51,9 +71,15 @@ on veut voir `epoch 0 step 0 {...}` puis une ligne `[val]`.
 ## Le vrai entraînement
 
 ```bash
-cd $HOME/csf-mamba && sbatch scripts/train.sbatch
+cd $HOME/csf-mamba && sbatch scripts/train.sbatch          # Hi-UCD  (~14 h)
+cd $HOME/csf-mamba && sbatch scripts/train_second.sbatch   # SECOND  (~3-4 h)
 squeue -u $USER
 ```
+
+⚠️ **Les deux recettes ne sont pas interchangeables.** Sur SECOND : `--val-split test`
+(pas de split `val`), `--sek-warmup-iters 0` (comme Mamba-FCS), et
+`--lambda-sem-change 0` (redondant, la sémantique y est déjà restreinte au
+changement). Détails et justifications dans `scripts/train_second.sbatch`.
 
 Recette (dans `train.sbatch`) : backbone VMamba-mini pré-entraîné, crops 256, batch 8,
 AMP bf16, LR cosine+warmup, warmup SeK, **loss BCD pondérée + Dice** (contre le

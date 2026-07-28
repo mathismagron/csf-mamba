@@ -199,29 +199,123 @@ empiriquement que c'est sans danger : le `clamp(min=0)` annule le gradient de ce
 et les gradients des autres termes restent finis. La loss SeK est donc simplement
 *muette*, elle ne corrompt pas l'entraînement.
 
-Résultat : _à compléter_
+**Résultat partiel (8 premières époques) — effet marginal à ce stade.**
+
+Comparaison époque par époque avec le run 2 (les deux `metrics.csv` existent) :
+
+| Époque | kappa run 2 | kappa run 3 |
+|---|---|---|
+| 0 | −0,147 | −0,209 |
+| 1 | −0,128 | −0,111 |
+| 2 | −0,060 | −0,019 |
+| 3 | −0,006 | **+0,002** |
+| 4 | −0,076 | −0,054 |
+| 5 | −0,104 | −0,103 |
+
+Les deux trajectoires sont **quasi superposées** : même pic à l'époque 3, même
+rechute ensuite. Le run 3 passe positif de justesse (première fois du projet), mais
+l'écart reste dans le bruit. **L'hypothèse n'est ni validée ni infirmée** à ce stade.
+
+Deux enseignements de méthode :
+- Le pic à l'époque 3 est un **transitoire commun** aux deux runs, non prédictif :
+  le run 2 finissait à −0,03 après ce même pic. Comparer le début d'un run à la fin
+  d'un autre induit en erreur — d'où l'intérêt du `metrics.csv` par run.
+- La chute simultanée de l'OA à l'époque 3 (0,932 contre ~0,97) révèle une
+  **compétition entre les deux objectifs sémantiques** : `ce_sem` (pleine scène,
+  tirée par les 97,5 % de pixels inchangés) contre `sem_ch` (zones changées). À
+  poids égal (λ=1), ils se neutralisent.
+
+Verdict attendu vers les époques 20-50, quand le LR aura décru et que la loss SeK
+se sera activée (époque ~13).
+
+---
+
+## Phase 4 — Pivot vers SECOND (28 juillet 2026)
+
+### Le constat qui change la stratégie
+
+En cherchant les chiffres à battre sur Hi-UCD, découverte gênante :
+
+1. **Mamba-FCS n'évalue pas sur Hi-UCD.** Le papier ne teste que sur **SECOND** et
+   **Landsat-SCD**. L'objectif affiché depuis le début (« battre Mamba-FCS sur
+   Hi-UCD ») n'avait donc **aucune cible chiffrée**.
+2. Les chiffres publiés sur Hi-UCD sont **épars** (améliorations relatives plutôt
+   qu'absolues) et portent sur des **variantes différentes** du dataset (Hi-UCD
+   complet / Hi-UCD-mini). Comparer notre résultat à un chiffre obtenu sur *mini*
+   n'aurait aucune validité.
+
+**Sur SECOND, au contraire**, les références sont denses et sans ambiguïté :
+
+| Méthode | Params | OA | Fscd | mIoU | **SeK** |
+|---|---|---|---|---|---|
+| ChangeMamba (MambaSCD) | ~90 M | 88,12 | 64,03 | 73,68 | **24,11** |
+| Mamba-FCS | 189 M | 88,62 | 65,78 | 74,07 | **25,50** |
+| **CSF-Mamba (nous)** | **20,8 M** | — | — | — | *à établir* |
+
+**Décision (D7) : SECOND devient le terrain de comparaison principal**, Hi-UCD
+restant le dataset d'origine du sujet et un terrain d'ablation.
+
+Trois arguments : les chiffres y sont directement comparables ; le dataset est
+petit (2 968 paires contre ~11 600 → ~3-4 h au lieu de 14 h) ; et la sémantique y
+étant annotée **uniquement sur le changement**, le problème de kappa négatif
+rencontré sur Hi-UCD ne devrait pas s'y poser.
+
+### Support SECOND ajouté
+
+Le modèle n'a **pas** eu à être modifié — la **convention A** (décision D4), choisie
+un an... une semaine plus tôt précisément pour coller à SECOND, s'avère native :
+SECOND encode déjà 0 = inchangé pour la sémantique. Seul le nombre de canaux des
+têtes change (10 → 7), soit **291 paramètres d'écart** sur 20,8 M.
+
+Travail réalisé : dataloader `SECONDDataset`, registre de datasets
+(`csf_mamba/datasets/__init__.py`) d'où `train.py` et `evaluate.py` tirent la classe
+et le nombre de canaux, script de téléchargement, script d'entraînement.
+
+**Validé sur les vraies données** : 2 968 paires en train, 1 694 en test — soit
+exactement le **split officiel** utilisé par la littérature (les listes
+`train.txt`/`test.txt` du dump sont lues, plutôt qu'un parcours de dossier).
+
+Réglages spécifiques à SECOND, et leur justification :
+
+| Réglage | Valeur | Pourquoi |
+|---|---|---|
+| `--val-split` | `test` | SECOND n'a pas de split `val` |
+| `--sek-warmup-iters` | `0` | comme Mamba-FCS (`SEK_START_ITER=0` sur SECOND) |
+| `--lambda-sem-change` | `0` | redondant : `ce_sem` y est **déjà** restreint au changement |
+
+Ce dernier point mérite d'être noté : le terme de supervision ciblée est un
+correctif **spécifique à Hi-UCD**, sans objet sur un dataset à sémantique
+change-only.
 
 ---
 
 ## État au 28 juillet 2026
 
 **Acquis :** pipeline complet et reproductible sur GPU ; modèle ~20,8 M paramètres
-(vs 189 M pour Mamba-FCS) ; détection de changements fonctionnelle (Fscd 0,227) ;
-outillage d'évaluation avec visualisations ; métriques garanties comparables.
+(vs 189 M pour Mamba-FCS) ; détection de changements fonctionnelle sur Hi-UCD
+(Fscd 0,227) ; outillage d'évaluation avec visualisations ; métriques garanties
+comparables ; **support des deux datasets** (Hi-UCD et SECOND) validé sur données
+réelles.
 
-**Verrou actuel :** la classification sémantique **dans les zones changées** — c'est
-elle qui détermine le SeK, la métrique cible.
+**Verrou actuel :** la classification sémantique **dans les zones changées** sur
+Hi-UCD — c'est elle qui détermine le SeK, la métrique cible. Le run 3 teste un
+correctif ; verdict en attente.
 
-**Piste de travail identifiée :** la cause racine est que la tête sémantique
-n'optimise quasiment pas les zones changées (2,5 % des pixels). Deux actions
-envisagées :
-1. ajouter un terme de supervision sémantique **restreint aux zones changées** — ce que
-   SECOND obtient gratuitement par la nature de ses labels ;
-2. rendre la loss SeK numériquement robuste (supprimer le `log`), pour qu'elle
-   redevienne exploitable une fois le kappa positif.
+**Chantiers en cours :**
 
-**Ensuite :** études d'ablation (damier vs CSSM-L1, ± FFT, ± L_sc, mini vs tiny) et
-comparaison efficience/performance avec l'état de l'art.
+| Chantier | État |
+|---|---|
+| Run 3 Hi-UCD (supervision ciblée) | en cours, effet marginal sur 8 époques |
+| Entraînement SECOND | prêt à lancer (~3-4 h) |
+
+**Ensuite :**
+1. Premier chiffre sur SECOND, comparable à ChangeMamba (24,11) et Mamba-FCS (25,50).
+2. Études d'ablation — la contribution scientifique : damier vs CSSM-L1, ± FFT,
+   ± L_sc, ± loss SeK, mini vs tiny, crops 256 vs 512 (décalage de longueur de
+   séquence entre entraînement et test, spécifique aux modèles SSM).
+3. Comparaison efficience/performance (params, FLOPs, temps d'inférence). Option la
+   plus rigoureuse : évaluer les checkpoints ChangeMamba publiés (SeK 22,08 / 22,92)
+   avec **notre** code de métriques, pour éliminer tout doute de protocole.
 
 ---
 
