@@ -4,8 +4,10 @@
 ~15M paramètres) pour la **détection sémantique de changements** (SCD), visant à
 battre le SOTA (Mamba-FCS, 189M) sur Hi-UCD et SECOND.
 
-Le raisonnement de conception complet est dans `documentation/plan_recap_CSF-Mamba2.md`.
-Pour **lancer** un entraînement/évaluation, voir `RUN.md`.
+- Conception et raisonnement d'architecture : `documentation/plan_recap_CSF-Mamba2.md`
+- **Journal de bord** (chronologie, décisions, résultats des runs) :
+  `documentation/journal-de-bord.md` — matière première du rapport
+- Lancer un entraînement / une évaluation : `RUN.md`
 
 ## État actuel (juillet 2026)
 
