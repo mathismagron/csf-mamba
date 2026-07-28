@@ -43,6 +43,9 @@ def parse_args():
                    help="Poids de la classe 'changement' (rare) dans la loss BCD. Contre le déséquilibre.")
     p.add_argument("--lambda-dice", type=float, default=1.0,
                    help="Poids de la loss Dice sur le changement (0 pour désactiver).")
+    p.add_argument("--lambda-sem-change", type=float, default=0.0,
+                   help="Poids de la CE sémantique restreinte aux zones changées "
+                        "(0 = désactivé, comme les runs 1-2).")
     p.add_argument("--amp", action="store_true", default=True, help="Precision mixte bf16 (défaut).")
     p.add_argument("--no-amp", dest="amp", action="store_false")
     p.add_argument("--seed", type=int, default=42)
@@ -81,6 +84,7 @@ def main():
         num_semantic_classes=NUM_SEMANTIC_CLASSES,
         bcd_change_weight=args.bcd_change_weight,
         lambda_dice=args.lambda_dice,
+        lambda_sem_change=args.lambda_sem_change,
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
 

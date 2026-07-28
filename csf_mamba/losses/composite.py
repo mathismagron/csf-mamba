@@ -63,6 +63,29 @@ def dice_loss_change(logits: torch.Tensor, target: torch.Tensor, eps: float = 1.
     return 1 - (2 * intersection + eps) / (denom + eps)
 
 
+def semantic_change_ce(
+    logits: torch.Tensor, target: torch.Tensor, change_mask: torch.Tensor
+) -> torch.Tensor:
+    """CE sémantique restreinte aux pixels CHANGÉS.
+
+    Motivation (Hi-UCD) : la sémantique est annotée en pleine scène, donc la CE
+    globale est dominée à 97,5 % par des pixels inchangés. Or SeK ne mesure que
+    les zones changées — que le modèle n'optimise donc quasiment pas, d'où un
+    kappa négatif. Ce terme rétablit une supervision sur cette population, ce que
+    SECOND obtient gratuitement (sa sémantique n'est annotée que sur le changement).
+
+    Implémentation : tout ce qui est hors changement est mis à IGNORE_INDEX, donc
+    la CE ne compte que les pixels changés (et non-ignorés).
+    """
+    masked = torch.where(
+        change_mask.bool(), target, torch.full_like(target, IGNORE_INDEX)
+    )
+    if not (masked != IGNORE_INDEX).any():
+        # Aucun pixel changé dans le batch : CE serait NaN (0/0). Zéro différentiable.
+        return logits.sum() * 0.0
+    return nn.functional.cross_entropy(logits, masked, ignore_index=IGNORE_INDEX)
+
+
 class CSFMambaLoss(nn.Module):
     """Assemble les cinq termes. `scd_target` est la carte SCD (0 = no-change)."""
 
@@ -72,6 +95,7 @@ class CSFMambaLoss(nn.Module):
         lambda_sek: float = 0.5,
         lambda_sc: float = 0.1,
         lambda_dice: float = 1.0,
+        lambda_sem_change: float = 0.0,
         sek_non_change_class: int = 0,
         bcd_change_weight: float = 1.0,
     ):
@@ -80,6 +104,7 @@ class CSFMambaLoss(nn.Module):
         self.lambda_sek = lambda_sek
         self.lambda_sc = lambda_sc
         self.lambda_dice = lambda_dice
+        self.lambda_sem_change = lambda_sem_change
         self.ce = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
         # BCD pondéré : la classe 1 (changement) est rare -> on la sur-pondère
         # pour éviter que le modèle collapse vers « aucun changement » (SeK=0).
@@ -97,16 +122,23 @@ class CSFMambaLoss(nn.Module):
         )
 
         terms = {"ce_bcd": loss_bcd, "ce_sem": loss_sem}
+        change_mask = (targets["change"] != 0).float()
 
         # Dice sur le changement : complète la CE pondérée contre le déséquilibre.
         if self.lambda_dice > 0:
             terms["dice"] = self.lambda_dice * dice_loss_change(outputs["bcd"], targets["change"])
 
+        # Supervision sémantique CIBLÉE sur les zones changées (cf. semantic_change_ce).
+        if self.lambda_sem_change > 0:
+            terms["sem_ch"] = self.lambda_sem_change * 0.5 * (
+                semantic_change_ce(outputs["sem_t1"], targets["sem_t1"], change_mask)
+                + semantic_change_ce(outputs["sem_t2"], targets["sem_t2"], change_mask)
+            )
+
         # SeK (verbatim Mamba-FCS) : pilotée par le change_mask, opère sur les deux
         # branches sémantiques. `apply_sek=False` pendant le warmup (la sémantique
         # doit d'abord apprendre avant que SeK, qui la suppose correcte, aide).
         if apply_sek:
-            change_mask = (targets["change"] != 0).float()
             terms["sek"] = self.lambda_sek * self.sek(
                 outputs["sem_t1"], outputs["sem_t2"],
                 targets["sem_t1"], targets["sem_t2"], change_mask,
