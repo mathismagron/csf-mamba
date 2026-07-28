@@ -178,6 +178,29 @@ la comparabilité avec le SOTA. Ce qui est comparé, c'est la **métrique** SeK
 (`evaluation/metrics.py`), portée verbatim et validée — et elle reste intacte. La loss
 est un choix de méthode interne, propre à chaque travail.
 
+### Run n°3 — supervision sémantique ciblée (28 juillet, en cours)
+
+**Hypothèse testée :** si le kappa est négatif parce que la tête sémantique
+n'optimise pas les zones changées, alors ajouter une supervision sémantique
+**restreinte à ces zones** doit faire monter le kappa, donc le SeK.
+
+**Changement (un seul, volontairement) :** nouveau terme `--lambda-sem-change`, une
+cross-entropy sémantique où tout pixel hors changement est mis à `ignore` — la CE ne
+compte donc que les pixels changés. Poids 1.0, soit une sur-pondération relative d'un
+facteur ~40 pour cette population (2,45 % des pixels).
+
+**Ce qui n'a PAS changé :** la loss SeK et les métriques restent strictement
+identiques (vérifié : aucune modification de `sek_mambafcs.py` ni `metrics.py`). Un
+seul facteur varie → l'effet observé sera attribuable sans ambiguïté, et cette
+comparaison run 2 vs run 3 constitue une **ligne d'ablation directement utilisable**.
+
+**Note technique :** la loss SeK continuera d'émettre des `NaN` (kappa négatif). Vérifié
+empiriquement que c'est sans danger : le `clamp(min=0)` annule le gradient de ce terme,
+et les gradients des autres termes restent finis. La loss SeK est donc simplement
+*muette*, elle ne corrompt pas l'entraînement.
+
+Résultat : _à compléter_
+
 ---
 
 ## État au 28 juillet 2026
