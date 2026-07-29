@@ -347,6 +347,62 @@ réflexe hérité de Hi-UCD (2,45 %).
 (aucune compensation). Un seul facteur varie → ligne d'ablation exploitable :
 « effet des mécanismes anti-déséquilibre selon le taux de changement du dataset ».
 
+### Première série d'ablations (29 juillet)
+
+Cinq runs de 100 époques, dont un **réplicat involontaire** (`w20` reproduit la
+config du run 3) qui fournit une mesure du **bruit run-à-run : ±0,004 de SeK**.
+Cette valeur sert de seuil de significativité pour tout ce qui suit.
+
+**SECOND — effet des mécanismes anti-déséquilibre**
+
+| Config | OA | Fscd | mIoU | SeK |
+|---|---|---|---|---|
+| poids 5 + Dice | 79,85 | 53,60 | 65,27 | 15,61 |
+| **poids 1, sans Dice** | **87,36** | **58,94** | **70,54** | **18,84** |
+
+Toutes les métriques progressent simultanément : +3,2 SeK (+20 % relatif) et
++7,5 OA. Sur un dataset à 20 % de changement, la compensation était non seulement
+inutile mais **nuisible** — elle provoquait une sur-détection (30,9 % prédits contre
+20,1 % réels) qui dégradait la précision.
+
+**Hi-UCD — effet de la supervision sémantique ciblée** (à poids égal, même version
+du code) :
+
+| Config | `sem_change` | meilleur SeK |
+|---|---|---|
+| `nosemch` | 0 | −0,0034 |
+| `w5` | 1,0 | **+0,0158** |
+
+Écart **+0,019 ≈ 5× le bruit** → effet réel. **L'hypothèse du run 3 est validée.**
+Un jugement antérieur la qualifiait de « marginale » sur la base de 6 époques : cette
+lecture était prématurée, les premières époques étant dominées par le bruit.
+
+**Hi-UCD — effet du poids de changement** :
+
+| Config | meilleur SeK |
+|---|---|
+| poids 20 | +0,0155 |
+| poids 5 | +0,0158 |
+
+Écart 0,0003, très en dessous du bruit → **levier sans effet ici**, contrairement à
+SECOND. La différence de taux de changement (2,45 % contre 20 %) explique que le même
+réglage soit décisif sur un dataset et neutre sur l'autre.
+
+**Positionnement actuel sur SECOND :**
+
+| Méthode | Params | OA | Fscd | mIoU | SeK |
+|---|---|---|---|---|---|
+| Mamba-FCS | 189 M | 88,62 | 65,78 | 74,07 | 25,50 |
+| ChangeMamba | ~90 M | 88,12 | 64,03 | 73,68 | 24,11 |
+| **CSF-Mamba** | **20,8 M** | **87,36** | 58,94 | 70,54 | **18,84** |
+
+OA à 0,8 point de ChangeMamba, mIoU à 3 points ; le SeK reste l'écart principal
+(78 % de ChangeMamba) avec 4,3× moins de paramètres.
+
+**Enseignement de méthode :** disposer d'un réplicat change tout. Sans lui, +0,019
+et +0,0003 auraient pu être lus de la même façon. Prévoir systématiquement un
+réplicat par configuration de référence dans les ablations à venir.
+
 ---
 
 ## État au 28 juillet 2026

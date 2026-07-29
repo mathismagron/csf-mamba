@@ -14,21 +14,24 @@ battre le SOTA (Mamba-FCS, 189M) sur Hi-UCD et SECOND.
 Pipeline complet validé sur GPU (Narval, A100), **20,8 M paramètres**, deux datasets
 supportés et validés sur données réelles.
 
-**Résultat de référence — SECOND** (même split officiel, même code de métriques) :
+**Résultat de référence — SECOND** (split officiel, code de métriques verbatim) :
 
 | Méthode | Params | OA | Fscd | mIoU | **SeK** |
 |---|---|---|---|---|---|
 | Mamba-FCS | 189 M | 88,62 | 65,78 | 74,07 | **25,50** |
 | ChangeMamba | ~90 M | 88,12 | 64,03 | 73,68 | **24,11** |
-| **CSF-Mamba** | **20,8 M** | 79,85 | 53,60 | 65,27 | **15,61** |
+| **CSF-Mamba** | **20,8 M** | **87,36** | 58,94 | 70,54 | **18,84** |
 
-Runs Hi-UCD : run 1 collapse (SeK 0), run 2 changement détecté mais kappa ≈ 0,
-run 3 (supervision sémantique ciblée) en cours.
+**Ablations établies** (bruit run-à-run mesuré : ±0,004 de SeK) :
 
-**Verrou principal — la sur-détection.** Le modèle prédit trop de changement sur les
-deux datasets (SECOND ×1,5, Hi-UCD ×3,6), proportionnellement au poids anti-
-déséquilibre appliqué. Ces mécanismes, utiles pour sortir du collapse initial, sont
-désormais trop agressifs et dégradent la précision.
+| Facteur | Dataset | Effet sur le SeK |
+|---|---|---|
+| Retirer la compensation de déséquilibre | SECOND (20 % chgt) | **+3,2** ✅ |
+| Supervision sémantique ciblée | Hi-UCD (2,45 % chgt) | **+0,019** ✅ |
+| Poids de changement 20 → 5 | Hi-UCD | +0,0003 (nul) |
+
+Le même réglage anti-déséquilibre est **décisif sur SECOND et neutre sur Hi-UCD** :
+il doit être calibré sur le taux de changement du dataset.
 
 Chronologie détaillée, décisions et diagnostics : `documentation/journal-de-bord.md`.
 
