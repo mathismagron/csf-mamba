@@ -28,6 +28,7 @@ set -euo pipefail
 WEIGHT="${WEIGHT:-1}"        # poids de la classe changement dans la CE
 DICE="${DICE:-0}"            # poids de la loss Dice
 EPOCHS="${EPOCHS:-100}"
+LOVASZ="${LOVASZ:-0}"        # poids de la loss Lovász (optimise l'IoU)
 TAG="${TAG:-nobal}"          # suffixe du dossier de sortie
 
 module load python/3.11 cuda/12.2
@@ -40,7 +41,7 @@ DATA_ROOT="$SLURM_TMPDIR/SECOND"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/second_mini_chess_$TAG"
-echo "== config : weight=$WEIGHT dice=$DICE epochs=$EPOCHS -> $OUT =="
+echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
@@ -54,6 +55,7 @@ python -m scripts.train \
     --batch-size 8 \
     --bcd-change-weight "$WEIGHT" \
     --lambda-dice "$DICE" \
+    --lambda-lovasz "$LOVASZ" \
     --lambda-sem-change 0 \
     --sek-warmup-iters 0 \
     --epochs "$EPOCHS" \

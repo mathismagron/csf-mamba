@@ -22,6 +22,7 @@ La SeK-loss est un portage VERBATIM de Mamba-FCS, validé numériquement
 import torch
 from torch import nn
 
+from .lovasz import lovasz_softmax
 from .sek_mambafcs import SeKLossMambaFCS
 
 IGNORE_INDEX = 255
@@ -96,6 +97,7 @@ class CSFMambaLoss(nn.Module):
         lambda_sc: float = 0.1,
         lambda_dice: float = 1.0,
         lambda_sem_change: float = 0.0,
+        lambda_lovasz: float = 0.0,
         sek_non_change_class: int = 0,
         bcd_change_weight: float = 1.0,
     ):
@@ -105,6 +107,7 @@ class CSFMambaLoss(nn.Module):
         self.lambda_sc = lambda_sc
         self.lambda_dice = lambda_dice
         self.lambda_sem_change = lambda_sem_change
+        self.lambda_lovasz = lambda_lovasz
         self.ce = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
         # BCD pondéré : la classe 1 (changement) est rare -> on la sur-pondère
         # pour éviter que le modèle collapse vers « aucun changement » (SeK=0).
@@ -127,6 +130,14 @@ class CSFMambaLoss(nn.Module):
         # Dice sur le changement : complète la CE pondérée contre le déséquilibre.
         if self.lambda_dice > 0:
             terms["dice"] = self.lambda_dice * dice_loss_change(outputs["bcd"], targets["change"])
+
+        # Lovász sur le changement : extension convexe de l'IoU, optimisée
+        # DIRECTEMENT — le diagnostic montre que la localisation du changement
+        # (IoU 40 % sur Hi-UCD, 55 % sur SECOND) est le goulot, pas la sémantique.
+        if self.lambda_lovasz > 0:
+            terms["lovasz"] = self.lambda_lovasz * lovasz_softmax(
+                outputs["bcd"].softmax(dim=1), targets["change"], ignore=IGNORE_INDEX
+            )
 
         # Supervision sémantique CIBLÉE sur les zones changées (cf. semantic_change_ce).
         if self.lambda_sem_change > 0:

@@ -30,7 +30,8 @@ set -euo pipefail
 
 WEIGHT="${WEIGHT:-5}"        # poids de la classe changement dans la CE
 DICE="${DICE:-1.0}"          # poids de la loss Dice
-SEMCH="${SEMCH:-1.0}"        # CE sémantique restreinte aux zones changées
+SEMCH="${SEMCH:-1.0}"
+LOVASZ="${LOVASZ:-0}"        # poids de la loss Lovász (optimise l'IoU)        # CE sémantique restreinte aux zones changées
 EPOCHS="${EPOCHS:-100}"
 TAG="${TAG:-w5}"             # suffixe du dossier de sortie
 
@@ -46,7 +47,7 @@ DATA_ROOT="$SLURM_TMPDIR/hi-ucd"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/hiucd_mini_chess_$TAG"
-echo "== config : weight=$WEIGHT dice=$DICE semch=$SEMCH epochs=$EPOCHS -> $OUT =="
+echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ semch=$SEMCH epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
@@ -59,6 +60,7 @@ python -m scripts.train \
     --batch-size 8 \
     --bcd-change-weight "$WEIGHT" \
     --lambda-dice "$DICE" \
+    --lambda-lovasz "$LOVASZ" \
     --lambda-sem-change "$SEMCH" \
     --epochs "$EPOCHS" \
     --seed 42 \
