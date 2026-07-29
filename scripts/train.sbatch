@@ -7,18 +7,32 @@
 #SBATCH --time=24:00:00
 #SBATCH --output=csf-mamba-%j.out
 #
-# Vrai entraînement (crops 256, batch 8, 100 époques, AMP bf16, LR cosine+warmup,
-# warmup SeK). Reprise auto : si le job atteint la limite de temps, resoumettre le
-# MÊME script reprend depuis last.pt (relancer autant de fois que nécessaire).
+# Entraînement sur Hi-UCD (crops 256, batch 8, AMP bf16, LR cosine+warmup,
+# warmup SeK). ~14 h pour 100 époques. Reprise auto : si le job atteint la limite
+# de temps, resoumettre le MÊME script repart depuis last.pt.
 #
-# Prérequis (faits UNE fois sur un nœud de connexion) :
+# Prérequis (une fois, sur un nœud de connexion) :
 #   bash scripts/setup_env.sh
 #   bash scripts/download_pretrained.sh $SCRATCH/pretrained_weight
-#   # créer l'archive du dataset (une fois) :
-#   cd /scratch/magron13/hi-ucd && tar -cf $SCRATCH/hi-ucd.tar train val test
+#   cd /scratch/<user>/hi-ucd && tar -cf $SCRATCH/hi-ucd.tar train val
 #
-# Soumission :  cd $HOME/csf-mamba && sbatch scripts/train.sbatch
+# DÉFAUT = WEIGHT 5. Hi-UCD n'a que 2,45 % de pixels changés, donc une
+# compensation reste nécessaire (sans elle, le run 1 avait collapsé vers « aucun
+# changement », SeK = 0). Mais WEIGHT=20 sur-détectait d'un facteur 3,6 (7,35 %
+# prédits contre 2,05 % réels), ce qui dégradait la précision. 5 est un
+# compromis à valider.
+#
+# Ablations (un seul facteur à la fois, dossier de sortie distinct) :
+#   sbatch scripts/train.sbatch                                          # défaut
+#   WEIGHT=20 TAG=w20 sbatch --export=ALL,WEIGHT,TAG scripts/train.sbatch
+#   SEMCH=0 TAG=nosemch sbatch --export=ALL,SEMCH,TAG scripts/train.sbatch
 set -euo pipefail
+
+WEIGHT="${WEIGHT:-5}"        # poids de la classe changement dans la CE
+DICE="${DICE:-1.0}"          # poids de la loss Dice
+SEMCH="${SEMCH:-1.0}"        # CE sémantique restreinte aux zones changées
+EPOCHS="${EPOCHS:-100}"
+TAG="${TAG:-w5}"             # suffixe du dossier de sortie
 
 module load python/3.11 cuda/12.2
 source "$SCRATCH/csf-venv-cu12/bin/activate"
@@ -31,9 +45,8 @@ tar -xf "$SCRATCH/hi-ucd.tar" -C "$SLURM_TMPDIR/hi-ucd"
 DATA_ROOT="$SLURM_TMPDIR/hi-ucd"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
-# Sortie nommée par la config (pas $SLURM_JOB_ID) : reprise fidèle ENTRE jobs de
-# la même config, mais un changement de recette -> nouveau dossier = run neuf.
-OUT="$SCRATCH/csf-mamba-runs/hiucd_mini_chess_v3_semch"
+OUT="$SCRATCH/csf-mamba-runs/hiucd_mini_chess_$TAG"
+echo "== config : weight=$WEIGHT dice=$DICE semch=$SEMCH epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
@@ -44,10 +57,10 @@ python -m scripts.train \
     --backend mamba \
     --crop-size 256 \
     --batch-size 8 \
-    --bcd-change-weight 20 \
-    --lambda-dice 1.0 \
-    --lambda-sem-change 1.0 \
-    --epochs 100 \
+    --bcd-change-weight "$WEIGHT" \
+    --lambda-dice "$DICE" \
+    --lambda-sem-change "$SEMCH" \
+    --epochs "$EPOCHS" \
     --seed 42 \
     --resume auto \
     --output "$OUT"
