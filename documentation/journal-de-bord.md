@@ -403,9 +403,90 @@ OA à 0,8 point de ChangeMamba, mIoU à 3 points ; le SeK reste l'écart princip
 et +0,0003 auraient pu être lus de la même façon. Prévoir systématiquement un
 réplicat par configuration de référence dans les ablations à venir.
 
+### Diagnostic approfondi : où sont réellement les erreurs (29 juillet)
+
+Le SeK plafonnait à 0,016 sur Hi-UCD contre 0,188 sur SECOND — un ordre de grandeur.
+Plutôt que d'essayer des correctifs, mesure de ce que contiennent les annotations et
+de ce que le modèle se trompe.
+
+**Erreur de méthode à consigner.** Une première mesure de la distribution des classes
+prenait les 300 *premières* tuiles. Or les tuiles de Hi-UCD sont numérotées
+séquentiellement et couvrent Tallinn de proche en proche : cet échantillon
+correspondait à **une seule zone géographique**. Il suggérait que 3 classes sur 9
+seulement apparaissaient dans les zones changées, et une conclusion (« la tâche est
+dégénérée sur cette paire temporelle ») en avait été tirée. **Conclusion fausse.**
+Sur un tirage aléatoire, le tableau est tout autre :
+
+| | Hi-UCD (train) | SECOND (train) |
+|---|---|---|
+| Classes présentes dans le changement | 8 / 9 | 6 / 6 |
+| Classe dominante | **29,5 %** | 36,1 % |
+| Types de transition observés | **31** (sur 48 documentés) | 30 |
+
+Hi-UCD est en réalité **mieux réparti** que SECOND. La leçon vaut au-delà de ce cas :
+un échantillon contigu n'est pas un échantillon, même pour une simple statistique
+descriptive.
+
+**La vraie anomalie — la densité du signal :**
+
+| | Pixels changés | Tuiles contenant du changement |
+|---|---|---|
+| Hi-UCD train | 1,36 % | **141 / 1500 (9,4 %)** |
+| Hi-UCD val | 2,20 % | 220 / 1500 (14,7 %) |
+| SECOND train | 20,13 % | **1499 / 1500 (99,9 %)** |
+
+**90 % des tuiles d'entraînement de Hi-UCD ne contiennent aucun changement.** Avec des
+crops tirés uniformément, l'écrasante majorité des exemples ne porte aucun signal pour
+la tâche. Sur SECOND, la totalité des tuiles en porte.
+
+**Décomposition des erreurs** (matrices de confusion, `scripts/confusion_report.py`) :
+
+| | Hi-UCD | SECOND |
+|---|---|---|
+| Changement détecté, bien classé | 56,5 % | **83,9 %** |
+| Erreurs de localisation (FP+FN) | 52,0 M | 97,7 M |
+| Erreurs de sémantique | 14,9 M | 18,9 M |
+| **Ratio localisation / sémantique** | **3,49** | **5,17** |
+| IoU du changement | **39,7 %** | **54,6 %** |
+
+**Conclusion : la branche sémantique fonctionne ; c'est la LOCALISATION du changement
+qui plafonne tout.** Sur SECOND, une fois le changement détecté, il est correctement
+classé dans 84 % des cas. Et comme le SeK contient un facteur `exp(IoU_changement)`,
+chaque point d'IoU se répercute directement sur la métrique cible.
+
+Ce diagnostic invalide les pistes explorées jusque-là (pondération sémantique,
+distribution dégénérée) : ce n'était pas le bon problème.
+
+Détail complémentaire : sur SECOND, FN (60,8 M) ≫ FP (36,9 M) — le modèle **rate** du
+changement (17,4 % prédits pour 20,1 % réels). La suppression de la compensation de
+déséquilibre a corrigé la sur-détection mais est allée un cran trop loin.
+
+### Loss Lovász-Softmax (29 juillet)
+
+Correctif dicté par le diagnostic : la **Lovász-Softmax** est une extension convexe
+de l'IoU — elle optimise **directement** la quantité qui bloque, là où la
+cross-entropy ne travaille que pixel par pixel. Portage verbatim de Mamba-FCS,
+validé numériquement identique (`tests/test_lovasz_port.py`). Appliquée à la sortie
+de changement (BCD), activable par `--lambda-lovasz`.
+
+**Runs lancés** (hypothèse posée avant résultat) : si la localisation est bien le
+goulot, l'IoU du changement doit monter, et le SeK avec lui.
+
+| Run | Dataset | Config |
+|---|---|---|
+| `second_..._lovasz` | SECOND | Lovász 0,5 seule |
+| `second_..._w2lovasz` | SECOND | Lovász 0,5 + poids 2 (récupérer du rappel) |
+| `hiucd_..._w5lovasz` | Hi-UCD | Lovász 0,5 |
+
+Résultats : _à compléter_
+
+**Levier gardé en réserve pour Hi-UCD :** sur-échantillonner les tuiles contenant du
+changement (×10 de densité de signal). Volontairement différé pour ne pas faire varier
+deux facteurs à la fois.
+
 ---
 
-## État au 28 juillet 2026
+## État au 29 juillet 2026
 
 **Acquis :** pipeline complet et reproductible sur GPU ; modèle ~20,8 M paramètres
 (vs 189 M pour Mamba-FCS) ; détection de changements fonctionnelle sur Hi-UCD
@@ -413,16 +494,18 @@ réplicat par configuration de référence dans les ablations à venir.
 comparables ; **support des deux datasets** (Hi-UCD et SECOND) validé sur données
 réelles.
 
-**Verrou actuel :** la classification sémantique **dans les zones changées** sur
-Hi-UCD — c'est elle qui détermine le SeK, la métrique cible. Le run 3 teste un
-correctif ; verdict en attente.
+**Verrou identifié : la LOCALISATION du changement.** La branche sémantique
+fonctionne (84 % de classification correcte sur SECOND une fois le changement
+détecté) ; ce sont les faux positifs et faux négatifs de détection qui pèsent 3,5×
+(Hi-UCD) à 5,2× (SECOND) plus lourd. IoU du changement : 39,7 % et 54,6 %.
 
 **Chantiers en cours :**
 
 | Chantier | État |
 |---|---|
-| Run 3 Hi-UCD (supervision ciblée) | en cours, effet marginal sur 8 époques |
-| Entraînement SECOND | prêt à lancer (~3-4 h) |
+| Loss Lovász (optimise l'IoU) | 3 runs lancés |
+| Sur-échantillonnage des tuiles avec changement (Hi-UCD) | en réserve |
+| Évaluation des checkpoints ChangeMamba avec notre code | à faire |
 
 **Ensuite :**
 1. Premier chiffre sur SECOND, comparable à ChangeMamba (24,11) et Mamba-FCS (25,50).
