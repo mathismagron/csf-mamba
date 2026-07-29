@@ -14,20 +14,21 @@ battre le SOTA (Mamba-FCS, 189M) sur Hi-UCD et SECOND.
 Pipeline complet validé sur GPU (Narval, A100), **20,8 M paramètres**, deux datasets
 supportés et validés sur données réelles.
 
-| Run | Dataset | SeK | Fscd | mIoU | Lecture |
+**Résultat de référence — SECOND** (même split officiel, même code de métriques) :
+
+| Méthode | Params | OA | Fscd | mIoU | **SeK** |
 |---|---|---|---|---|---|
-| 1 | Hi-UCD | 0,000 | 0,000 | ~0,50 | collapse « aucun changement » (déséquilibre 2,45 %) |
-| 2 | Hi-UCD | −0,019 | 0,227 | 0,693 | changement détecté ✅, sémantique des transitions ❌ |
-| 3 | Hi-UCD | 🔄 | | | supervision sémantique ciblée — en cours |
-| — | SECOND | — | | | prêt à lancer |
+| Mamba-FCS | 189 M | 88,62 | 65,78 | 74,07 | **25,50** |
+| ChangeMamba | ~90 M | 88,12 | 64,03 | 73,68 | **24,11** |
+| **CSF-Mamba** | **20,8 M** | 79,85 | 53,60 | 65,27 | **15,61** |
 
-**Verrou :** la sémantique **dans les zones changées** (kappa négatif). Hi-UCD annote
-la sémantique en pleine scène, donc la tête n'optimise quasiment pas les 2,5 % de
-pixels que SeK mesure.
+Runs Hi-UCD : run 1 collapse (SeK 0), run 2 changement détecté mais kappa ≈ 0,
+run 3 (supervision sémantique ciblée) en cours.
 
-**Cibles de comparaison** (sur SECOND, où la littérature est dense — Mamba-FCS
-n'évalue **pas** sur Hi-UCD) : ChangeMamba **SeK 24,11** (~90 M params),
-Mamba-FCS **SeK 25,50** (189 M params).
+**Verrou principal — la sur-détection.** Le modèle prédit trop de changement sur les
+deux datasets (SECOND ×1,5, Hi-UCD ×3,6), proportionnellement au poids anti-
+déséquilibre appliqué. Ces mécanismes, utiles pour sortir du collapse initial, sont
+désormais trop agressifs et dégradent la précision.
 
 Chronologie détaillée, décisions et diagnostics : `documentation/journal-de-bord.md`.
 

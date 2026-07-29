@@ -287,6 +287,66 @@ Ce dernier point mérite d'être noté : le terme de supervision ciblée est un
 correctif **spécifique à Hi-UCD**, sans objet sur un dataset à sémantique
 change-only.
 
+### Bug d'évaluation découvert et corrigé (28 juillet)
+
+Le premier run SECOND affichait des métriques incohérentes entre elles : `Fscd 0,698`
+et `SeK 0,380` (meilleurs que Mamba-FCS !) mais `OA 0,608` et `mIoU 0,371`
+(catastrophiques). Ces quatre valeurs ne peuvent pas coexister sur un modèle sain.
+
+**Cause :** le masque de validité de `SCDEvaluator` exigeait une sémantique annotée
+sur **tous** les pixels. Or SECOND n'annote la sémantique que sur le changement →
+toute la population « non changé » disparaissait de l'histogramme. Confirmé
+numériquement : en posant `iu[0] = 0`, on retrouvait le SeK affiché à 1e-7 près.
+
+**Conséquence la plus grave :** les **fausses détections** n'étaient pas comptées —
+un pixel prédit « changé » à tort n'entrait pas dans le calcul.
+
+**Correction :** un pixel inchangé porte légitimement le label 0 dans la carte SCD ;
+il ne requiert aucune annotation sémantique. Seuls les pixels changés en exigent une.
+Cette logique est aussi celle de l'implémentation de référence (`SCDD_eval_all`
+compte tous les pixels, sans notion d'ignore sémantique).
+
+**Impact mesuré :** structurel sur SECOND (une prédiction *parfaite* donnait
+mIoU = 0,50 au lieu de 1,00) ; négligeable sur Hi-UCD (~0,6 % relatif sur le SeK),
+car la sémantique y est annotée en pleine scène. Les conclusions passées sur Hi-UCD
+restent donc valides.
+
+**Garde-fou ajouté** (`tests/test_metrics_validity.py`) : une prédiction parfaite
+doit donner des métriques parfaites, vérifié sur les **deux** conventions de
+labellisation. Ce test aurait dû exister dès l'ajout de SECOND.
+
+### Premiers résultats comparables — SECOND (28 juillet)
+
+| Méthode | Params | OA | Fscd | mIoU | **SeK** |
+|---|---|---|---|---|---|
+| Mamba-FCS | 189 M | 88,62 | 65,78 | 74,07 | **25,50** |
+| ChangeMamba | ~90 M | 88,12 | 64,03 | 73,68 | **24,11** |
+| **CSF-Mamba** | **20,8 M** | 79,85 | 53,60 | 65,27 | **15,61** |
+
+Premier chiffre du projet directement confrontable à la littérature (même split
+officiel, même code de métriques). **Nettement en dessous du SOTA** : ~65 % du SeK de
+ChangeMamba, avec 4,3× moins de paramètres.
+
+**Diagnostic principal : le modèle sur-détecte le changement**, et de façon cohérente
+sur les deux datasets :
+
+| Dataset | Changement réel | Prédit | Excès | `bcd-change-weight` |
+|---|---|---|---|---|
+| SECOND | 20,07 % | 30,86 % | ×1,5 | 5 |
+| Hi-UCD | 2,05 % | 7,35 % | ×3,6 | 20 |
+
+L'excès suit le poids appliqué. Les mécanismes anti-déséquilibre (CE pondérée +
+Dice), introduits pour sortir du collapse du run 1, sont **trop agressifs** : la
+sur-détection dégrade la précision, donc Fscd, mIoU, OA et in fine le SeK.
+
+Sur SECOND c'est particulièrement injustifié : à **20 % de changement**, le dataset
+est quasi équilibré et ne nécessitait aucune compensation. Ces réglages étaient un
+réflexe hérité de Hi-UCD (2,45 %).
+
+**Prochaine expérience :** SECOND avec `--bcd-change-weight 1 --lambda-dice 0`
+(aucune compensation). Un seul facteur varie → ligne d'ablation exploitable :
+« effet des mécanismes anti-déséquilibre selon le taux de changement du dataset ».
+
 ---
 
 ## État au 28 juillet 2026
