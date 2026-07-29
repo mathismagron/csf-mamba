@@ -1,0 +1,36 @@
+#!/bin/bash
+#SBATCH --job-name=csf-eval
+#SBATCH --account=def-hervete
+#SBATCH --qos=cc-debug
+#SBATCH --gres=gpu:a100:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=48G
+#SBATCH --time=0:30:0
+#SBATCH --output=csf-eval-%j.out
+#
+# Évalue un checkpoint : tableau complet des métriques + diagnostic + visualisations.
+#
+# Usage (variables d'environnement, avec valeurs par défaut = run SECOND) :
+#   sbatch scripts/evaluate.sbatch
+#   RUN=hiucd_mini_chess_v3_semch DATASET=hi_ucd DATA=$SCRATCH/hi-ucd SPLIT=val \
+#       sbatch --export=ALL,RUN,DATASET,DATA,SPLIT scripts/evaluate.sbatch
+set -euo pipefail
+
+RUN="${RUN:-second_mini_chess}"
+DATASET="${DATASET:-second}"
+DATA="${DATA:-$SCRATCH/SECOND}"
+SPLIT="${SPLIT:-test}"
+CKPT_NAME="${CKPT_NAME:-best.pt}"
+
+module load python/3.11 cuda/12.2
+source "$SCRATCH/csf-venv-cu12/bin/activate"
+
+cd "$HOME/csf-mamba"
+python -m scripts.evaluate \
+    --data-root "$DATA" \
+    --dataset "$DATASET" \
+    --split "$SPLIT" \
+    --checkpoint "$SCRATCH/csf-mamba-runs/$RUN/$CKPT_NAME" \
+    --encoder vmamba_mini \
+    --backend mamba \
+    --output "$SCRATCH/csf-mamba-runs/$RUN/eval_$SPLIT"

@@ -110,14 +110,21 @@ class SCDEvaluator:
         pred_b = self._scd_map(sem_b, change_pred).cpu().numpy()
 
         # Vérité : sémantique masquée par le changement RÉEL ; 0 = no-change.
-        gt_change = (targets["change"] != 0)                 # bool, ignore=255 -> True mais filtré
+        change_valid = targets["change"] != IGNORE_INDEX
+        gt_change = change_valid & (targets["change"] != 0)
         gt_a = (targets["sem_t1"] * gt_change).cpu().numpy()
         gt_b = (targets["sem_t2"] * gt_change).cpu().numpy()
 
-        # Pixels valides : sémantique GT non-ignore et changement GT non-ignore.
-        valid = ((targets["sem_t1"] != IGNORE_INDEX)
-                 & (targets["sem_t2"] != IGNORE_INDEX)
-                 & (targets["change"] != IGNORE_INDEX)).cpu().numpy()
+        # Validité : un pixel INCHANGÉ porte légitimement le label 0 dans la carte
+        # SCD — il ne requiert AUCUNE annotation sémantique. Seuls les pixels
+        # CHANGÉS exigent une sémantique annotée.
+        #
+        # ⚠️ Exiger la sémantique partout (ancienne version) supprimait toute la
+        # population « non changé » sur les datasets à sémantique change-only
+        # (SECOND) : l'histogramme perdait la classe 0, iu[0] tombait à 0 et
+        # toutes les métriques devenaient incomparables à la littérature.
+        sem_valid = (targets["sem_t1"] != IGNORE_INDEX) & (targets["sem_t2"] != IGNORE_INDEX)
+        valid = (change_valid & (~gt_change | sem_valid)).cpu().numpy()
 
         for pred, gt in ((pred_a, gt_a), (pred_b, gt_b)):
             self.hist += fast_hist(pred[valid], gt[valid], self.num_classes)
