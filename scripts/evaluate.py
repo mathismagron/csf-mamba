@@ -87,6 +87,43 @@ def save_panel(sample, out, pred_change, pred_sem2, path):
     panel.save(path)
 
 
+def _report_confusion(evaluator, out_dir, num_classes):
+    """Diagnostic sémantique DANS les zones changées (classes 1..N).
+
+    Répond à la question : le modèle discrimine-t-il les classes, ou prédit-il
+    massivement la classe dominante ? Un kappa proche de 0 avec une classe très
+    majoritaire signe une distribution dégénérée, pas une architecture en cause.
+    """
+    hist = evaluator.hist
+    np.savetxt(out_dir / "confusion.csv", hist, fmt="%.0f", delimiter=",")
+
+    fg = hist[1:, 1:]                       # bloc sémantique, hors no-change
+    total = fg.sum()
+    if total == 0:
+        print("\n(aucun pixel changé prédit ET annoté : pas de diagnostic sémantique)")
+        return
+
+    gt_per_class = fg.sum(axis=0)           # colonnes = vérité
+    pred_per_class = fg.sum(axis=1)         # lignes = prédiction
+    correct = np.diag(fg)
+
+    print("\n===== Sémantique dans les zones changées =====")
+    print("  classe | % vérité | % prédit | rappel")
+    for c in range(fg.shape[0]):
+        if gt_per_class[c] == 0 and pred_per_class[c] == 0:
+            continue
+        rappel = correct[c] / gt_per_class[c] if gt_per_class[c] else float("nan")
+        print(f"    {c+1:4d} | {100*gt_per_class[c]/total:7.2f}% | "
+              f"{100*pred_per_class[c]/total:7.2f}% | {rappel:6.2%}")
+
+    dom_gt = 100 * gt_per_class.max() / total
+    dom_pred = 100 * pred_per_class.max() / total
+    print(f"  classe la plus fréquente  — vérité {dom_gt:.1f}% | prédite {dom_pred:.1f}%")
+    if dom_pred > 80:
+        print("  ⚠️ le modèle prédit massivement UNE classe -> kappa ~0 par construction")
+    print(f"  matrice complète sauvée dans {out_dir}/confusion.csv")
+
+
 @torch.no_grad()
 def main():
     args = parse_args()
@@ -126,6 +163,8 @@ def main():
             save_panel(sample, out_dir, pred_change[i], pred_sem2[i],
                        out_dir / f"sample_{saved:03d}.png")
             saved += 1
+
+    _report_confusion(evaluator, out_dir, num_classes)
 
     m = evaluator.compute()
     print("\n===== Métriques SCD (split", args.split, ") =====")
