@@ -30,8 +30,8 @@ set -euo pipefail
 
 WEIGHT="${WEIGHT:-5}"        # poids de la classe changement dans la CE
 DICE="${DICE:-1.0}"          # poids de la loss Dice
-SEMCH="${SEMCH:-1.0}"
-LOVASZ="${LOVASZ:-0}"        # poids de la loss Lovász (optimise l'IoU)        # CE sémantique restreinte aux zones changées
+SEMCH="${SEMCH:-1.0}"        # CE sémantique restreinte aux zones changées
+LOVASZ="${LOVASZ:-0}"        # poids de la loss Lovász (optimise l'IoU)
 EPOCHS="${EPOCHS:-100}"
 TAG="${TAG:-w5}"             # suffixe du dossier de sortie
 
