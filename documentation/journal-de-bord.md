@@ -478,11 +478,53 @@ goulot, l'IoU du changement doit monter, et le SeK avec lui.
 | `second_..._w2lovasz` | SECOND | Lovász 0,5 + poids 2 (récupérer du rappel) |
 | `hiucd_..._w5lovasz` | Hi-UCD | Lovász 0,5 |
 
-Résultats : _à compléter_
+**Résultat : hypothèse RÉFUTÉE.** (seuil de bruit : ±0,004 de SeK)
 
-**Levier gardé en réserve pour Hi-UCD :** sur-échantillonner les tuiles contenant du
-changement (×10 de densité de signal). Volontairement différé pour ne pas faire varier
-deux facteurs à la fois.
+| Run | IoU changement | SeK | % changement prédit |
+|---|---|---|---|
+| SECOND `nobal` (réf.) | 54,59 % | 0,1884 | 17,38 % |
+| SECOND `lovasz` | **54,64 %** | 0,1819 | 17,63 % |
+| SECOND `w2lovasz` | 56,07 % | 0,1931 | **20,88 %** |
+| Hi-UCD `w5` (réf.) | 39,70 % | 0,0155 | 2,13 % |
+| Hi-UCD `w5lovasz` | **39,12 %** | 0,0064 | 2,29 % |
+
+La Lovász **ne modifie pas l'IoU du changement** (54,59 → 54,64 sur SECOND) et le
+dégrade légèrement sur Hi-UCD, où elle fait chuter le SeK de moitié. Le seul gain
+observé (+1,5 point d'IoU) provient du **poids de changement porté à 2**, pas de la
+Lovász.
+
+**Enseignement structurel — un budget d'erreur incompressible.** Somme des erreurs de
+localisation sur SECOND :
+
+| Run | FN | FP | FN + FP |
+|---|---|---|---|
+| `nobal` | 60,8 M | 36,9 M | **97,7 M** |
+| `lovasz` | 59,9 M | 38,3 M | **98,2 M** |
+| `w2lovasz` | 47,6 M | 54,8 M | **102,3 M** |
+
+Le poids 2 calibre parfaitement la détection (20,88 % prédits pour 20,07 % réels) en
+échangeant 13 M de faux négatifs contre 18 M de faux positifs — mais la **somme reste
+autour de 100 M dans les trois configurations**.
+
+Conclusion : **les interventions au niveau de la loss déplacent le point de
+fonctionnement sur la courbe précision/rappel ; elles n'améliorent pas la courbe.**
+Le plafond est une limite de **capacité discriminante**, pas d'objectif
+d'optimisation. Cela ferme toute la famille des correctifs par pondération et
+reformulation de loss, et oriente vers : densité du signal d'entraînement, résolution,
+ou capacité du modèle.
+
+**Effet secondaire notable :** pousser la détection dégrade légèrement la sémantique
+(83,9 % → 82,3 % de classification correcte sur SECOND). Les deux tâches se disputent
+la capacité du décodeur — argument supplémentaire en faveur d'une limite de capacité.
+
+**Prochains leviers, visant la capacité et non la loss :**
+1. **Hi-UCD — densité du signal** : seules 9,4 % des tuiles d'entraînement contiennent
+   du changement. Sur-échantillonner ces tuiles (×10 de signal utile). C'est un
+   problème de données, qu'aucune loss ne pouvait résoudre — cohérent avec ce qui
+   précède.
+2. **SECOND — crops 512** : la densité de signal y est bonne (99,9 %), donc la limite
+   est ailleurs. Entraîner à la résolution du test supprime le décalage de longueur de
+   séquence (256² → 512², ×4 de tokens), spécifique aux modèles SSM.
 
 ---
 

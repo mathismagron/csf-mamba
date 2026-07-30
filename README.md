@@ -20,7 +20,7 @@ supportés et validés sur données réelles.
 |---|---|---|---|---|---|
 | Mamba-FCS | 189 M | 88,62 | 65,78 | 74,07 | **25,50** |
 | ChangeMamba | ~90 M | 88,12 | 64,03 | 73,68 | **24,11** |
-| **CSF-Mamba** | **20,8 M** | **87,36** | 58,94 | 70,54 | **18,84** |
+| **CSF-Mamba** | **20,8 M** | 85,89 | 59,16 | 71,28 | **19,31** |
 
 **Ablations établies** (bruit run-à-run mesuré : ±0,004 de SeK) :
 
@@ -29,9 +29,16 @@ supportés et validés sur données réelles.
 | Retirer la compensation de déséquilibre | SECOND (20 % chgt) | **+3,2** ✅ |
 | Supervision sémantique ciblée | Hi-UCD (2,45 % chgt) | **+0,019** ✅ |
 | Poids de changement 20 → 5 | Hi-UCD | +0,0003 (nul) |
+| Loss Lovász (optimise l'IoU) | les deux | **−0,006 à −0,009** ❌ |
+| Poids de changement 1 → 2 | SECOND | +0,005 (limite du bruit) |
 
 Le même réglage anti-déséquilibre est **décisif sur SECOND et neutre sur Hi-UCD** :
 il doit être calibré sur le taux de changement du dataset.
+
+**Résultat négatif important :** la somme des erreurs de localisation (FN+FP) reste
+constante (~100 M sur SECOND) quelle que soit la loss. Les interventions au niveau de
+la loss déplacent le point de fonctionnement précision/rappel mais **n'améliorent pas
+la courbe** — le plafond est une limite de capacité, pas d'objectif d'optimisation.
 
 Chronologie détaillée, décisions et diagnostics : `documentation/journal-de-bord.md`.
 
