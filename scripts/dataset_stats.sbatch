@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=csf-stats
 #SBATCH --account=def-hervete
-#SBATCH --qos=cc-debug
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=0:30:0
@@ -14,6 +13,9 @@
 #   sbatch scripts/dataset_stats.sbatch                                  # Hi-UCD
 #   DATASET=second DATA=$SCRATCH/SECOND SPLITS="train test" \
 #       sbatch --export=ALL,DATASET,DATA,SPLITS scripts/dataset_stats.sbatch
+# Astuce : pour un démarrage plus rapide, ajouter la QOS sur la ligne de
+# commande — sbatch --qos=cc-debug ... — plutôt que de la coder en dur
+# (elle est limitée à un job simultané et parfois indisponible).
 set -euo pipefail
 
 DATASET="${DATASET:-hi_ucd}"

@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=csf-test
 #SBATCH --account=def-hervete
-#SBATCH --qos=cc-debug
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=64G
@@ -12,6 +11,9 @@
 # pipeline tournent sur GPU. 10 batches, 1 époque, batch 2 (le 512x512 pleine
 # résolution est gourmand — batch 8 sature l'A100 40G). Pas un vrai entraînement.
 # Soumission :  cd $HOME/csf-mamba && sbatch scripts/test.sbatch
+# Astuce : pour un démarrage plus rapide, ajouter la QOS sur la ligne de
+# commande — sbatch --qos=cc-debug ... — plutôt que de la coder en dur
+# (elle est limitée à un job simultané et parfois indisponible).
 set -euo pipefail
 
 module load python/3.11 cuda/12.2

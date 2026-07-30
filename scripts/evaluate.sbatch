@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=csf-eval
 #SBATCH --account=def-hervete
-#SBATCH --qos=cc-debug
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
@@ -14,6 +13,9 @@
 #   sbatch scripts/evaluate.sbatch
 #   RUN=hiucd_mini_chess_v3_semch DATASET=hi_ucd DATA=$SCRATCH/hi-ucd SPLIT=val \
 #       sbatch --export=ALL,RUN,DATASET,DATA,SPLIT scripts/evaluate.sbatch
+# Astuce : pour un démarrage plus rapide, ajouter la QOS sur la ligne de
+# commande — sbatch --qos=cc-debug ... — plutôt que de la coder en dur
+# (elle est limitée à un job simultané et parfois indisponible).
 set -euo pipefail
 
 RUN="${RUN:-second_mini_chess}"

@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=csf-analyse
 #SBATCH --account=def-hervete
-#SBATCH --qos=cc-debug
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
 #SBATCH --time=0:15:0
@@ -15,6 +14,9 @@
 # confusion trouvées.
 #
 #   sbatch scripts/analyse.sbatch
+# Astuce : pour un démarrage plus rapide, ajouter la QOS sur la ligne de
+# commande — sbatch --qos=cc-debug ... — plutôt que de la coder en dur
+# (elle est limitée à un job simultané et parfois indisponible).
 set -euo pipefail
 
 module load python/3.11 cuda/12.2
