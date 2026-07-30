@@ -33,6 +33,9 @@ def parse_args():
     p.add_argument("--limit-batches", type=int, default=None,
                    help="Plafonne le nb de batches train/val par époque (run de test).")
     p.add_argument("--batch-size", type=int, default=8)
+    p.add_argument("--accum-steps", type=int, default=1,
+                   help="Accumulation de gradient : batch effectif = batch-size x accum-steps. "
+                        "Permet de changer la résolution à batch effectif constant.")
     p.add_argument("--crop-size", type=int, default=256,
                    help="Crop d'entraînement (256 = rapide). 0 = pleine résolution 512.")
     p.add_argument("--oversample-change", type=float, default=1.0,
@@ -116,8 +119,12 @@ def main():
         shuffle=False, num_workers=4, pin_memory=True,
     )
 
-    steps_per_epoch = args.limit_batches or len(train_loader)
+    micro_per_epoch = args.limit_batches or len(train_loader)
+    steps_per_epoch = max(1, micro_per_epoch // args.accum_steps)
     total_iters = args.epochs * steps_per_epoch
+    if args.accum_steps > 1:
+        print(f"accumulation x{args.accum_steps} : batch effectif "
+              f"{args.batch_size * args.accum_steps}, {steps_per_epoch} pas d'optimiseur/époque")
     scheduler = _warmup_cosine(optimizer, args.warmup_iters, total_iters, args.lr, args.min_lr)
     use_amp = args.amp and device == "cuda"
 
@@ -140,6 +147,7 @@ def main():
 
     for epoch in range(start_epoch, args.epochs):
         model.train()
+        optimizer.zero_grad()
         for step, batch in enumerate(train_loader):
             if args.limit_batches is not None and step >= args.limit_batches:
                 break
@@ -152,13 +160,16 @@ def main():
             outputs = {k: (v.float() if torch.is_tensor(v) else v) for k, v in outputs.items()}
             losses = criterion(outputs, _targets_from_batch(batch), apply_sek=apply_sek)
 
-            optimizer.zero_grad()
-            losses["total"].backward()
-            optimizer.step()
-            scheduler.step()
-            global_step += 1
+            # Accumulation : on divise pour que le gradient moyen soit celui du
+            # batch effectif, et on ne met à jour que tous les accum_steps.
+            (losses["total"] / args.accum_steps).backward()
+            if (step + 1) % args.accum_steps == 0:
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad()
+                global_step += 1
 
-            if step % 50 == 0:
+            if step % (50 * args.accum_steps) == 0:
                 flat = {k: round(v.item(), 4) for k, v in losses.items()}
                 lr = scheduler.get_last_lr()[0]
                 print(f"epoch {epoch} step {step} lr {lr:.2e} sek={'on' if apply_sek else 'off'} {flat}")

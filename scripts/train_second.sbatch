@@ -23,12 +23,23 @@
 # Ablations (un seul facteur à la fois, dossier de sortie distinct) :
 #   sbatch scripts/train_second.sbatch                                   # défaut
 #   WEIGHT=5 DICE=1 TAG=w5d1 sbatch --export=ALL,WEIGHT,DICE,TAG scripts/train_second.sbatch
+#
+# Résolution : l'entraînement se fait sur des crops 256 mais la validation sur des
+# tuiles 512 entières — pour un modèle SSM, cela quadruple la longueur de séquence
+# entre les deux régimes. Pour tester l'effet de ce décalage, entraîner en 512 :
+#   CROP=512 BATCH=2 ACCUM=4 TAG=crop512 \
+#     sbatch --time=24:00:00 --export=ALL,CROP,BATCH,ACCUM,TAG scripts/train_second.sbatch
+# BATCH=2 x ACCUM=4 conserve le batch effectif de 8 : SEULE la résolution change
+# (512² en batch 8 sature l'A100). Compter ~4x le temps : ~14 h au lieu de ~3-4 h.
 set -euo pipefail
 
 WEIGHT="${WEIGHT:-1}"        # poids de la classe changement dans la CE
 DICE="${DICE:-0}"            # poids de la loss Dice
 EPOCHS="${EPOCHS:-100}"
 LOVASZ="${LOVASZ:-0}"        # poids de la loss Lovász (optimise l'IoU)
+CROP="${CROP:-256}"          # taille du crop d'entraînement (512 = tuile entière)
+BATCH="${BATCH:-8}"          # micro-batch
+ACCUM="${ACCUM:-1}"          # accumulation : batch effectif = BATCH x ACCUM
 TAG="${TAG:-nobal}"          # suffixe du dossier de sortie
 
 module load python/3.11 cuda/12.2
@@ -41,7 +52,7 @@ DATA_ROOT="$SLURM_TMPDIR/SECOND"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/second_mini_chess_$TAG"
-echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ epochs=$EPOCHS -> $OUT =="
+echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ crop=$CROP batch=$BATCH x accum=$ACCUM epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
@@ -51,8 +62,9 @@ python -m scripts.train \
     --encoder-pretrained "$CKPT" \
     --core chess \
     --backend mamba \
-    --crop-size 256 \
-    --batch-size 8 \
+    --crop-size "$CROP" \
+    --batch-size "$BATCH" \
+    --accum-steps "$ACCUM" \
     --bcd-change-weight "$WEIGHT" \
     --lambda-dice "$DICE" \
     --lambda-lovasz "$LOVASZ" \
