@@ -26,8 +26,8 @@ supportés et validés sur données réelles.
 
 | Facteur | Dataset | Effet sur le SeK |
 |---|---|---|
-| Retirer la compensation de déséquilibre | SECOND (20 % chgt) | **+3,2** ✅ |
-| Supervision sémantique ciblée | Hi-UCD (2,45 % chgt) | **+0,019** ✅ |
+| Retirer la compensation de déséquilibre | SECOND (20 % de pixels chgt) | **+3,2** ✅ |
+| Supervision sémantique ciblée | Hi-UCD (1,4 % de pixels chgt) | **+0,019** ✅ |
 | Poids de changement 20 → 5 | Hi-UCD | +0,0003 (nul) |
 | Loss Lovász (optimise l'IoU) | les deux | **−0,006 à −0,009** ❌ |
 | Poids de changement 1 → 2 | SECOND | +0,005 (limite du bruit) |

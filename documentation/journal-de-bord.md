@@ -110,8 +110,21 @@ Hi-UCD-S : paire annotée **2018→2019**, tuiles 512×512, masques RGB 3 canaux
 (sémantique T1 / sémantique T2 / changement), 9 classes sémantiques. Le split `test/`
 n'a **pas** de masques → validation sur `val/`.
 
-**Mesure déterminante : seulement 2,45 % des pixels sont des changements.** Ce
-déséquilibre extrême conditionne tout ce qui suit.
+**Mesure déterminante : le changement est très minoritaire.** Deux statistiques
+distinctes, à ne pas confondre — elles motivent des correctifs différents :
+
+| Mesure | train | val | Ce qu'elle conditionne |
+|---|---|---|---|
+| **% de pixels** changés | 1,36 % | 2,20 % | le **déséquilibre de classes** dans la loss |
+| **% de tuiles** contenant du changement | 9,4 % | 14,7 % | la **densité du signal** d'entraînement |
+
+Les deux se combinent : `9,4 % des tuiles × ~14,5 % de surface dans ces tuiles
+= 1,36 % de la surface totale`. Le changement est donc **concentré dans peu de
+tuiles**, et y occupe environ un septième de la surface.
+
+*(Note : un premier chiffre de 2,45 % circulait, issu d'un échantillon non
+aléatoire — voir plus bas l'erreur d'échantillonnage contigu. Les valeurs
+ci-dessus proviennent d'un tirage aléatoire de 1 500 tuiles par split.)*
 
 ### Run n°1 — baseline (22–23 juillet, 13 h 45, 100 époques)
 
@@ -187,7 +200,7 @@ n'optimise pas les zones changées, alors ajouter une supervision sémantique
 **Changement (un seul, volontairement) :** nouveau terme `--lambda-sem-change`, une
 cross-entropy sémantique où tout pixel hors changement est mis à `ignore` — la CE ne
 compte donc que les pixels changés. Poids 1.0, soit une sur-pondération relative d'un
-facteur ~40 pour cette population (2,45 % des pixels).
+facteur important pour cette population (~1,4 % des pixels en train).
 
 **Ce qui n'a PAS changé :** la loss SeK et les métriques restent strictement
 identiques (vérifié : aucune modification de `sek_mambafcs.py` ni `metrics.py`). Un
@@ -341,7 +354,7 @@ sur-détection dégrade la précision, donc Fscd, mIoU, OA et in fine le SeK.
 
 Sur SECOND c'est particulièrement injustifié : à **20 % de changement**, le dataset
 est quasi équilibré et ne nécessitait aucune compensation. Ces réglages étaient un
-réflexe hérité de Hi-UCD (2,45 %).
+réflexe hérité de Hi-UCD (~1,4 % de pixels changés).
 
 **Prochaine expérience :** SECOND avec `--bcd-change-weight 1 --lambda-dice 0`
 (aucune compensation). Un seul facteur varie → ligne d'ablation exploitable :
@@ -385,7 +398,7 @@ lecture était prématurée, les premières époques étant dominées par le bru
 | poids 5 | +0,0158 |
 
 Écart 0,0003, très en dessous du bruit → **levier sans effet ici**, contrairement à
-SECOND. La différence de taux de changement (2,45 % contre 20 %) explique que le même
+SECOND. La différence de taux de changement (~1,4 % contre 20 %) explique que le même
 réglage soit décisif sur un dataset et neutre sur l'autre.
 
 **Positionnement actuel sur SECOND :**

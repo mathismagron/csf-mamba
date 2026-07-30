@@ -16,7 +16,7 @@
 #   bash scripts/download_pretrained.sh $SCRATCH/pretrained_weight
 #   cd /scratch/<user>/hi-ucd && tar -cf $SCRATCH/hi-ucd.tar train val
 #
-# DÉFAUT = WEIGHT 5. Hi-UCD n'a que 2,45 % de pixels changés, donc une
+# DÉFAUT = WEIGHT 5. Hi-UCD n'a que ~1,4 % de pixels changés (train), donc une
 # compensation reste nécessaire (sans elle, le run 1 avait collapsé vers « aucun
 # changement », SeK = 0). Mais WEIGHT=20 sur-détectait d'un facteur 3,6 (7,35 %
 # prédits contre 2,05 % réels), ce qui dégradait la précision. 5 est un
