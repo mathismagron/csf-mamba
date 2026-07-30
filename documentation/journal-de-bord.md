@@ -519,12 +519,57 @@ la capacité du décodeur — argument supplémentaire en faveur d'une limite de
 
 **Prochains leviers, visant la capacité et non la loss :**
 1. **Hi-UCD — densité du signal** : seules 9,4 % des tuiles d'entraînement contiennent
-   du changement. Sur-échantillonner ces tuiles (×10 de signal utile). C'est un
-   problème de données, qu'aucune loss ne pouvait résoudre — cohérent avec ce qui
-   précède.
+   du changement. Sur-échantillonner ces tuiles. C'est un problème de données,
+   qu'aucune loss ne pouvait résoudre — cohérent avec ce qui précède.
 2. **SECOND — crops 512** : la densité de signal y est bonne (99,9 %), donc la limite
    est ailleurs. Entraîner à la résolution du test supprime le décalage de longueur de
    séquence (256² → 512², ×4 de tokens), spécifique aux modèles SSM.
+
+### Sur-échantillonnage des tuiles avec changement (29 juillet, en cours)
+
+**Hypothèse testée.** Si le plafond de Hi-UCD vient d'un manque de signal
+d'entraînement plutôt que d'une limite d'architecture, alors augmenter la proportion
+d'exemples utiles doit faire monter l'IoU du changement — la mesure qui a résisté à
+toutes les manipulations de loss.
+
+L'argument reposant sur une corrélation frappante entre les deux datasets :
+
+| | Tuiles avec changement | SeK obtenu |
+|---|---|---|
+| Hi-UCD | 9,4 % | 0,0155 |
+| SECOND | 99,9 % | 0,1931 |
+
+Rapport de densité ~10:1, rapport de SeK ~12:1, à architecture et recette identiques.
+
+**Mécanisme.** Index de changement par tuile (lecture du seul masque, mis en cache et
+réutilisé à la reprise), puis `WeightedRandomSampler` : les tuiles contenant du
+changement reçoivent un poids `OVERSAMPLE`, tirage avec remise, taille d'époque
+inchangée. Densité vérifiée conforme à la théorie :
+
+| `OVERSAMPLE` | Densité du signal | Répétitions par tuile utile |
+|---|---|---|
+| 1 (uniforme) | 9,4 % | 1 |
+| 3 | 24,5 % | 2,5 |
+| 10 | 51,9 % | 5,3 |
+
+**La validation reste strictement uniforme** — on ne biaise que ce que le modèle voit
+à l'entraînement, jamais ce sur quoi il est jugé.
+
+**Compromis assumé et instrumenté.** Un facteur élevé fait revoir souvent les ~1 130
+mêmes tuiles (sur-apprentissage) et raréfie les exemples négatifs (faux positifs).
+Deux garde-fous mesurables :
+- courbe de SeK en validation qui monterait puis **redescendrait** ;
+- « % de changement prédit » s'éloignant des 2,05 % réels (à 2,13 % actuellement,
+  donc bien calibré).
+
+Deux runs lancés (`ov3` et `ov10`) pour obtenir à la fois le résultat et la
+sensibilité au réglage.
+
+**Signal de succès attendu :** IoU du changement au-delà de 39,7 %.
+**En cas d'échec des deux :** la limite serait bien la capacité du modèle, et il
+faudrait se tourner vers la résolution ou la taille du backbone.
+
+Résultats : _à compléter_
 
 ---
 
@@ -545,9 +590,15 @@ détecté) ; ce sont les faux positifs et faux négatifs de détection qui pèse
 
 | Chantier | État |
 |---|---|
-| Loss Lovász (optimise l'IoU) | 3 runs lancés |
-| Sur-échantillonnage des tuiles avec changement (Hi-UCD) | en réserve |
+| Loss Lovász (optimise l'IoU) | ❌ réfutée — n'améliore pas l'IoU |
+| Sur-échantillonnage des tuiles avec changement (Hi-UCD) | 2 runs lancés (`ov3`, `ov10`) |
+| Crops 512 sur SECOND (décalage de longueur de séquence) | à faire |
 | Évaluation des checkpoints ChangeMamba avec notre code | à faire |
+
+**Meilleur résultat à ce jour** — SECOND, `w2lovasz` : SeK **19,31** avec 20,8 M
+paramètres, détection parfaitement calibrée (20,88 % prédits pour 20,07 % réels).
+À comparer aux checkpoints publiés par ChangeMamba eux-mêmes : SeK 22,08 pour
+~37 M paramètres — soit **87 % de leur score avec 56 % de leurs paramètres**.
 
 **Ensuite :**
 1. Premier chiffre sur SECOND, comparable à ChangeMamba (24,11) et Mamba-FCS (25,50).
