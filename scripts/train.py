@@ -12,6 +12,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from csf_mamba.datasets import DATASETS
+from csf_mamba.datasets.oversample import build_change_index, make_change_sampler
 from csf_mamba.datasets.transforms import train_transform
 from csf_mamba.evaluation.metrics import SCDEvaluator, SCDMetrics
 from csf_mamba.losses.composite import CSFMambaLoss
@@ -34,6 +35,9 @@ def parse_args():
     p.add_argument("--batch-size", type=int, default=8)
     p.add_argument("--crop-size", type=int, default=256,
                    help="Crop d'entraînement (256 = rapide). 0 = pleine résolution 512.")
+    p.add_argument("--oversample-change", type=float, default=1.0,
+                   help="Poids des tuiles contenant du changement au tirage "
+                        "(1 = uniforme). Utile sur Hi-UCD où 9 %% seulement en ont.")
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--min-lr", type=float, default=1e-6, help="Plancher de la décroissance cosine.")
     p.add_argument("--warmup-iters", type=int, default=1500, help="Montée linéaire du LR.")
@@ -92,9 +96,20 @@ def main():
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
 
+    train_set = build_dataset(args, "train")
+    # Sur-échantillonnage des tuiles avec changement (cf. datasets/oversample.py).
+    # La VALIDATION reste uniforme : les métriques restent honnêtes.
+    train_sampler = None
+    if args.oversample_change != 1.0:
+        fractions = build_change_index(
+            train_set, cache_path=Path(args.output) / "change_index_train.npy"
+        )
+        train_sampler = make_change_sampler(fractions, args.oversample_change)
+
     train_loader = DataLoader(
-        build_dataset(args, "train"), batch_size=args.batch_size,
-        shuffle=True, num_workers=4, pin_memory=True, drop_last=True,
+        train_set, batch_size=args.batch_size,
+        shuffle=(train_sampler is None), sampler=train_sampler,
+        num_workers=4, pin_memory=True, drop_last=True,
     )
     val_loader = DataLoader(
         build_dataset(args, args.val_split), batch_size=args.batch_size,

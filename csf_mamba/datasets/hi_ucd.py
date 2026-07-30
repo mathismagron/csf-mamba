@@ -83,6 +83,15 @@ class HiUCDDataset(Dataset):
     def __len__(self) -> int:
         return len(self.ids)
 
+    def change_fraction(self, idx: int) -> float:
+        """Fraction de pixels changés, en ne lisant QUE le masque (1 fichier sur 3).
+
+        Sert à construire l'index de sur-échantillonnage : seules ~9 % des tuiles
+        d'entraînement Hi-UCD contiennent du changement.
+        """
+        arr = np.asarray(Image.open(self.mask_dir / f"{self.ids[idx]}.png"))
+        return float((arr[..., 2] == 2).mean())      # canal 3 : 2 = changement
+
     def _load_image(self, year: str, sample_id: str) -> torch.Tensor:
         path = self.root / "image" / year / f"{sample_id}.png"
         arr = np.asarray(Image.open(path).convert("RGB"), dtype=np.float32) / 255.0

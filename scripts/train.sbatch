@@ -26,12 +26,20 @@
 #   sbatch scripts/train.sbatch                                          # défaut
 #   WEIGHT=20 TAG=w20 sbatch --export=ALL,WEIGHT,TAG scripts/train.sbatch
 #   SEMCH=0 TAG=nosemch sbatch --export=ALL,SEMCH,TAG scripts/train.sbatch
+#   OVERSAMPLE=3 TAG=ov3 sbatch --export=ALL,OVERSAMPLE,TAG scripts/train.sbatch
+#
+# OVERSAMPLE : seules ~9,4 % des tuiles d'entraînement Hi-UCD contiennent du
+# changement. Un facteur 3 porte la densité de signal à ~24 %, un facteur 10 à
+# ~52 %. Contrepartie : les ~1 130 tuiles utiles sont revues 2,5 à 5 fois par
+# époque (risque de sur-apprentissage) et les négatifs se raréfient (risque de
+# faux positifs). Surveiller la courbe de SeK et le %% de changement prédit.
 set -euo pipefail
 
 WEIGHT="${WEIGHT:-5}"        # poids de la classe changement dans la CE
 DICE="${DICE:-1.0}"          # poids de la loss Dice
 SEMCH="${SEMCH:-1.0}"        # CE sémantique restreinte aux zones changées
 LOVASZ="${LOVASZ:-0}"        # poids de la loss Lovász (optimise l'IoU)
+OVERSAMPLE="${OVERSAMPLE:-1}" # poids des tuiles AVEC changement au tirage
 EPOCHS="${EPOCHS:-100}"
 TAG="${TAG:-w5}"             # suffixe du dossier de sortie
 
@@ -47,7 +55,7 @@ DATA_ROOT="$SLURM_TMPDIR/hi-ucd"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/hiucd_mini_chess_$TAG"
-echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ semch=$SEMCH epochs=$EPOCHS -> $OUT =="
+echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ semch=$SEMCH oversample=$OVERSAMPLE epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
@@ -61,6 +69,7 @@ python -m scripts.train \
     --bcd-change-weight "$WEIGHT" \
     --lambda-dice "$DICE" \
     --lambda-lovasz "$LOVASZ" \
+    --oversample-change "$OVERSAMPLE" \
     --lambda-sem-change "$SEMCH" \
     --epochs "$EPOCHS" \
     --seed 42 \

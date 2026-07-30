@@ -87,6 +87,11 @@ class SECONDDataset(Dataset):
     def __len__(self) -> int:
         return len(self.ids)
 
+    def change_fraction(self, idx: int) -> float:
+        """Fraction de pixels changés, en ne lisant QUE la carte de changement."""
+        arr = np.asarray(Image.open(self.dirs["GT_CD"] / self.ids[idx]))
+        return float((arr > 0).mean())
+
     def _load_rgb(self, folder: str, name: str) -> torch.Tensor:
         arr = np.asarray(
             Image.open(self.dirs[folder] / name).convert("RGB"), dtype=np.float32
