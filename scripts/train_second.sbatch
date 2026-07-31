@@ -40,6 +40,7 @@ LOVASZ="${LOVASZ:-0}"        # poids de la loss Lovász (optimise l'IoU)
 CROP="${CROP:-256}"          # taille du crop d'entraînement (512 = tuile entière)
 BATCH="${BATCH:-8}"          # micro-batch
 ACCUM="${ACCUM:-1}"          # accumulation : batch effectif = BATCH x ACCUM
+ENCODER="${ENCODER:-vmamba_mini}"  # vmamba_mini (13,8M) ou vmamba_tiny (28M)
 TAG="${TAG:-nobal}"          # suffixe du dossier de sortie
 
 module load python/3.11 cuda/12.2
@@ -52,13 +53,13 @@ DATA_ROOT="$SLURM_TMPDIR/SECOND"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/second_mini_chess_$TAG"
-echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ crop=$CROP batch=$BATCH x accum=$ACCUM epochs=$EPOCHS -> $OUT =="
+echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ crop=$CROP batch=$BATCH x accum=$ACCUM enc=$ENCODER epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
     --dataset second \
     --val-split test \
-    --encoder vmamba_mini \
+    --encoder "$ENCODER" \
     --encoder-pretrained "$CKPT" \
     --core chess \
     --backend mamba \

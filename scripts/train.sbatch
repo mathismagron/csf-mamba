@@ -41,6 +41,7 @@ SEMCH="${SEMCH:-1.0}"        # CE sémantique restreinte aux zones changées
 LOVASZ="${LOVASZ:-0}"        # poids de la loss Lovász (optimise l'IoU)
 OVERSAMPLE="${OVERSAMPLE:-1}" # poids des tuiles AVEC changement au tirage
 EPOCHS="${EPOCHS:-100}"
+ENCODER="${ENCODER:-vmamba_mini}"  # vmamba_mini (13,8M) ou vmamba_tiny (28M)
 TAG="${TAG:-w5}"             # suffixe du dossier de sortie
 
 module load python/3.11 cuda/12.2
@@ -55,12 +56,12 @@ DATA_ROOT="$SLURM_TMPDIR/hi-ucd"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/hiucd_mini_chess_$TAG"
-echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ semch=$SEMCH oversample=$OVERSAMPLE epochs=$EPOCHS -> $OUT =="
+echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ semch=$SEMCH oversample=$OVERSAMPLE enc=$ENCODER epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
     --dataset hi_ucd \
-    --encoder vmamba_mini \
+    --encoder "$ENCODER" \
     --encoder-pretrained "$CKPT" \
     --core chess \
     --backend mamba \
