@@ -27,6 +27,15 @@
 #   WEIGHT=20 TAG=w20 sbatch --export=ALL,WEIGHT,TAG scripts/train.sbatch
 #   SEMCH=0 TAG=nosemch sbatch --export=ALL,SEMCH,TAG scripts/train.sbatch
 #   OVERSAMPLE=3 TAG=ov3 sbatch --export=ALL,OVERSAMPLE,TAG scripts/train.sbatch
+#   ENCODER=vmamba_tiny TAG=tiny sbatch --export=ALL,ENCODER,TAG scripts/train.sbatch
+#
+# Résolution : l'entraînement se fait sur des crops 256 mais la validation sur des
+# tuiles 512 — pour un modèle SSM cela quadruple la longueur de séquence entre les
+# deux régimes. Supprimer ce décalage a rapporté +0,026 de SeK sur SECOND :
+#   CROP=512 BATCH=2 ACCUM=4 TAG=crop512 \
+#     sbatch --time=24:00:00 --export=ALL,CROP,BATCH,ACCUM,TAG scripts/train.sbatch
+# BATCH=2 x ACCUM=4 conserve le batch effectif de 8 : SEULE la résolution change
+# (512² en batch 8 sature l'A100). Compter ~4x le temps.
 #
 # OVERSAMPLE : seules ~9,4 % des tuiles d'entraînement Hi-UCD contiennent du
 # changement. Un facteur 3 porte la densité de signal à ~24 %, un facteur 10 à
@@ -41,6 +50,9 @@ SEMCH="${SEMCH:-1.0}"        # CE sémantique restreinte aux zones changées
 LOVASZ="${LOVASZ:-0}"        # poids de la loss Lovász (optimise l'IoU)
 OVERSAMPLE="${OVERSAMPLE:-1}" # poids des tuiles AVEC changement au tirage
 EPOCHS="${EPOCHS:-100}"
+CROP="${CROP:-256}"          # taille du crop d'entraînement (512 = tuile entière)
+BATCH="${BATCH:-8}"          # micro-batch
+ACCUM="${ACCUM:-1}"          # accumulation : batch effectif = BATCH x ACCUM
 ENCODER="${ENCODER:-vmamba_mini}"  # vmamba_mini (13,8M) ou vmamba_tiny (28M)
 TAG="${TAG:-w5}"             # suffixe du dossier de sortie
 
@@ -56,7 +68,7 @@ DATA_ROOT="$SLURM_TMPDIR/hi-ucd"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/hiucd_mini_chess_$TAG"
-echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ semch=$SEMCH oversample=$OVERSAMPLE enc=$ENCODER epochs=$EPOCHS -> $OUT =="
+echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ semch=$SEMCH oversample=$OVERSAMPLE enc=$ENCODER crop=$CROP batch=$BATCH x accum=$ACCUM epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
@@ -65,8 +77,9 @@ python -m scripts.train \
     --encoder-pretrained "$CKPT" \
     --core chess \
     --backend mamba \
-    --crop-size 256 \
-    --batch-size 8 \
+    --crop-size "$CROP" \
+    --batch-size "$BATCH" \
+    --accum-steps "$ACCUM" \
     --bcd-change-weight "$WEIGHT" \
     --lambda-dice "$DICE" \
     --lambda-lovasz "$LOVASZ" \
