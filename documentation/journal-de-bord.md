@@ -582,6 +582,85 @@ sensibilité au réglage.
 **En cas d'échec des deux :** la limite serait bien la capacité du modèle, et il
 faudrait se tourner vers la résolution ou la taille du backbone.
 
+**Résultat : hypothèse validée, mais insuffisante.** (seuil de bruit : ±0,004)
+
+| Config | SeK | Fscd | kappa |
+|---|---|---|---|
+| `w5` (uniforme) | 0,0158 | 0,321 | 0,029 |
+| **`ov3`** | **0,0531** | **0,382** | **0,096** |
+| `ov10` | 0,0386 | 0,380 | 0,072 |
+
+`ov3` **triple le SeK** (+0,037, soit ~9× le bruit) — de loin l'effet le plus fort
+mesuré sur Hi-UCD. Le manque de signal était donc bien **un** facteur.
+
+Et le compromis anticipé se manifeste : **`ov10` fait moins bien que `ov3`**. À 5,4
+répétitions par tuile et par époque, le sur-apprentissage coûte plus que la densité
+ne rapporte. L'optimum est proche de 3.
+
+**Mais le niveau absolu reste mauvais** : 0,053 contre 0,214 sur SECOND — un facteur 4
+d'écart subsiste. Le manque de signal n'était donc pas **le** facteur. Il ne faut pas
+confondre « effet statistiquement net » et « résultat exploitable ».
+
+### Crops 512 sur SECOND — le décalage de longueur de séquence (29 juillet)
+
+**Hypothèse.** L'entraînement se fait sur des crops 256, la validation sur des tuiles
+512 : pour un modèle **SSM**, qui traite l'image comme une séquence, cela quadruple la
+longueur de séquence entre les deux régimes. Anodin pour un CNN, potentiellement
+coûteux ici.
+
+**Protocole.** `CROP=512 BATCH=2 ACCUM=4` : l'accumulation de gradient conserve le
+batch effectif de 8, donc **seule la résolution varie** (512² en batch 8 sature
+l'A100). Équivalence des gradients vérifiée à 1e-6 près.
+
+| Config | SeK | Fscd | mIoU | OA |
+|---|---|---|---|---|
+| `nobal` (crops 256) | 0,1884 | 0,593 | 0,710 | 0,869 |
+| `w2lovasz` | 0,1931 | 0,592 | 0,713 | 0,859 |
+| **`crop512`** | **0,2143** | **0,621** | **0,720** | **0,876** |
+
+**+0,026 (≈6× le bruit), toutes métriques en hausse simultanément.** Hypothèse
+validée : pour un modèle SSM, entraîner à la résolution d'inférence compte réellement.
+C'est une observation qui dépasse le cadre de ce projet.
+
+**Convergence :** les deux runs plafonnent vers l'époque 62-68 puis déclinent
+légèrement — 100 époques suffisent, prolonger dégraderait.
+
+**Positionnement actualisé :**
+
+| Méthode | Params | SeK |
+|---|---|---|
+| Mamba-FCS | 189 M | 25,50 |
+| ChangeMamba (publié) | ~90 M | 24,11 |
+| ChangeMamba (checkpoint réel) | ~37 M | 22,08 |
+| **CSF-Mamba** | **20,8 M** | **21,43** |
+
+**0,65 point du checkpoint réel de ChangeMamba, avec 56 % de ses paramètres.**
+
+**Constat transversal :** les deux seuls leviers qui ont fonctionné touchent aux
+**données** (densité du signal) et à la **résolution** — jamais à la loss. Cohérent
+avec le budget d'erreur incompressible observé plus haut.
+
+### Série suivante (lancée le 29 juillet)
+
+Toutes partent de `OVERSAMPLE=3`, la meilleure configuration connue, en ne faisant
+varier qu'un facteur :
+
+| Run | Hypothèse testée |
+|---|---|
+| `ov5` | l'optimum du sur-échantillonnage est entre 3 et 10 |
+| `ov3_tiny` | **la capacité du modèle est le verrou restant** (backbone 13,8 M → 28 M) |
+| `ov3_crop512` | le décalage de longueur de séquence coûte aussi sur Hi-UCD |
+
+`ov3_tiny` porte le modèle à 34,8 M, hors cible d'efficience : c'est une **ablation
+diagnostique**, pas un modèle candidat.
+
+**Ces trois runs épuisent les pistes identifiées.** Si aucun ne porte le SeK de
+Hi-UCD au-delà de ~0,08, la conclusion défendable sera que le plafond vient du
+**dataset lui-même** — étayée par les mesures accumulées (9,4 % de tuiles utiles,
+budget d'erreur constant sous toute variation de loss, capacité). Ce serait une
+caractérisation, pas un échec, et elle expliquerait pourquoi la littérature publie si
+peu sur cette paire temporelle.
+
 Résultats : _à compléter_
 
 ---

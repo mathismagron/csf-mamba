@@ -20,7 +20,8 @@ supportés et validés sur données réelles.
 |---|---|---|---|---|---|
 | Mamba-FCS | 189 M | 88,62 | 65,78 | 74,07 | **25,50** |
 | ChangeMamba | ~90 M | 88,12 | 64,03 | 73,68 | **24,11** |
-| **CSF-Mamba** | **20,8 M** | 85,89 | 59,16 | 71,28 | **19,31** |
+| ChangeMamba *(checkpoint publié)* | ~37 M | — | — | — | *22,08* |
+| **CSF-Mamba** | **20,8 M** | 87,58 | 62,10 | 72,00 | **21,43** |
 
 **Ablations établies** (bruit run-à-run mesuré : ±0,004 de SeK) :
 
@@ -31,14 +32,21 @@ supportés et validés sur données réelles.
 | Poids de changement 20 → 5 | Hi-UCD | +0,0003 (nul) |
 | Loss Lovász (optimise l'IoU) | les deux | **−0,006 à −0,009** ❌ |
 | Poids de changement 1 → 2 | SECOND | +0,005 (limite du bruit) |
+| **Sur-échantillonnage ×3** | Hi-UCD | **+0,037** ✅ (mais niveau absolu faible) |
+| Sur-échantillonnage ×10 | Hi-UCD | +0,023 (moins bon que ×3) |
+| **Crops 512 (vs 256)** | SECOND | **+0,026** ✅ |
 
 Le même réglage anti-déséquilibre est **décisif sur SECOND et neutre sur Hi-UCD** :
 il doit être calibré sur le taux de changement du dataset.
 
-**Résultat négatif important :** la somme des erreurs de localisation (FN+FP) reste
-constante (~100 M sur SECOND) quelle que soit la loss. Les interventions au niveau de
-la loss déplacent le point de fonctionnement précision/rappel mais **n'améliorent pas
-la courbe** — le plafond est une limite de capacité, pas d'objectif d'optimisation.
+**Constat transversal :** les seuls leviers efficaces touchent aux **données**
+(densité du signal) et à la **résolution** — jamais à la loss. Cohérent avec le fait
+que la somme des erreurs de localisation (FN+FP) reste constante (~100 M sur SECOND)
+quelle que soit la loss : celles-ci déplacent le point de fonctionnement
+précision/rappel sans améliorer la courbe.
+
+**Hi-UCD reste très en deçà** (SeK 0,053 contre 0,214 sur SECOND). Le plafond y est
+caractérisé mais non levé — voir le journal.
 
 Chronologie détaillée, décisions et diagnostics : `documentation/journal-de-bord.md`.
 
