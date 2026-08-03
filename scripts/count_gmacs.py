@@ -26,7 +26,7 @@ from pathlib import Path
 
 import torch
 from fvcore.nn import flop_count, parameter_count
-from fvcore.nn.jit_handles import einsum_flop_jit
+from fvcore.nn.jit_handles import einsum_flop_jit, get_shape
 
 from csf_mamba.datasets import DATASETS
 from csf_mamba.model import CSFMamba
@@ -55,6 +55,39 @@ def _einsum_flop(inputs, outputs):
     return einsum_flop_jit(inputs[:2], outputs)
 
 
+def _mamba_inner_flop(inputs, outputs):
+    """`mamba_inner_fn` de mamba_ssm — le kernel fusionné de NOS blocs C²S².
+
+    Sans ce handler, fvcore ne compte RIEN pour les quatre C²S² : le kernel fusionne
+    conv1d, x_proj, dt_proj, le scan sélectif et out_proj dans une seule
+    `autograd.Function` opaque, et les sous-modules apparaissent « never called ».
+    L'omission portait sur ~20 % du total.
+
+    Signature : mamba_inner_fn(xz, conv1d_w, conv1d_b, x_proj_w, delta_proj_w,
+                               out_proj_w, ...)
+    """
+    xz = get_shape(inputs[0])                    # (B, 2*d_inner, L)
+    conv1d_w = get_shape(inputs[1])              # (d_inner, 1, d_conv)
+    x_proj_w = get_shape(inputs[3])              # (dt_rank + 2*d_state, d_inner)
+    delta_proj_w = get_shape(inputs[4])          # (d_inner, dt_rank)
+    out_proj_w = get_shape(inputs[5])            # (d_model, d_inner)
+
+    b, l = xz[0], xz[2]
+    d_inner, d_conv = conv1d_w[0], conv1d_w[2]
+    dt_rank = delta_proj_w[1]
+    d_state = (x_proj_w[0] - dt_rank) // 2
+    d_model = out_proj_w[0]
+
+    macs = b * l * (
+        d_inner * d_conv                     # convolution causale 1D
+        + d_inner * x_proj_w[0]              # projection x -> (dt, B, C)
+        + dt_rank * d_inner                  # projection de delta
+        + 9 * d_inner * d_state              # scan sélectif (convention ChangeMamba)
+        + d_inner * d_model                  # projection de sortie
+    )
+    return macs
+
+
 def supported_ops():
     """Handlers pour les opérations que fvcore ne sait pas compter seul."""
     if str(_CHANGEMAMBA) not in sys.path:
@@ -69,6 +102,8 @@ def supported_ops():
         "aten::flip": None,
         # einsum : contourne l'incompatibilité fvcore / PyTorch récent.
         "aten::einsum": _einsum_flop,
+        # Kernel fusionné de mamba_ssm : sans lui, les C²S² comptent zéro.
+        "prim::PythonOp.MambaInnerFn": _mamba_inner_flop,
         # Scan sélectif : handlers de ChangeMamba, pour des chiffres comparables.
         "prim::PythonOp.SelectiveScanMamba": selective_scan_flop_jit,
         "prim::PythonOp.SelectiveScanOflex": selective_scan_flop_jit,
@@ -112,6 +147,9 @@ def main():
         for op, n in sorted(unsupported.items(), key=lambda kv: -kv[1])[:10]:
             print(f"    {op:40s} {n}")
         print("  (vérifier qu'aucune n'est un scan SSM : ce serait une sous-estimation)")
+        for op in unsupported:
+            if "SelectiveScan" in op or "MambaInner" in op:
+                print(f"  ⛔ {op} NON compté -> le total est FAUX")
 
 
 if __name__ == "__main__":
