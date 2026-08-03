@@ -77,6 +77,8 @@ def main():
     inputs = (torch.randn(1, 3, s, s).cuda(), torch.randn(1, 3, s, s).cuda())
 
     params = parameter_count(model)[""]
+    print(f"modèle construit ({params / 1e6:.2f} M) — traçage fvcore en cours "
+          f"(lent sur les modèles SSM, plusieurs minutes)...", flush=True)
     gmacs, unsupported = flop_count(model=model, inputs=inputs,
                                     supported_ops=supported_ops())
     total = sum(gmacs.values())

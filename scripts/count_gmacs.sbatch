@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
-#SBATCH --time=0:20:0
+#SBATCH --time=1:00:00
 #SBATCH --output=csf-gmacs-%j.out
 #
 # Compte GMACs + paramètres. Nécessite un GPU (kernel selective_scan).
@@ -21,5 +21,7 @@ source "$SCRATCH/csf-venv-cu12/bin/activate"
 cd "$HOME/csf-mamba"
 
 for ENC in vmamba_mini vmamba_tiny; do
-    python -m scripts.count_gmacs --encoder "$ENC" --size "$SIZE" --dataset second
+    echo "########## $ENC (taille $SIZE) — début $(date +%H:%M:%S)"
+    python -u -m scripts.count_gmacs --encoder "$ENC" --size "$SIZE" --dataset second
+    echo "########## $ENC terminé $(date +%H:%M:%S)"
 done
