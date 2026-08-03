@@ -21,7 +21,7 @@ supportés et validés sur données réelles.
 | Mamba-FCS | 189 M | 88,62 | 65,78 | 74,07 | **25,50** |
 | ChangeMamba | ~90 M | 88,12 | 64,03 | 73,68 | **24,11** |
 | ChangeMamba *(checkpoint publié)* | ~37 M | — | — | — | *22,08* |
-| **CSF-Mamba** | **20,8 M** | 87,58 | 62,10 | 72,00 | **21,43** |
+| **CSF-Mamba** | **20,8 M** | 87,57 | 62,10 | 72,00 | **21,44** |
 
 **Ablations établies** (bruit run-à-run mesuré : ±0,004 de SeK) :
 
@@ -35,6 +35,9 @@ supportés et validés sur données réelles.
 | **Sur-échantillonnage ×3** | Hi-UCD | **+0,037** ✅ (mais niveau absolu faible) |
 | Sur-échantillonnage ×10 | Hi-UCD | +0,023 (moins bon que ×3) |
 | **Crops 512 (vs 256)** | SECOND | **+0,026** ✅ |
+| Crops 512 (vs 256) | Hi-UCD | −0,024 ❌ (perte d'augmentation) |
+| Backbone ×1,8 (20,8 → 36,9 M) | Hi-UCD | −0,009 ❌ |
+| Sur-échantillonnage ×5 | Hi-UCD | −0,003 (= ×3, plateau) |
 
 Le même réglage anti-déséquilibre est **décisif sur SECOND et neutre sur Hi-UCD** :
 il doit être calibré sur le taux de changement du dataset.
@@ -45,8 +48,13 @@ que la somme des erreurs de localisation (FN+FP) reste constante (~100 M sur SEC
 quelle que soit la loss : celles-ci déplacent le point de fonctionnement
 précision/rappel sans améliorer la courbe.
 
-**Hi-UCD reste très en deçà** (SeK 0,053 contre 0,214 sur SECOND). Le plafond y est
-caractérisé mais non levé — voir le journal.
+**Hi-UCD — conclusion.** Les quatre familles de leviers (loss, données, capacité,
+résolution) sont épuisées : le meilleur SeK y plafonne à **0,053** contre 0,214 sur
+SECOND. Doubler le backbone *dégrade*, la résolution 512 *dégrade*, et l'époque du pic
+recule dès qu'on augmente la pression sur les données. **Le plafond est une propriété
+du jeu de données** — 1 130 tuiles porteuses de signal sur 12 000 — non du modèle.
+Hi-UCD est clos comme terrain d'optimisation, conservé comme dataset d'ablation et
+résultat de caractérisation.
 
 Chronologie détaillée, décisions et diagnostics : `documentation/journal-de-bord.md`.
 

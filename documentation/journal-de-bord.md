@@ -661,7 +661,95 @@ budget d'erreur constant sous toute variation de loss, capacité). Ce serait une
 caractérisation, pas un échec, et elle expliquerait pourquoi la littérature publie si
 peu sur cette paire temporelle.
 
-Résultats : _à compléter_
+**Résultats — les trois hypothèses sont tranchées, et Hi-UCD peut être conclu.**
+(seuil de bruit : ±0,004)
+
+| Run | Params | SeK | Époque du pic | Écart vs `ov3` |
+|---|---|---|---|---|
+| **`ov3`** | 20,8 M | **0,0531** | 39 | — |
+| `ov5` | 20,8 M | 0,0500 | 51 | −0,003 (dans le bruit) |
+| `ov10` | 20,8 M | 0,0386 | 33 | −0,015 |
+| `ov3_tiny` | **36,9 M** | 0,0438 | **12** | −0,009 |
+| `ov3_crop512` | 20,8 M | 0,0295 | **15** | −0,024 |
+
+**1. L'optimum du sur-échantillonnage est un plateau entre 3 et 5.** L'écart `ov3`
+vs `ov5` (0,003) est sous le seuil de bruit ; au-delà (×10), la dégradation est nette.
+
+**2. La capacité n'est PAS le verrou.** Doubler le backbone (20,8 → 36,9 M) **dégrade**
+le SeK de 0,009. C'était le dernier candidat non écarté — il est éliminé.
+
+**3. La résolution 512 dégrade sur Hi-UCD** (−0,024) alors qu'elle **améliorait**
+SECOND (+0,026). Explication cohérente : sur Hi-UCD, les crops 256 fournissent 4× plus
+de fenêtres distinctes par tuile, soit une augmentation de données précieuse quand
+seules ~1 130 tuiles portent du signal. Passer à 512 la supprime. Sur SECOND
+(2 968 tuiles toutes utiles), l'augmentation compte moins et l'alignement des longueurs
+de séquence l'emporte. **Le même levier a donc un signe opposé selon la richesse du
+dataset.**
+
+**L'époque du pic est le fil conducteur.** Plus on ajoute de capacité ou plus on retire
+d'augmentation, plus le modèle culmine tôt : 51 (`ov5`) → 39 (`ov3`) → 15 (`crop512`)
+→ 12 (`tiny`). C'est la signature d'un sur-apprentissage **contraint par la quantité de
+signal disponible**, non par la capacité du modèle.
+
+---
+
+## Conclusion sur Hi-UCD (30 juillet 2026)
+
+**Les quatre familles de leviers sont épuisées :**
+
+| Levier | Effet sur le SeK |
+|---|---|
+| Loss (pondération, Dice, Lovász, supervision ciblée) | déplace le point de fonctionnement, **pas la courbe** |
+| Données (sur-échantillonnage ×3) | **+0,037**, plafonne à 0,053 |
+| Capacité (backbone ×1,8) | **−0,009** |
+| Résolution (crops 512) | **−0,024** |
+
+**Le plafond de Hi-UCD est une propriété du jeu de données, pas du modèle.** Avec
+1 130 tuiles porteuses de signal sur 12 000 (paire 2018→2019), chaque tentative
+d'extraire davantage se paie immédiatement en sur-apprentissage.
+
+Trois observations convergentes l'étayent :
+1. l'IoU du changement plafonne à ~40 % quelle que soit l'intervention ;
+2. l'époque du pic recule dès qu'on augmente la pression sur les données ;
+3. le même modèle atteint SeK 0,214 sur SECOND — dont **99,9 %** des tuiles portent du
+   signal contre **9,4 %** ici.
+
+Ce n'est pas un échec expérimental mais une **caractérisation mesurée**. Elle éclaire
+d'ailleurs deux faits de la littérature : Mamba-FCS n'évalue pas sur Hi-UCD, et les
+rares chiffres publiés portent sur la variante *mini*, non comparable.
+
+**Décision : Hi-UCD est clos comme terrain d'optimisation.** Il reste utile comme
+dataset d'ablation (les effets y sont mesurables) et comme résultat de
+caractérisation dans le rapport.
+
+**Le résultat à défendre reste SECOND :**
+
+| Méthode | Params | OA | Fscd | mIoU | SeK |
+|---|---|---|---|---|---|
+| Mamba-FCS | 189 M | 88,62 | 65,78 | 74,07 | 25,50 |
+| ChangeMamba (publié) | ~90 M | 88,12 | 64,03 | 73,68 | 24,11 |
+| ChangeMamba (checkpoint réel) | ~37 M | — | — | — | 22,08 |
+| **CSF-Mamba** | **20,8 M** | **87,57** | 62,10 | 72,00 | **21,44** |
+
+**0,64 point du checkpoint réel de ChangeMamba, avec 56 % de ses paramètres.**
+
+### Ce que les gains ont réellement amélioré
+
+Contre-intuitif au vu du diagnostic : les deux leviers efficaces (sur-échantillonnage,
+résolution) ont fait progresser le **kappa** (qualité sémantique) bien plus que l'IoU
+du changement (localisation) :
+
+| | kappa | IoU changement |
+|---|---|---|
+| `ov3` vs `w5` (Hi-UCD) | **×3,4** | +1,4 pt |
+| `crop512` vs `w2lovasz` (SECOND) | **+11 %** | **+0,1 pt** |
+
+Sur SECOND, `crop512` et `w2lovasz` ont le **même IoU** (56,2 % vs 56,1 %) mais des SeK
+très différents (0,214 vs 0,193) : tout l'écart vient de la sémantique.
+
+**Le verrou de localisation n'a jamais cédé** — IoU du changement bloqué à ~40 %
+(Hi-UCD) et ~56 % (SECOND) sous *toutes* les interventions testées. C'est le sujet
+naturel d'une suite éventuelle.
 
 ---
 
