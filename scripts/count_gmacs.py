@@ -26,6 +26,7 @@ from pathlib import Path
 
 import torch
 from fvcore.nn import flop_count, parameter_count
+from fvcore.nn.jit_handles import einsum_flop_jit
 
 from csf_mamba.datasets import DATASETS
 from csf_mamba.model import CSFMamba
@@ -43,6 +44,17 @@ def parse_args():
     return p.parse_args()
 
 
+def _einsum_flop(inputs, outputs):
+    """einsum, compatible PyTorch récent.
+
+    Le handler de fvcore impose `assert len(inputs) == 2` (équation, tenseurs),
+    mais PyTorch trace désormais `aten::einsum` avec un troisième argument (le
+    `path` d'optimisation). On tronque aux deux premiers et on délègue : le calcul
+    reste celui de fvcore, seule l'assertion est contournée.
+    """
+    return einsum_flop_jit(inputs[:2], outputs)
+
+
 def supported_ops():
     """Handlers pour les opérations que fvcore ne sait pas compter seul."""
     if str(_CHANGEMAMBA) not in sys.path:
@@ -55,6 +67,8 @@ def supported_ops():
         "aten::neg": None,
         "aten::exp": None,
         "aten::flip": None,
+        # einsum : contourne l'incompatibilité fvcore / PyTorch récent.
+        "aten::einsum": _einsum_flop,
         # Scan sélectif : handlers de ChangeMamba, pour des chiffres comparables.
         "prim::PythonOp.SelectiveScanMamba": selective_scan_flop_jit,
         "prim::PythonOp.SelectiveScanOflex": selective_scan_flop_jit,
