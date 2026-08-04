@@ -31,6 +31,13 @@
 #     sbatch --time=24:00:00 --export=ALL,CROP,BATCH,ACCUM,TAG scripts/train_second.sbatch
 # BATCH=2 x ACCUM=4 conserve le batch effectif de 8 : SEULE la résolution change
 # (512² en batch 8 sature l'A100). Compter ~4x le temps : ~14 h au lieu de ~3-4 h.
+#
+# Décodeur élargi : les deux décodeurs ne pèsent que 0,98 M (4,8 % du modèle) car
+# leur raffinement est depthwise. DECODER_REFINE=full le passe en 3x3 complet
+# (24,08 M au total). À lancer sur la meilleure config connue (mini + crop512) :
+#   CROP=512 BATCH=2 ACCUM=4 DECODER_REFINE=full TAG=crop512-decfull \
+#     sbatch --time=24:00:00 \
+#       --export=ALL,CROP,BATCH,ACCUM,DECODER_REFINE,TAG scripts/train_second.sbatch
 set -euo pipefail
 
 WEIGHT="${WEIGHT:-1}"        # poids de la classe changement dans la CE
