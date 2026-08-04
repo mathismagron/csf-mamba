@@ -14,14 +14,26 @@ battre le SOTA (Mamba-FCS, 189M) sur Hi-UCD et SECOND.
 Pipeline complet validé sur GPU (Narval, A100), **20,8 M paramètres**, deux datasets
 supportés et validés sur données réelles.
 
-**Résultat de référence — SECOND** (split officiel, code de métriques verbatim) :
+**Résultat de référence — SECOND** (split officiel, code de métriques verbatim).
+GMACs mesurés en 512×512 avec fvcore, handlers SSM inclus — même convention que
+ChangeMamba, qui étiquette ses sorties fvcore « GFLOPs » alors qu'il s'agit de MACs :
 
-| Méthode | Params | OA | Fscd | mIoU | **SeK** |
-|---|---|---|---|---|---|
-| Mamba-FCS | 189 M | 88,62 | 65,78 | 74,07 | **25,50** |
-| ChangeMamba | ~90 M | 88,12 | 64,03 | 73,68 | **24,11** |
-| ChangeMamba *(checkpoint publié)* | ~37 M | — | — | — | *22,08* |
-| **CSF-Mamba** | **20,8 M** | 87,57 | 62,10 | 72,00 | **21,44** |
+| Méthode | Params | GMACs | OA | Fscd | mIoU | **SeK** |
+|---|---|---|---|---|---|---|
+| Mamba-FCS | 189,54 M | 263,15 | 88,62 | 65,78 | 74,07 | **25,50** |
+| MambaSCD-Base | 89,99 M | 211,55 | — | — | — | *22,92* |
+| **MambaSCD-Tiny** | 21,51 M | 73,42 | — | — | — | *22,08* |
+| **CSF-Mamba** | **20,80 M** | **41,30** | 87,57 | 62,10 | 72,00 | **21,44** |
+
+*(SeK en italique = checkpoints publiés par ChangeMamba, évalués par eux.)*
+
+**Le résultat d'efficience** — face à MambaSCD-Tiny, seul modèle de taille comparable :
+**−3 % de paramètres, −44 % de calcul, pour −2,9 % de SeK**. Face à Mamba-FCS :
+**6,4× moins de calcul et 9,1× moins de paramètres** pour −16 % de SeK.
+
+Répartition du coût (512²) : convolutions 63 %, `MambaInnerFn` (C²S²) 12 %,
+matmul 12 %, einsum 9 %, scan sélectif du backbone 3 %. Le modèle est dominé par
+ses parties convolutionnelles, non par la machinerie SSM.
 
 **Ablations établies** (bruit run-à-run mesuré : ±0,004 de SeK) :
 
