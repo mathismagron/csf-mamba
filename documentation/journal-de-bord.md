@@ -753,6 +753,137 @@ naturel d'une suite éventuelle.
 
 ---
 
+## Phase 5 — Efficience et ablation croisée sur SECOND (1–3 août 2026)
+
+### Ablation croisée backbone × résolution
+
+Quatre configurations, toutes sur 100 époques, SECOND (`WEIGHT=1 DICE=0 LOVASZ=0`) :
+
+| Config | Backbone | Crop | SeK | Époque du pic |
+|---|---|---|---|---|
+| `nobal` | mini (20,8 M) | 256 | 0,1884 | 68 |
+| `tiny` | **tiny (36,9 M)** | 256 | 0,2062 | 52 |
+| **`crop512`** | mini (20,8 M) | **512** | **0,2143** | 62 |
+| `crop512_tiny` | tiny (36,9 M) | 512 | 0,2092 | 86 |
+
+**Effets isolés** (seuil de bruit ±0,004) :
+
+| Facteur | Contexte | Effet |
+|---|---|---|
+| Backbone mini → tiny | crops 256 | **+0,018** ✅ |
+| Crop 256 → 512 | backbone mini | **+0,026** ✅ |
+| Crop 256 → 512 | backbone tiny | +0,003 (dans le bruit) |
+| Backbone mini → tiny | crops 512 | **−0,005** ❌ |
+
+**Les deux leviers ne s'additionnent pas.** Pris séparément ils apportent +0,018 et
++0,026 ; combinés, le résultat (0,2092) est **inférieur** au meilleur des deux
+(0,2143). Ils corrigent donc la **même limitation** — vraisemblablement la quantité
+de contexte spatial exploitable — et saturent.
+
+**Conséquence pratique majeure : `mini + crop512` domine sur les trois axes à la
+fois** — meilleur SeK, 44 % de paramètres en moins, 39 % de calcul en moins que la
+variante tiny. La résolution est un levier **gratuit en paramètres**, contrairement à
+la capacité.
+
+**Contraste avec Hi-UCD, cohérent avec la conclusion précédente :** le passage à tiny
+**améliore** SECOND (+0,018) et **dégrade** Hi-UCD (−0,009). Le même levier, deux
+signes opposés — la capacité paie là où les données sont riches (99,9 % de tuiles
+utiles) et sur-apprend là où elles sont pauvres (9,4 %).
+
+### Mesure des GMACs
+
+Demande du superviseur. Deux pièges rencontrés, tous deux consignés dans
+`scripts/count_gmacs.py` :
+
+**1. Incompatibilité fvcore / PyTorch.** Le handler `einsum` de fvcore impose
+`assert len(inputs) == 2`, mais PyTorch trace désormais `aten::einsum` avec un
+troisième argument (le `path` d'optimisation) : le comptage échouait. *(À noter : la
+version du wheelhouse Alliance est plus stricte que celle de PyPI, l'erreur ne se
+reproduit pas partout.)*
+
+**2. Sous-estimation silencieuse de 11,7 %.** `mamba_ssm` fusionne conv1d, x_proj,
+dt_proj, le scan et out_proj dans une seule `autograd.Function` (`MambaInnerFn`) que
+fvcore ne sait pas décomposer. Sans handler dédié, **les quatre blocs C²S² comptaient
+zéro** et les sous-modules apparaissaient « never called ». Le total passait de 41,30
+à 36,45 GMACs — une sous-estimation **flatteuse**, exactement le type d'erreur qui
+invaliderait un tableau d'efficience. Le script alerte désormais explicitement (`⛔`)
+si un scan SSM reste non compté.
+
+**Résultats** (entrée 512×512, paire bi-temporelle) :
+
+| Backbone | Params | GMACs |
+|---|---|---|
+| **vmamba_mini** | **20,80 M** | **41,30** |
+| vmamba_tiny | 36,90 M | 67,94 |
+
+Répartition du coût (mini) : convolutions **63,2 %**, `MambaInnerFn` (nos C²S²)
+11,7 %, matmul 11,7 %, einsum 8,6 %, scan sélectif du backbone 2,7 %, le reste < 2 %.
+**Le modèle est dominé par ses parties convolutionnelles, non par la machinerie SSM** —
+nuance importante : l'efficience obtenue vient surtout de la légèreté du décodeur.
+
+### ⚠️ Convention GMACs / GFLOPs — piège de comparaison
+
+ChangeMamba calcule ses chiffres avec `fvcore.flop_count` et les étiquette
+« GFLOPs » (`vmamba.py`, méthode `flops()`). Or **fvcore compte des MACs**. Leurs
+« GFLOPs » sont donc des **GMACs**, comme les nôtres.
+
+**Nos chiffres et les leurs sont directement comparables ; appliquer un facteur 2
+pour « convertir » serait une erreur** qui nous ferait paraître deux fois plus
+coûteux. Dans le rapport : reprendre leur intitulé, ou ajouter une note de méthode.
+
+### Positionnement final sur SECOND
+
+| Méthode | Params | GMACs | SeK |
+|---|---|---|---|
+| Mamba-FCS | 189,54 M | 263,15 | 25,50 |
+| ScanNet (Transformer) | 27,90 M | 264,95 | — |
+| MambaSCD-Base | 89,99 M | 211,55 | 22,92\* |
+| MambaSCD-Small | 54,28 M | 146,70 | — |
+| **MambaSCD-Tiny** | 21,51 M | 73,42 | 22,08\* |
+| **CSF-Mamba** | **20,80 M** | **41,30** | **21,44** |
+
+\* checkpoints publiés par ChangeMamba, évalués par eux.
+*(Sources : table de complexité de ChangeMamba et table VI de Mamba-FCS, toutes deux
+en entrée 512×512 bi-temporelle.)*
+
+**Comparaison à taille équivalente — MambaSCD-Tiny :**
+
+| | MambaSCD-Tiny | CSF-Mamba | Écart |
+|---|---|---|---|
+| Params | 21,51 M | 20,80 M | **−3,3 %** |
+| GMACs | 73,42 | 41,30 | **−43,7 %** |
+| SeK | 22,08 | 21,44 | −0,64 (**97,1 %** du score) |
+
+**Face à Mamba-FCS :** 11,0 % de ses paramètres, 15,7 % de son calcul, pour **84,1 %
+de son SeK**.
+
+### Reformulation de l'objectif
+
+L'objectif initial — « battre Mamba-FCS » — n'était pas atteignable à ce budget :
+**9,1× moins de paramètres et 6,4× moins de calcul**. Les mesures accumulées
+soutiennent en revanche un énoncé solide :
+
+> Une architecture SCD atteignant **97 % du SeK de MambaSCD-Tiny pour 56 % de son
+> coût de calcul**, et **84 % du SeK de Mamba-FCS pour 16 % de son calcul et 11 % de
+> ses paramètres**.
+
+### ⚠️ Ce qui n'a jamais été fait
+
+**Les ablations des composants propres à CSF-Mamba** — ± FFT, ± L_sc, damier vs
+CSSM-L1, ± loss SeK — prévues au plan initial, n'ont **jamais été lancées**. On ne
+sait donc pas si le C²S²-Block, la branche fréquentielle ou la CGA résiduelle
+contribuent au résultat. C'est à la fois :
+- la **contribution scientifique manquante** du projet (un modèle efficient sans
+  démonstration de *pourquoi* il l'est) ;
+- un **gain potentiel** : un composant pourrait nuire, et son retrait ferait gagner
+  des points *et* des paramètres.
+
+Autres pistes non explorées : EMA des poids, augmentation plus riche (rotations,
+colorimétrie), redémarrages du LR, augmentation au moment du test, Lovász appliquée
+aussi aux branches sémantiques (Mamba-FCS le fait, nous seulement sur le changement).
+
+---
+
 ## État au 29 juillet 2026
 
 **Acquis :** pipeline complet et reproductible sur GPU ; modèle ~20,8 M paramètres

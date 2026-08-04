@@ -9,7 +9,7 @@ battre le SOTA (Mamba-FCS, 189M) sur Hi-UCD et SECOND.
   `documentation/journal-de-bord.md` — matière première du rapport
 - Lancer un entraînement / une évaluation : `RUN.md`
 
-## État actuel (28 juillet 2026)
+## État actuel (3 août 2026)
 
 Pipeline complet validé sur GPU (Narval, A100), **20,8 M paramètres**, deux datasets
 supportés et validés sur données réelles.
@@ -46,7 +46,9 @@ ses parties convolutionnelles, non par la machinerie SSM.
 | Poids de changement 1 → 2 | SECOND | +0,005 (limite du bruit) |
 | **Sur-échantillonnage ×3** | Hi-UCD | **+0,037** ✅ (mais niveau absolu faible) |
 | Sur-échantillonnage ×10 | Hi-UCD | +0,023 (moins bon que ×3) |
-| **Crops 512 (vs 256)** | SECOND | **+0,026** ✅ |
+| **Crops 512 (vs 256)** | SECOND (backbone mini) | **+0,026** ✅ |
+| Backbone mini → tiny | SECOND (crops 256) | **+0,018** ✅ |
+| Backbone mini → tiny | SECOND (crops 512) | −0,005 (non additif) |
 | Crops 512 (vs 256) | Hi-UCD | −0,024 ❌ (perte d'augmentation) |
 | Backbone ×1,8 (20,8 → 36,9 M) | Hi-UCD | −0,009 ❌ |
 | Sur-échantillonnage ×5 | Hi-UCD | −0,003 (= ×3, plateau) |
