@@ -27,6 +27,8 @@ def parse_args():
     p.add_argument("--encoder-pretrained", default=None,
                    help="Chemin du checkpoint ImageNet VMamba (cf. download_pretrained.sh)")
     p.add_argument("--core", default="chess", choices=["chess", "l1"])
+    p.add_argument("--decoder-refine", default="dw", choices=["dw", "full"],
+                   help="Raffinement des décodeurs : depthwise (référence) ou 3x3 complet.")
     p.add_argument("--backend", default="auto", choices=["auto", "mamba", "ref"])
     p.add_argument("--val-split", default="val")
     p.add_argument("--epochs", type=int, default=100)
@@ -86,6 +88,7 @@ def main():
     model = CSFMamba(
         num_semantic_classes=num_classes,
         encoder=args.encoder, core=args.core, backend=args.backend,
+        decoder_refine=args.decoder_refine,
         encoder_kwargs=encoder_kwargs,
     ).to(device)
     print("Paramètres :", count_parameters(model))

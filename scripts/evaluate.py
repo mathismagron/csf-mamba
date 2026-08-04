@@ -39,6 +39,7 @@ def parse_args():
     p.add_argument("--dataset", default="hi_ucd", choices=sorted(DATASETS))
     p.add_argument("--encoder", default="vmamba_mini", choices=["conv", "vmamba_mini", "vmamba_tiny"])
     p.add_argument("--core", default="chess", choices=["chess", "l1"])
+    p.add_argument("--decoder-refine", default="dw", choices=["dw", "full"])
     p.add_argument("--backend", default="mamba", choices=["auto", "mamba", "ref"])
     p.add_argument("--split", default="val")
     p.add_argument("--batch-size", type=int, default=4)
@@ -133,7 +134,8 @@ def main():
 
     dataset_cls, num_classes = DATASETS[args.dataset]
     model = CSFMamba(num_semantic_classes=num_classes,
-                     encoder=args.encoder, core=args.core, backend=args.backend).to(device)
+                     encoder=args.encoder, core=args.core, backend=args.backend,
+                     decoder_refine=args.decoder_refine).to(device)
     load_checkpoint(model, args.checkpoint, device)
     model.eval()
 

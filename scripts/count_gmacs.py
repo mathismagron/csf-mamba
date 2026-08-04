@@ -40,6 +40,7 @@ def parse_args():
     p.add_argument("--encoder", default="vmamba_mini",
                    choices=["conv", "vmamba_mini", "vmamba_tiny"])
     p.add_argument("--core", default="chess", choices=["chess", "l1"])
+    p.add_argument("--decoder-refine", default="dw", choices=["dw", "full"])
     p.add_argument("--size", type=int, default=512, help="Côté de l'image d'entrée.")
     return p.parse_args()
 
@@ -120,7 +121,8 @@ def main():
 
     _, num_classes = DATASETS[args.dataset]
     model = CSFMamba(num_semantic_classes=num_classes,
-                     encoder=args.encoder, core=args.core, backend="mamba").cuda().eval()
+                     encoder=args.encoder, core=args.core, backend="mamba",
+                     decoder_refine=args.decoder_refine).cuda().eval()
 
     s = args.size
     inputs = (torch.randn(1, 3, s, s).cuda(), torch.randn(1, 3, s, s).cuda())
@@ -132,7 +134,8 @@ def main():
                                     supported_ops=supported_ops())
     total = sum(gmacs.values())
 
-    print(f"\n===== {args.encoder} / {args.core} / {args.dataset} — entrée {s}x{s} =====")
+    print(f"\n===== {args.encoder} / {args.core} / décodeur {args.decoder_refine}"
+          f" / {args.dataset} — entrée {s}x{s} =====")
     print(f"  Paramètres : {params / 1e6:8.2f} M")
     print(f"  GMACs      : {total:8.2f}   (pour UNE paire d'images)")
     print(f"  GFLOPs     : {2 * total:8.2f}   (≈ 2 x GMACs)")

@@ -53,6 +53,7 @@ EPOCHS="${EPOCHS:-100}"
 CROP="${CROP:-256}"          # taille du crop d'entraînement (512 = tuile entière)
 BATCH="${BATCH:-8}"          # micro-batch
 ACCUM="${ACCUM:-1}"          # accumulation : batch effectif = BATCH x ACCUM
+DECODER_REFINE="${DECODER_REFINE:-dw}"  # dw = référence, full = décodeur élargi
 ENCODER="${ENCODER:-vmamba_mini}"  # vmamba_mini (13,8M) ou vmamba_tiny (28M)
 TAG="${TAG:-w5}"             # suffixe du dossier de sortie
 
@@ -68,12 +69,13 @@ DATA_ROOT="$SLURM_TMPDIR/hi-ucd"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/hiucd_mini_chess_$TAG"
-echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ semch=$SEMCH oversample=$OVERSAMPLE enc=$ENCODER crop=$CROP batch=$BATCH x accum=$ACCUM epochs=$EPOCHS -> $OUT =="
+echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ semch=$SEMCH oversample=$OVERSAMPLE enc=$ENCODER dec=$DECODER_REFINE crop=$CROP batch=$BATCH x accum=$ACCUM epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
     --dataset hi_ucd \
     --encoder "$ENCODER" \
+    --decoder-refine "$DECODER_REFINE" \
     --encoder-pretrained "$CKPT" \
     --core chess \
     --backend mamba \

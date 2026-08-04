@@ -34,6 +34,7 @@ class CSFMamba(nn.Module):
         backend: str = "auto",
         fft_stages: tuple[int, ...] = (0, 1),
         channels: tuple[int, ...] = STAGE_CHANNELS,
+        decoder_refine: str = "dw",
         encoder_kwargs: dict | None = None,
     ):
         super().__init__()
@@ -47,8 +48,10 @@ class CSFMamba(nn.Module):
         self.fft = nn.ModuleDict(
             {str(i): FFTBranch(channels[i]) for i in self.fft_stages}
         )
-        self.binary_decoder = BinaryDecoder(channels, num_change)
-        self.semantic_decoder = SharedSemanticDecoder(channels, num_semantic_classes, num_change)
+        self.binary_decoder = BinaryDecoder(channels, num_change, refine=decoder_refine)
+        self.semantic_decoder = SharedSemanticDecoder(
+            channels, num_semantic_classes, num_change, refine=decoder_refine
+        )
 
     def forward(self, img_t1: torch.Tensor, img_t2: torch.Tensor) -> dict:
         feats_t1 = self.encoder(img_t1)

@@ -10,6 +10,7 @@ import torch
 from torch import nn
 
 from ..modules.fusion import ResidualCGA
+from .binary import make_refine
 from .dysample import DySample
 
 
@@ -19,6 +20,7 @@ class SharedSemanticDecoder(nn.Module):
         channels: tuple[int, ...] = (96, 192, 384, 768),
         num_classes: int = 9,
         num_change: int = 2,
+        refine: str = "dw",
     ):
         super().__init__()
         self.channels = channels
@@ -30,7 +32,7 @@ class SharedSemanticDecoder(nn.Module):
 
         self.ups = nn.ModuleList()
         for i in reversed(range(len(channels) - 1)):
-            self.ups.append(_SemUp(channels[i + 1], channels[i]))
+            self.ups.append(_SemUp(channels[i + 1], channels[i], refine=refine))
 
         self.head = nn.Conv2d(channels[0], num_classes, kernel_size=1)
         self.final_up = DySample(channels[0])
@@ -60,15 +62,11 @@ class SharedSemanticDecoder(nn.Module):
 
 
 class _SemUp(nn.Module):
-    def __init__(self, in_channels: int, skip_channels: int):
+    def __init__(self, in_channels: int, skip_channels: int, refine: str = "dw"):
         super().__init__()
         self.up = DySample(in_channels)
         self.reduce = nn.Conv2d(in_channels, skip_channels, kernel_size=1)
-        self.refine = nn.Sequential(
-            nn.Conv2d(skip_channels, skip_channels, kernel_size=3, padding=1, groups=skip_channels),
-            nn.GroupNorm(1, skip_channels),
-            nn.GELU(),
-        )
+        self.refine = make_refine(skip_channels, refine)
 
     def forward(self, coarse, skip):
         return self.refine(self.reduce(self.up(coarse)) + skip)
