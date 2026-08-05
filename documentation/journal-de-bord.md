@@ -884,6 +884,111 @@ aussi aux branches sémantiques (Mamba-FCS le fait, nous seulement sur le change
 
 ---
 
+## Phase 6 — Le décodeur n'est pas le goulot (5 août 2026)
+
+### L'hypothèse
+
+Sur SECOND, l'IoU du changement plafonnait à ~56 % sous toute intervention, alors
+que la sémantique atteignait 84 % **une fois le changement détecté** : le modèle
+comprend ce qui a changé, mais délimite mal *où*. Or délimiter est le travail du
+décodeur — et les deux décodeurs ne pesaient que **0,98 M sur 20,61 M, soit 4,8 %
+du modèle**, contre 13,84 M pour le seul encodeur.
+
+La raison de cette légèreté est le bloc de raffinement : une convolution
+**depthwise** 3×3, soit 9·C paramètres au lieu de 9·C² pour une convolution
+complète — un facteur 384 à C = 384. Une depthwise filtre chaque canal isolément :
+**aucun mélange inter-canaux dans l'opération spatiale**. Or délimiter une
+frontière demande justement de combiner texture, couleur et contexte au même
+endroit. L'hypothèse était donc que le décodeur, sous-dimensionné, bornait la
+qualité de la frontière quoi qu'on fasse en amont.
+
+### Le test
+
+`--decoder-refine {dw, full}` : `full` remplace les depthwise par des 3×3
+complètes dans les deux décodeurs. Rien d'autre ne bouge — ni l'encodeur, ni les
+C²S², ni les losses, ni le DySample. `dw` reste le défaut, et sa vérification a
+été faite avant lancement : **compte de paramètres identique et 338 clés de
+`state_dict` identiques** à la version précédente, donc les checkpoints existants
+se rechargent tels quels et la référence est strictement inchangée.
+
+Coût du mode `full` : 20,61 M → **24,08 M (+3,47 M)**, les décodeurs passant de
+4,8 % à **18,5 %** du modèle. Lancé sur la meilleure configuration connue
+(`mini` + crop 512), 100 époques, tout le reste identique au contrôle.
+
+### Le résultat — hypothèse réfutée
+
+Bilan de **toutes** les configurations entraînées sur SECOND, l'IoU du changement
+étant reconstruit depuis `SeK = κ·exp(IoU_fg)/e`, soit `IoU_fg = 1 + ln(SeK/κ)` :
+
+| Configuration | ép. | SeK | **IoU chgt** | IoU fond | Fscd |
+|---|---|---|---|---|---|
+| `crop512` (référence) | 62 | **0,2143** | **0,5621** | 0,8778 | 0,6210 |
+| `crop512_tiny` | 86 | 0,2092 | 0,5594 | 0,8759 | 0,6155 |
+| `crop512-decfull` | 70 | 0,2089 | 0,5597 | 0,8745 | 0,6167 |
+| `tiny` | 52 | 0,2061 | 0,5595 | 0,8775 | 0,6120 |
+| `w2lovasz` | 59 | 0,1931 | 0,5607 | 0,8650 | 0,5917 |
+| `nobal` | 68 | 0,1883 | 0,5460 | 0,8732 | 0,5926 |
+| `lovasz` | 70 | 0,1820 | 0,5464 | 0,8724 | 0,5821 |
+
+Le décodeur élargi donne **SeK 0,2089 contre 0,2143** : −0,0054, soit un peu
+au-delà du plancher de bruit de ±0,004. Pas un effondrement, mais aucun gain.
+
+Et surtout, la colonne qui compte : **IoU du changement 0,5597 contre 0,5621**.
++3,47 M de paramètres injectés directement là où le problème était supposé se
+situer, et la frontière n'a pas bougé.
+
+### Ce que la colonne IoU révèle vraiment
+
+Le tableau dit plus que le verdict sur le décodeur. Trois modèles
+architecturalement très différents convergent au même endroit :
+
+| | paramètres | IoU chgt |
+|---|---|---|
+| référence | 20,61 M | 0,5621 |
+| encodeur élargi (`tiny`, +16 M) | 36,9 M | 0,5594 |
+| décodeur élargi (`full`, +3,47 M) | 24,08 M | 0,5597 |
+
+**0,5594 / 0,5597 / 0,5621** — trois valeurs dans un intervalle de 0,003, alors
+que la capacité varie de 20,6 M à 36,9 M et que le paramètre ajouté l'est tantôt
+en amont, tantôt en aval. Le plus petit modèle a même le meilleur IoU.
+
+Sur les sept configurations, **l'IoU du changement s'étale sur 0,016** (0,546 à
+0,562) quand le SeK s'étale sur **0,032**, soit deux fois plus. Autrement dit :
+ce qui distingue une bonne configuration d'une mauvaise sur SECOND **n'est pas la
+qualité de la délimitation du changement** — c'est la qualité sémantique et
+l'équilibre précision/rappel, que capturent κ et Fscd. Les variantes de loss
+(`nobal`, `lovasz`) perdent leur SeK via l'IoU du fond et le Fscd, pas via l'IoU
+du changement.
+
+### Bilan des leviers testés sur le plafond des 56 %
+
+| Levier | Verdict |
+|---|---|
+| Loss (pondération, Dice, Lovász, SeK) | déplace le point de fonctionnement, pas la courbe |
+| Données (sur-échantillonnage) | +0,037 sur Hi-UCD, plafonne ; sans effet sur le plafond IoU |
+| Résolution (crop 256 → 512) | +0,026 de SeK, IoU chgt inchangé |
+| Capacité d'encodeur (mini → tiny) | −0,005, IoU chgt inchangé |
+| **Capacité de décodeur (dw → full)** | **−0,005, IoU chgt inchangé** |
+
+Cinq familles de leviers, toutes écartées **par la mesure**. Le plafond n'est
+donc imputable ni à l'optimisation, ni au signal d'entraînement, ni à la
+résolution, ni à la capacité — où qu'on la place. Les explications restantes
+sortent du modèle : la précision d'annotation des frontières dans SECOND, et
+l'information réellement disponible dans une paire d'images bi-temporelles pour
+trancher le contour exact d'un changement. Un plafond mesuré, pas supposé.
+
+### Incident — TIMEOUT du comptage GMACs (job 173649)
+
+Le job de comptage a fini en **TIMEOUT à 1 h**. Cause : le traçage fvcore d'un
+modèle SSM est lent, et le script bouclait sur **les deux backbones**. Deux
+correctifs : walltime porté à 3 h, et variable `ENCODERS` pour ne mesurer que la
+variante manquante au lieu de tout reprendre. Prévision analytique en attente de
+confirmation : les trois convolutions élargies par décodeur coûtent 9·C²·H·W à
+128²/64²/32², soit **+8,1 GMACs** — 41,30 → ~49,4, toujours loin sous les 73,42
+de MambaSCD-Tiny.
+
+---
+
 ## État au 29 juillet 2026
 
 **Acquis :** pipeline complet et reproductible sur GPU ; modèle ~20,8 M paramètres

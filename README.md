@@ -52,9 +52,21 @@ ses parties convolutionnelles, non par la machinerie SSM.
 | Crops 512 (vs 256) | Hi-UCD | −0,024 ❌ (perte d'augmentation) |
 | Backbone ×1,8 (20,8 → 36,9 M) | Hi-UCD | −0,009 ❌ |
 | Sur-échantillonnage ×5 | Hi-UCD | −0,003 (= ×3, plateau) |
+| Décodeur élargi (dw → 3×3 pleine, +3,47 M) | SECOND (crops 512) | −0,005 ❌ |
 
 Le même réglage anti-déséquilibre est **décisif sur SECOND et neutre sur Hi-UCD** :
 il doit être calibré sur le taux de changement du dataset.
+
+**Le plafond de l'IoU du changement.** Reconstruit depuis `IoU_fg = 1 + ln(SeK/κ)`,
+il vaut **0,546 à 0,562 sur les sept configurations SECOND** — un étalement de
+0,016, deux fois moindre que celui du SeK (0,032). Trois modèles pourtant très
+différents y convergent au même point : référence 20,6 M → **0,5621**, encodeur
+élargi 36,9 M → **0,5594**, décodeur élargi 24,1 M → **0,5597**. Le plus petit est
+le meilleur. Ce qui sépare une bonne configuration d'une mauvaise sur SECOND n'est
+donc **pas la délimitation du changement** mais la qualité sémantique (κ, Fscd).
+Cinq familles de leviers — loss, données, résolution, capacité d'encodeur, capacité
+de décodeur — laissent ce plafond intact : il n'est imputable ni à l'optimisation,
+ni à la capacité, où qu'on la place.
 
 **Constat transversal :** les seuls leviers efficaces touchent aux **données**
 (densité du signal) et à la **résolution** — jamais à la loss. Cohérent avec le fait
