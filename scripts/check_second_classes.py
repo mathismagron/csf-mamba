@@ -18,13 +18,21 @@ Ne demande ni GPU ni environnement particulier : lecture de PNG uniquement.
 """
 
 import argparse
+import time
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 
-from csf_mamba.datasets.second import CLASS_NAMES
+_T0 = time.monotonic()
+
+
+def log(msg: str) -> None:
+    """Trace horodatée. Le job à 20 min a fini en TIMEOUT sans qu'on sache où :
+    la lecture de 200 tuiles prend des secondes, donc le temps part ailleurs
+    (imports depuis le venv sur Lustre, listage du dossier). On mesure."""
+    print(f"[{time.monotonic() - _T0:7.1f} s] {msg}", flush=True)
 
 # Palette officielle de SECOND, telle que reprise par ChangeMamba
 # (`ST_COLORMAP` / `ST_CLASSES`). C'est l'association couleur -> nom qui fait foi.
@@ -51,6 +59,12 @@ def parse_args():
 
 def main():
     args = parse_args()
+    log("démarrage")
+    # Import tardif et chronométré : `csf_mamba.datasets.second` tire torch, dont
+    # le chargement depuis un venv sur Lustre peut être très lent à froid.
+    from csf_mamba.datasets.second import CLASS_NAMES
+    log("imports csf_mamba terminés")
+
     root = Path(args.data_root) / args.split
     idx_dir = root / f"GT_{args.date}"
     col_dir = root / f"GT_{args.date}_COLORED"
@@ -59,6 +73,7 @@ def main():
             raise SystemExit(f"dossier introuvable : {d}")
 
     names = sorted(p.name for p in idx_dir.glob("*.png"))
+    log(f"listage terminé : {len(names)} fichiers")
     if args.limit:
         # Pas échantillonné en tête de liste : les tuiles y sont spatialement
         # contiguës, donc non représentatives (leçon du comptage Hi-UCD).
@@ -66,7 +81,9 @@ def main():
     print(f"{len(names)} tuiles échantillonnées dans {idx_dir}")
 
     counts = {c: Counter() for c in range(7)}
-    for name in names:
+    for i, name in enumerate(names):
+        if i % 25 == 0:
+            log(f"tuile {i}/{len(names)}")
         idx = np.asarray(Image.open(idx_dir / name))
         col = np.asarray(Image.open(col_dir / name).convert("RGB"))
         if idx.ndim != 2 or col.shape[:2] != idx.shape:
@@ -79,6 +96,7 @@ def main():
                 key, n = np.unique(sel, return_counts=True)
                 counts[c].update(dict(zip(key.tolist(), n.tolist())))
 
+    log("lecture terminée")
     print(f"\n{'idx':>3} | {'couleur dominante':>18} | {'pureté':>7} | "
           f"{'palette officielle':<22} | {'nos CLASS_NAMES':<22} | ok")
     print("-" * 100)

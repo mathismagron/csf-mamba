@@ -3,7 +3,7 @@
 #SBATCH --account=def-hervete
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
-#SBATCH --time=0:20:00
+#SBATCH --time=1:00:00
 #SBATCH --output=csf-classes-%j.out
 #
 # Vérifie l'association indice -> classe sémantique de SECOND.
@@ -11,6 +11,10 @@
 # Pas de --gres=gpu : le script ne fait que lire des PNG. Un job CPU seul
 # démarre bien plus vite qu'un job GPU, et les nœuds de calcul n'ont pas la
 # limitation d'entrées/sorties imposée sur le nœud de connexion.
+#
+# Walltime porté de 20 min à 1 h : la première tentative a fini en TIMEOUT alors
+# que la lecture elle-même prend des secondes. Le script trace désormais chaque
+# étape avec son horodatage, ce qui montrera où le temps part réellement.
 #
 #   sbatch scripts/check_second_classes.sbatch
 #   DATE=T1 LIMIT=500 sbatch --export=ALL,DATE,LIMIT scripts/check_second_classes.sbatch
