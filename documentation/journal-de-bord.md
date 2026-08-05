@@ -977,6 +977,106 @@ sortent du modèle : la précision d'annotation des frontières dans SECOND, et
 l'information réellement disponible dans une paire d'images bi-temporelles pour
 trancher le contour exact d'un changement. Un plafond mesuré, pas supposé.
 
+### Correction — les noms de classes SECOND étaient faux (5 août)
+
+Le tableau de diagnostic sémantique attribuait **37,11 % des pixels changés à
+« arbre »**. Invraisemblable sur des scènes industrielles chinoises : c'est ce
+qui a déclenché la vérification.
+
+Nos `CLASS_NAMES` avaient été écrits d'après l'ordre d'**énumération de l'article**
+SECOND, qui n'est pas l'ordre des indices dans le dump prétraité. Contrôle par
+`scripts/check_second_classes` : pour chaque indice, couleur dominante des pixels
+correspondants dans les cartes `GT_T*_COLORED` que le dataloader ignore, comparée
+à la palette officielle. **Pureté 100 % sur 200 tuiles**, aucune ambiguïté.
+
+| indice | couleur | classe réelle | ce qu'on écrivait |
+|---|---|---|---|
+| 1 | vert foncé | **végétation basse** | ~~sol non végétalisé~~ |
+| 2 | gris | **sol non végétalisé** | ~~arbre~~ |
+| 3 | vert vif | **arbre** | ~~végétation basse~~ |
+| 4 | bleu | eau | eau ✓ |
+| 5 | rouge foncé | bâtiment | bâtiment ✓ |
+| 6 | rouge | terrain de sport | terrain de sport ✓ |
+
+**Aucune métrique n'était affectée** : SeK, Fscd, mIoU, OA et kappa sont calculés
+sur des indices, de façon cohérente entre prédiction et vérité. Le portage
+verbatim reste valide, aucun réentraînement n'est nécessaire. Seuls les *noms*
+étaient faux — mais dans un rapport ou une figure, c'eût été une erreur factuelle.
+
+Le diagnostic sémantique se relit ainsi, et devient cohérent :
+
+| classe | % des pixels changés | rappel |
+|---|---|---|
+| sol non végétalisé | 37,1 % | 89,8 % |
+| bâtiment | 35,1 % | 92,8 % |
+| végétation basse | 21,5 % | 74,0 % |
+| arbre | 4,5 % | 64,9 % |
+| eau | 1,0 % | 55,0 % |
+| terrain de sport | 0,7 % | 82,6 % |
+
+Sol nu et bâtiment font 72 % des pixels changés : la signature attendue de
+l'urbanisation. Les deux classes dominantes sont aussi les mieux reconnues.
+
+**Réserve honnête** : le lien couleur → nom est visuellement évident pour le bleu
+(eau), le gris (sol nu) et le rouge foncé (bâtiment). Il l'est moins entre les
+deux verts — vert foncé pour la végétation basse, vert vif pour l'arbre — repris
+de la palette de ChangeMamba. La répartition mesurée le corrobore (végétation
+basse 21,5 % contre arbre 4,5 %, l'ordre attendu), sans le démontrer.
+
+### Diagnostic complet du changement sur SECOND (5 août)
+
+Décomposition de la matrice de confusion du meilleur modèle, indexée
+[prédiction, vérité], sur 888,1 M pixels :
+
+| | pixels |
+|---|---|
+| changement correctement détecté (TP) | 122,1 M |
+| changement **raté** (FN) | **56,1 M** |
+| **fausse alarme** (FP) | **40,0 M** |
+
+**Rappel 68,5 %, précision 75,3 %**, IoU 0,5596 — identique à la valeur
+reconstruite depuis le SeK, les deux chemins de calcul concordent. FN+FP =
+96,1 M, la constante ~100 M observée depuis juillet sous toute intervention.
+
+Le modèle **rate plus qu'il ne sur-détecte**. Les visualisations montrent deux
+régimes distincts : des objets trouvés mais à la forme dégradée (angles droits
+arrondis, bords déchiquetés), et des objets entièrement manqués ou inventés. Le
+second régime n'a rien à voir avec la délimitation — ce qui explique que le
+décodeur élargi n'ait rien donné.
+
+La sémantique, elle, fonctionne : **85,9 % d'exactitude** sur les pixels de
+changement correctement détectés.
+
+**Ce qui est en jeu**, à kappa constant (0,3245) :
+
+| IoU changement | SeK |
+|---|---|
+| 0,56 (actuel) | 0,2089 |
+| 0,70 | 0,2404 |
+| **0,80** | **0,2657** |
+| 1,00 | 0,3245 |
+
+Porter le seul IoU du changement à 0,80, sans toucher à la sémantique,
+dépasserait Mamba-FCS (0,2550). Tout le déficit restant tient dans cette unique
+quantité.
+
+### Incidents d'infrastructure (5 août)
+
+Deux jobs tués par la limite de temps **sans produire une seule ligne Python**,
+malgré `python -u` : `csf-gmacs` (190707, 5 h, nœud GPU) et `csf-classes`
+(194247, 20 min, nœud CPU). Aucun n'a atteint son premier `print`. Le même jour,
+`csf-eval` s'est terminé normalement en 1 h 03 avec le même venv.
+
+Point commun des deux jobs bloqués : l'import de torch depuis le venv sur Lustre.
+`csf-classes` a été réécrit pour ne plus dépendre de torch du tout — il lit
+`CLASS_NAMES` par analyse syntaxique du source et n'utilise que numpy et Pillow,
+fournis par `scipy-stack`. Relancé sans venv, il a terminé en **3 min 30**
+(job 196374). Cela **incrimine le venv sur Lustre**, sans le prouver formellement.
+
+Leçon générale retenue : instrumenter avec des traces horodatées et flushées
+avant de supposer où part le temps. Sur `csf-gmacs`, l'hypothèse « le traçage
+fvcore est lent » était fausse — le traçage n'avait jamais commencé.
+
 ### Incident — TIMEOUT du comptage GMACs (job 173649)
 
 Le job de comptage a fini en **TIMEOUT à 1 h**. Cause : le traçage fvcore d'un

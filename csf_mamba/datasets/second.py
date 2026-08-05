@@ -1,7 +1,9 @@
 """Dataloader SECOND (Semantic Change Detection dataset).
 
 4 662 paires 512×512, résolution 0,5–3 m, 6 classes sémantiques réelles
-(non-vegetated ground, tree, low vegetation, water, building, playground).
+(low vegetation, non-vegetated ground, tree, water, building, playground) — cet
+ordre est celui des indices RÉELS du dump, vérifié par `scripts/check_second_classes`
+contre les cartes `GT_T*_COLORED`, et non celui de l'énumération de l'article.
 
 **Convention native de SECOND = notre convention A** : la sémantique n'est
 annotée QUE dans les zones changées, et vaut 0 ailleurs. On mappe donc `0 → 255`
@@ -41,8 +43,14 @@ from ..losses.composite import IGNORE_INDEX
 # 7 canaux : index 0 réservé (inchangé/non annoté), classes réelles 1..6.
 NUM_SEMANTIC_CLASSES = 7
 
+# ⚠️ Ordre VÉRIFIÉ, pas déduit. Une première version suivait l'ordre d'énumération
+# de l'article SECOND et se trompait sur les indices 1, 2 et 3. Le contrôle
+# (`python -m scripts.check_second_classes`) relève la couleur dominante de chaque
+# indice dans `GT_T*_COLORED` : pureté 100 % sur 200 tuiles, aucune ambiguïté.
+# Aucune métrique n'en dépend — tout est calculé sur des indices — mais un nom
+# faux dans un rapport ou une figure serait une erreur factuelle.
 CLASS_NAMES = (
-    "reserved", "non-vegetated ground", "tree", "low vegetation",
+    "reserved", "low vegetation", "non-vegetated ground", "tree",
     "water", "building", "playground",
 )
 
