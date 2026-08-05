@@ -12,9 +12,11 @@
 # démarre bien plus vite qu'un job GPU, et les nœuds de calcul n'ont pas la
 # limitation d'entrées/sorties imposée sur le nœud de connexion.
 #
-# Walltime porté de 20 min à 1 h : la première tentative a fini en TIMEOUT alors
-# que la lecture elle-même prend des secondes. Le script trace désormais chaque
-# étape avec son horodatage, ce qui montrera où le temps part réellement.
+# Le premier job (194247) a fini en TIMEOUT à 20 min sans écrire une seule ligne,
+# malgré python -u : il n'a jamais atteint son premier print. La lecture de PNG
+# n'était donc pas en cause. Deux mesures : le script n'importe plus torch (il
+# lit CLASS_NAMES par analyse syntaxique) et le venv est retiré au profit de
+# scipy-stack. Traces horodatées ajoutées pour situer tout blocage résiduel.
 #
 #   sbatch scripts/check_second_classes.sbatch
 #   DATE=T1 LIMIT=500 sbatch --export=ALL,DATE,LIMIT scripts/check_second_classes.sbatch
@@ -24,8 +26,11 @@ SPLIT="${SPLIT:-train}"
 DATE="${DATE:-T2}"
 LIMIT="${LIMIT:-200}"
 
-module load python/3.11
-source "$SCRATCH/csf-venv-cu12/bin/activate"
+# Pas de venv : le script n'utilise que numpy et Pillow, tous deux fournis par
+# scipy-stack. Le premier job a passé 20 minutes sans produire une seule ligne,
+# bloqué avant son premier print — le venv sur Lustre était le seul suspect
+# lourd, il est donc retiré du chemin.
+module load python/3.11 scipy-stack
 cd "$HOME/csf-mamba"
 
 python -u -m scripts.check_second_classes \

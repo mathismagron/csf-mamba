@@ -18,6 +18,7 @@ Ne demande ni GPU ni environnement particulier : lecture de PNG uniquement.
 """
 
 import argparse
+import ast
 import time
 from collections import Counter
 from pathlib import Path
@@ -29,10 +30,25 @@ _T0 = time.monotonic()
 
 
 def log(msg: str) -> None:
-    """Trace horodatée. Le job à 20 min a fini en TIMEOUT sans qu'on sache où :
-    la lecture de 200 tuiles prend des secondes, donc le temps part ailleurs
-    (imports depuis le venv sur Lustre, listage du dossier). On mesure."""
+    """Trace horodatée, pour situer un blocage plutôt que le deviner."""
     print(f"[{time.monotonic() - _T0:7.1f} s] {msg}", flush=True)
+
+
+def read_class_names() -> tuple[str, ...]:
+    """Lit CLASS_NAMES dans le source, SANS importer csf_mamba.
+
+    `csf_mamba.datasets.second` importe torch, dont le chargement depuis le venv
+    sur Lustre est ce qui a fait échouer le premier job : 20 minutes sans même
+    atteindre le premier print. Ce script n'a besoin que d'un tuple de chaînes —
+    on l'extrait par analyse syntaxique. Pas de duplication, pas de torch, et le
+    script ne dépend plus que de numpy et Pillow.
+    """
+    src = Path(__file__).resolve().parents[1] / "csf_mamba" / "datasets" / "second.py"
+    for node in ast.parse(src.read_text()).body:
+        if (isinstance(node, ast.Assign)
+                and any(getattr(t, "id", None) == "CLASS_NAMES" for t in node.targets)):
+            return tuple(ast.literal_eval(node.value))
+    raise SystemExit(f"CLASS_NAMES introuvable dans {src}")
 
 # Palette officielle de SECOND, telle que reprise par ChangeMamba
 # (`ST_COLORMAP` / `ST_CLASSES`). C'est l'association couleur -> nom qui fait foi.
@@ -60,10 +76,8 @@ def parse_args():
 def main():
     args = parse_args()
     log("démarrage")
-    # Import tardif et chronométré : `csf_mamba.datasets.second` tire torch, dont
-    # le chargement depuis un venv sur Lustre peut être très lent à froid.
-    from csf_mamba.datasets.second import CLASS_NAMES
-    log("imports csf_mamba terminés")
+    class_names = read_class_names()
+    log(f"CLASS_NAMES lus : {class_names}")
 
     root = Path(args.data_root) / args.split
     idx_dir = root / f"GT_{args.date}"
@@ -109,7 +123,7 @@ def main():
         rgb = ((key >> 16) & 255, (key >> 8) & 255, key & 255)
         purity = n / sum(counts[c].values())
         official = REFERENCE_PALETTE.get(rgb, "⚠️ couleur hors palette")
-        ours = CLASS_NAMES[c] if c < len(CLASS_NAMES) else "?"
+        ours = class_names[c] if c < len(class_names) else "?"
         match = official.split(" /")[0] in _fr(ours) or c == 0
         verdict &= match
         print(f"{c:>3} | {str(rgb):>18} | {purity:6.1%} | {official:<22} | "
