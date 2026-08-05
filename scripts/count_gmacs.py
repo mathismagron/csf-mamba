@@ -22,14 +22,33 @@ Nécessite un GPU (le kernel selective_scan ne tourne pas sur CPU).
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
+_T0 = time.monotonic()
+
+
+def log(msg: str) -> None:
+    """Trace horodatée, écrite avant tout import lourd.
+
+    Le job 190707 a été tué après 5 h sans produire une seule ligne Python : la
+    bannière du shell s'affichait, puis plus rien. Impossible de savoir si le
+    temps partait dans les imports, l'initialisation CUDA ou le traçage fvcore.
+    On instrumente chaque étape plutôt que de deviner.
+    """
+    print(f"[{time.monotonic() - _T0:7.1f} s] {msg}", flush=True)
+
+
+log("processus python démarré")
 import torch
+log(f"torch {torch.__version__} importé")
 from fvcore.nn import flop_count, parameter_count
 from fvcore.nn.jit_handles import einsum_flop_jit, get_shape
+log("fvcore importé")
 
 from csf_mamba.datasets import DATASETS
 from csf_mamba.model import CSFMamba
+log("csf_mamba importé")
 
 _CHANGEMAMBA = Path(__file__).resolve().parents[1] / "third_party" / "ChangeMamba"
 
@@ -118,20 +137,26 @@ def main():
     args = parse_args()
     if not torch.cuda.is_available():
         sys.exit("Un GPU est requis (le kernel selective_scan ne tourne pas sur CPU).")
+    log(f"CUDA disponible : {torch.cuda.get_device_name(0)}")
 
     _, num_classes = DATASETS[args.dataset]
     model = CSFMamba(num_semantic_classes=num_classes,
                      encoder=args.encoder, core=args.core, backend="mamba",
-                     decoder_refine=args.decoder_refine).cuda().eval()
+                     decoder_refine=args.decoder_refine)
+    log("modèle instancié sur CPU")
+    model = model.cuda().eval()
+    log("modèle transféré sur GPU")
 
     s = args.size
     inputs = (torch.randn(1, 3, s, s).cuda(), torch.randn(1, 3, s, s).cuda())
 
     params = parameter_count(model)[""]
-    print(f"modèle construit ({params / 1e6:.2f} M) — traçage fvcore en cours "
-          f"(lent sur les modèles SSM, plusieurs minutes)...", flush=True)
-    gmacs, unsupported = flop_count(model=model, inputs=inputs,
-                                    supported_ops=supported_ops())
+    log(f"paramètres comptés : {params / 1e6:.2f} M — traçage fvcore en cours "
+        f"(lent sur les modèles SSM)")
+    ops = supported_ops()
+    log("handlers fvcore prêts (ChangeMamba importé)")
+    gmacs, unsupported = flop_count(model=model, inputs=inputs, supported_ops=ops)
+    log("traçage terminé")
     total = sum(gmacs.values())
 
     print(f"\n===== {args.encoder} / {args.core} / décodeur {args.decoder_refine}"

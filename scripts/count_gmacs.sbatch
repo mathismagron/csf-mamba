@@ -13,9 +13,13 @@
 #   sbatch scripts/count_gmacs.sbatch
 #   SIZE=256 sbatch --export=ALL,SIZE scripts/count_gmacs.sbatch
 #
-# ⚠️ Le traçage fvcore d'un modèle SSM est LENT : compter ~30-45 min par variante.
-# Le job à 1 h avec les deux backbones a fini en TIMEOUT (job 173649). D'où les 3 h,
-# et ENCODERS pour ne mesurer que ce qui manque plutôt que tout reprendre :
+# ⚠️ Deux TIMEOUTs successifs (173649 à 1 h, 190707 à 5 h). Le second n'a produit
+# AUCUNE ligne Python après la bannière du shell : le blocage est donc en amont
+# du traçage, pas dedans. Le script et ce job tracent maintenant chaque étape
+# avec son horodatage — modules, venv, imports, CUDA, construction, traçage —
+# pour situer le blocage au lieu de le deviner.
+#
+# ENCODERS permet de ne mesurer qu'une variante plutôt que les deux :
 #   ENCODERS=vmamba_mini DECODER_REFINE=full \
 #     sbatch --export=ALL,ENCODERS,DECODER_REFINE scripts/count_gmacs.sbatch
 set -euo pipefail
@@ -24,8 +28,12 @@ SIZE="${SIZE:-512}"
 ENCODERS="${ENCODERS:-vmamba_mini vmamba_tiny}"
 DECODER_REFINE="${DECODER_REFINE:-dw}"
 
+echo "== démarrage $(date +%H:%M:%S) sur $(hostname)"
 module load python/3.11 cuda/12.2
+echo "== modules chargés $(date +%H:%M:%S)"
 source "$SCRATCH/csf-venv-cu12/bin/activate"
+echo "== venv activé $(date +%H:%M:%S)"
+nvidia-smi --query-gpu=name,memory.used --format=csv,noheader
 cd "$HOME/csf-mamba"
 
 for ENC in $ENCODERS; do
