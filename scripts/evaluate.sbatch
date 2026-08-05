@@ -13,6 +13,10 @@
 #   sbatch scripts/evaluate.sbatch
 #   RUN=hiucd_mini_chess_v3_semch DATASET=hi_ucd DATA=$SCRATCH/hi-ucd SPLIT=val \
 #       sbatch --export=ALL,RUN,DATASET,DATA,SPLIT scripts/evaluate.sbatch
+#
+# ENCODER et DECODER_REFINE doivent reproduire la config d'entraînement :
+#   RUN=second_mini_chess_crop512-decfull DECODER_REFINE=full \
+#       sbatch --export=ALL,RUN,DECODER_REFINE scripts/evaluate.sbatch
 # Astuce : pour un démarrage plus rapide, ajouter la QOS sur la ligne de
 # commande — sbatch --qos=cc-debug ... — plutôt que de la coder en dur
 # (elle est limitée à un job simultané et parfois indisponible).
@@ -23,6 +27,10 @@ DATASET="${DATASET:-second}"
 DATA="${DATA:-$SCRATCH/SECOND}"
 SPLIT="${SPLIT:-test}"
 CKPT_NAME="${CKPT_NAME:-best.pt}"
+# Doivent correspondre à l'entraînement du checkpoint, sinon le state_dict ne
+# se recharge pas (le décodeur élargi n'a pas la même forme que la référence).
+ENCODER="${ENCODER:-vmamba_mini}"
+DECODER_REFINE="${DECODER_REFINE:-dw}"
 
 module load python/3.11 cuda/12.2
 source "$SCRATCH/csf-venv-cu12/bin/activate"
@@ -33,6 +41,7 @@ python -m scripts.evaluate \
     --dataset "$DATASET" \
     --split "$SPLIT" \
     --checkpoint "$SCRATCH/csf-mamba-runs/$RUN/$CKPT_NAME" \
-    --encoder vmamba_mini \
+    --encoder "$ENCODER" \
+    --decoder-refine "$DECODER_REFINE" \
     --backend mamba \
     --output "$SCRATCH/csf-mamba-runs/$RUN/eval_$SPLIT"
