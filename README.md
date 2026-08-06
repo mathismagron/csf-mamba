@@ -153,8 +153,11 @@ Le backbone VMamba est branché sur ChangeMamba, en deux variantes (commutateur 
 
 | `--encoder` | backbone | modèle complet | verdict |
 |---|---|---|---|
-| `vmamba_mini` | 13,1 M | **19,8 M** | tient la Piste A (§11-5) — **défaut** |
-| `vmamba_tiny` | 28,0 M | 34,8 M | hors cible |
+| `vmamba_mini` | 13,84 M | **20,80 M** | **défaut** — meilleur SeK, 41,30 GMACs |
+| `vmamba_tiny` | 28,0 M | 36,90 M | +0,018 de SeK en crops 256, −0,005 en crops 512 |
+
+*(Comptes mesurés par fvcore. Les estimations initiales — 13,1 / 19,8 / 34,8 M —
+étaient légèrement basses.)*
 
 ⚠️ Le « VMamba-Tiny ~14M » du plan correspond en fait à la config **mini** (branche
 MLP désactivée). Le forward VMamba exige le **kernel CUDA `selective_scan`** : il

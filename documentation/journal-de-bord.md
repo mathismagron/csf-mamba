@@ -6,7 +6,11 @@ Destiné à servir de matière première au rapport de stage.
 Contexte : stage de recherche été 2026, Université de Moncton (Prof. Eric Hervet,
 Prof. Andy Couturier). Objectif : une architecture Mamba **efficiente** (~20M
 paramètres) pour la détection sémantique de changements (SCD), à comparer au SOTA
-(Mamba-FCS, 189M) sur Hi-UCD.
+(Mamba-FCS, 189M).
+
+Terrain initial : Hi-UCD. **Terrain de comparaison retenu depuis le 28 juillet :
+SECOND** — voir la décision D7 en phase 4, et la reformulation de l'objectif en
+phase 5.
 
 ---
 
@@ -42,11 +46,14 @@ cluster fonctionnel.
 
 | Variante | Backbone | Modèle complet |
 |---|---|---|
-| VMamba-tiny (MLP actif) | 28,0 M | 34,8 M |
+| VMamba-tiny (MLP actif) | 28,0 M | 34,8 M\* |
 | **VMamba-mini (MLP désactivé)** | **13,8 M** | **~20,8 M** |
 
 Le « VMamba-Tiny ~14M » du plan correspondait en fait à la config **mini**. Sans cette
 vérification, le budget aurait été dépassé de 75 %.
+
+\* estimation de l'époque ; la mesure ultérieure donne **36,9 M** pour le modèle
+complet en variante tiny. C'est 36,9 M qui fait foi dans tout le reste du journal.
 
 **D4 — Convention d'index A.** Sémantique en classes 1..9, `unlabeled (0) → 255`, têtes
 à 10 canaux (index 0 réservé). *Raison :* une seule configuration de loss et de métrique
@@ -135,9 +142,14 @@ warmup SeK, loss CE + SeK + L_sc.
 |---|---|---|---|
 | **0.000** | 0.000 | ~0.50 | 0.9995 |
 
-**Diagnostic : collapse.** Le modèle prédit « aucun changement » partout. Comme 97,5 %
-des pixels sont effectivement inchangés, il obtient 99,95 % de justesse (OA) **sans
-jamais détecter un seul changement**. C'est le défi classique du déséquilibre de classes
+**Diagnostic : collapse.** Le modèle prédit « aucun changement » partout. La quasi-
+totalité des pixels étant effectivement inchangée (**98,6 %** en train, 97,8 % en val),
+il obtient une justesse (OA) très élevée **sans jamais détecter un seul changement**.
+
+> ⚠️ L'OA de 0,9995 rapportée ici n'est reconstructible depuis aucun des taux de
+> changement mesurés — elle est antérieure au correctif du masque de validité du
+> 28 juillet et ne doit pas être comparée aux OA des runs ultérieurs. Seule la
+> lecture qualitative (collapse) est à retenir. C'est le défi classique du déséquilibre de classes
 en détection de changements — pas un bug.
 
 ### Correctif → Run n°2 (23 juillet, 100 époques)
@@ -176,8 +188,8 @@ jamais rien appris** — soit gradient nul, soit pic énorme.
 1. **Nature des labels.** Sur SECOND, la sémantique n'est annotée que dans les zones
    changées (`label_clf[label==0] = 255`). Leur tête sémantique s'entraîne donc
    exactement sur la population que SeK mesure → kappa positif rapidement. Sur Hi-UCD,
-   la sémantique est en **pleine scène** : la tête optimise 97,5 % de pixels inchangés,
-   alors que SeK ne regarde que les 2,5 % changés.
+   la sémantique est en **pleine scène** : la tête optimise 98,6 % de pixels inchangés,
+   alors que SeK ne regarde que les 1,4 % changés.
 2. **Ils contournent le problème.** Leur code contient
    `SEK_START_ITER = 0 if dataset == 'SECOND' else 150000` : sur tout dataset autre que
    SECOND, ils retardent la loss SeK de 150 000 itérations — soit, à notre échelle, la
@@ -235,7 +247,7 @@ Deux enseignements de méthode :
   d'un autre induit en erreur — d'où l'intérêt du `metrics.csv` par run.
 - La chute simultanée de l'OA à l'époque 3 (0,932 contre ~0,97) révèle une
   **compétition entre les deux objectifs sémantiques** : `ce_sem` (pleine scène,
-  tirée par les 97,5 % de pixels inchangés) contre `sem_ch` (zones changées). À
+  tirée par les 98,6 % de pixels inchangés) contre `sem_ch` (zones changées). À
   poids égal (λ=1), ils se neutralisent.
 
 Verdict attendu vers les époques 20-50, quand le LR aura décru et que la loss SeK
@@ -276,7 +288,7 @@ rencontré sur Hi-UCD ne devrait pas s'y poser.
 ### Support SECOND ajouté
 
 Le modèle n'a **pas** eu à être modifié — la **convention A** (décision D4), choisie
-un an... une semaine plus tôt précisément pour coller à SECOND, s'avère native :
+une semaine plus tôt précisément pour coller à SECOND, s'avère native :
 SECOND encode déjà 0 = inchangé pour la sémantique. Seul le nombre de canaux des
 têtes change (10 → 7), soit **291 paramètres d'écart** sur 20,8 M.
 
@@ -593,7 +605,7 @@ faudrait se tourner vers la résolution ou la taille du backbone.
 `ov3` **triple le SeK** (+0,037, soit ~9× le bruit) — de loin l'effet le plus fort
 mesuré sur Hi-UCD. Le manque de signal était donc bien **un** facteur.
 
-Et le compromis anticipé se manifeste : **`ov10` fait moins bien que `ov3`**. À 5,4
+Et le compromis anticipé se manifeste : **`ov10` fait moins bien que `ov3`**. À 5,3
 répétitions par tuile et par époque, le sur-apprentissage coûte plus que la densité
 ne rapporte. L'optimum est proche de 3.
 
@@ -631,10 +643,20 @@ légèrement — 100 époques suffisent, prolonger dégraderait.
 |---|---|---|
 | Mamba-FCS | 189 M | 25,50 |
 | ChangeMamba (publié) | ~90 M | 24,11 |
-| ChangeMamba (checkpoint réel) | ~37 M | 22,08 |
+| MambaSCD-Tiny (checkpoint publié) | 21,51 M | 22,08 |
 | **CSF-Mamba** | **20,8 M** | **21,43** |
 
-**0,65 point du checkpoint réel de ChangeMamba, avec 56 % de ses paramètres.**
+**0,65 point du checkpoint publié de ChangeMamba, à paramètres quasi égaux.**
+
+> ⚠️ **Correction du 5 août.** Ce tableau portait « ~37 M » pour ce checkpoint —
+> une estimation par analogie avec notre propre variante tiny (36,9 M), jamais
+> vérifiée. La table de complexité publiée par ChangeMamba donne **21,51 M** pour
+> MambaSCD-Tiny. La formule « avec 56 % de ses paramètres », répétée à plusieurs
+> endroits du journal, était donc **fausse** : les deux modèles ont pratiquement
+> le même nombre de paramètres (−3,3 %). Le facteur 56 % est réel mais porte sur
+> le **calcul** (41,30 contre 73,42 GMACs), pas sur les paramètres. Voir
+> « Positionnement final sur SECOND ». Vérification définitive possible en
+> chargeant le checkpoint — chantier encore ouvert.
 
 **Constat transversal :** les deux seuls leviers qui ont fonctionné touchent aux
 **données** (densité du signal) et à la **résolution** — jamais à la loss. Cohérent
@@ -651,7 +673,7 @@ varier qu'un facteur :
 | `ov3_tiny` | **la capacité du modèle est le verrou restant** (backbone 13,8 M → 28 M) |
 | `ov3_crop512` | le décalage de longueur de séquence coûte aussi sur Hi-UCD |
 
-`ov3_tiny` porte le modèle à 34,8 M, hors cible d'efficience : c'est une **ablation
+`ov3_tiny` porte le modèle à 36,9 M, hors cible d'efficience : c'est une **ablation
 diagnostique**, pas un modèle candidat.
 
 **Ces trois runs épuisent les pistes identifiées.** Si aucun ne porte le SeK de
@@ -728,10 +750,11 @@ caractérisation dans le rapport.
 |---|---|---|---|---|---|
 | Mamba-FCS | 189 M | 88,62 | 65,78 | 74,07 | 25,50 |
 | ChangeMamba (publié) | ~90 M | 88,12 | 64,03 | 73,68 | 24,11 |
-| ChangeMamba (checkpoint réel) | ~37 M | — | — | — | 22,08 |
+| MambaSCD-Tiny (checkpoint publié) | 21,51 M | — | — | — | 22,08 |
 | **CSF-Mamba** | **20,8 M** | **87,57** | 62,10 | 72,00 | **21,44** |
 
-**0,64 point du checkpoint réel de ChangeMamba, avec 56 % de ses paramètres.**
+**0,64 point du checkpoint publié de ChangeMamba, à paramètres quasi égaux
+(−3,3 %) et pour 56 % de son calcul.**
 
 ### Ce que les gains ont réellement amélioré
 
@@ -891,7 +914,7 @@ aussi aux branches sémantiques (Mamba-FCS le fait, nous seulement sur le change
 Sur SECOND, l'IoU du changement plafonnait à ~56 % sous toute intervention, alors
 que la sémantique atteignait 84 % **une fois le changement détecté** : le modèle
 comprend ce qui a changé, mais délimite mal *où*. Or délimiter est le travail du
-décodeur — et les deux décodeurs ne pesaient que **0,98 M sur 20,61 M, soit 4,8 %
+décodeur — et les deux décodeurs ne pesaient que **0,98 M sur 20,80 M, soit 4,7 %
 du modèle**, contre 13,84 M pour le seul encodeur.
 
 La raison de cette légèreté est le bloc de raffinement : une convolution
@@ -911,8 +934,8 @@ C²S², ni les losses, ni le DySample. `dw` reste le défaut, et sa vérificatio
 `state_dict` identiques** à la version précédente, donc les checkpoints existants
 se rechargent tels quels et la référence est strictement inchangée.
 
-Coût du mode `full` : 20,61 M → **24,08 M (+3,47 M)**, les décodeurs passant de
-4,8 % à **18,5 %** du modèle. Lancé sur la meilleure configuration connue
+Coût du mode `full` : 20,80 M → **24,27 M (+3,47 M)**, les décodeurs passant de
+4,7 % à **18,3 %** du modèle (0,98 M → 4,45 M). Lancé sur la meilleure configuration connue
 (`mini` + crop 512), 100 époques, tout le reste identique au contrôle.
 
 ### Le résultat — hypothèse réfutée
@@ -944,12 +967,12 @@ architecturalement très différents convergent au même endroit :
 
 | | paramètres | IoU chgt |
 |---|---|---|
-| référence | 20,61 M | 0,5621 |
+| référence | 20,80 M | 0,5621 |
 | encodeur élargi (`tiny`, +16 M) | 36,9 M | 0,5594 |
-| décodeur élargi (`full`, +3,47 M) | 24,08 M | 0,5597 |
+| décodeur élargi (`full`, +3,47 M) | 24,27 M | 0,5597 |
 
 **0,5594 / 0,5597 / 0,5621** — trois valeurs dans un intervalle de 0,003, alors
-que la capacité varie de 20,6 M à 36,9 M et que le paramètre ajouté l'est tantôt
+que la capacité varie de 20,8 M à 36,9 M et que le paramètre ajouté l'est tantôt
 en amont, tantôt en aval. Le plus petit modèle a même le meilleur IoU.
 
 Sur les sept configurations, **l'IoU du changement s'étale sur 0,016** (0,546 à
@@ -1060,7 +1083,7 @@ Porter le seul IoU du changement à 0,80, sans toucher à la sémantique,
 dépasserait Mamba-FCS (0,2550). Tout le déficit restant tient dans cette unique
 quantité.
 
-### Incidents d'infrastructure (5 août)
+### Incidents d'infrastructure — premier constat (5 août)
 
 Deux jobs tués par la limite de temps **sans produire une seule ligne Python**,
 malgré `python -u` : `csf-gmacs` (190707, 5 h, nœud GPU) et `csf-classes`
@@ -1106,7 +1129,7 @@ qui valide les deux. La leçon : « partagé » décrit les poids, pas le calcul
 référence sur les trois axes. Le tableau d'efficience conserve donc la variante
 `dw`, et le mode `full` reste dans le code comme ablation documentée.
 
-### Incident — le venv sur Lustre coûte 70 minutes par job (5 août)
+### Incidents d'infrastructure — le chiffrage (5 août)
 
 Le même log chiffre enfin le problème d'infrastructure, sur nœud de calcul GPU :
 
@@ -1130,11 +1153,14 @@ signalement au support d'Alliance. Le contournement documenté consiste à
 construire l'environnement dans `$SLURM_TMPDIR`, sur le disque local du nœud,
 plutôt que de l'activer depuis Lustre.
 
-### Incident — TIMEOUT du comptage GMACs (job 173649)
-
 ---
 
-## État au 29 juillet 2026
+## Instantané au 29 juillet 2026 (historique — dépassé)
+
+> ⚠️ Section conservée telle qu'écrite le 29 juillet, pour la trace chronologique.
+> **Elle est périmée** : les chantiers « à faire » ont été menés et le meilleur
+> résultat cité (SeK 19,31) a été dépassé. Pour l'état courant, voir la phase 6 et
+> « Positionnement final sur SECOND ».
 
 **Acquis :** pipeline complet et reproductible sur GPU ; modèle ~20,8 M paramètres
 (vs 189 M pour Mamba-FCS) ; détection de changements fonctionnelle sur Hi-UCD
@@ -1159,7 +1185,8 @@ détecté) ; ce sont les faux positifs et faux négatifs de détection qui pèse
 **Meilleur résultat à ce jour** — SECOND, `w2lovasz` : SeK **19,31** avec 20,8 M
 paramètres, détection parfaitement calibrée (20,88 % prédits pour 20,07 % réels).
 À comparer aux checkpoints publiés par ChangeMamba eux-mêmes : SeK 22,08 pour
-~37 M paramètres — soit **87 % de leur score avec 56 % de leurs paramètres**.
+21,51 M paramètres — soit **87 % de leur score à paramètres équivalents**.
+*(Corrigé le 5 août : « ~37 M / 56 % des paramètres » était faux, cf. supra.)*
 
 **Ensuite :**
 1. Premier chiffre sur SECOND, comparable à ChangeMamba (24,11) et Mamba-FCS (25,50).
@@ -1180,5 +1207,5 @@ paramètres, détection parfaitement calibrée (20,88 % prédits pour 20,07 % r�
   `.out` peut être perdu ; le CSV, non).
 - Reprise sur checkpoint (`last.pt` : modèle + optimiseur + scheduler + step) : un job
   interrompu par la limite de temps se relance sans perte.
-- Trois tests de non-régression (`tests/`) : formes et budget du modèle, portage SeK,
-  portage des métriques.
+- Cinq tests de non-régression (`tests/`) : formes et budget du modèle, portage SeK,
+  portage Lovász, portage des métriques, et validité du masque d'évaluation.
