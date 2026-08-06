@@ -24,6 +24,7 @@ ChangeMamba, qui étiquette ses sorties fvcore « GFLOPs » alors qu'il s'agit d
 | MambaSCD-Base | 89,99 M | 211,55 | — | — | — | *22,92* |
 | **MambaSCD-Tiny** | 21,51 M | 73,42 | — | — | — | *22,08* |
 | **CSF-Mamba** | **20,80 M** | **41,30** | 87,57 | 62,10 | 72,00 | **21,44** |
+| CSF-Mamba, décodeur élargi | 24,27 M | 53,45 | 87,24 | 61,67 | 71,70 | 20,89 |
 
 *(SeK en italique = checkpoints publiés par ChangeMamba, évalués par eux.)*
 
@@ -52,7 +53,7 @@ ses parties convolutionnelles, non par la machinerie SSM.
 | Crops 512 (vs 256) | Hi-UCD | −0,024 ❌ (perte d'augmentation) |
 | Backbone ×1,8 (20,8 → 36,9 M) | Hi-UCD | −0,009 ❌ |
 | Sur-échantillonnage ×5 | Hi-UCD | −0,003 (= ×3, plateau) |
-| Décodeur élargi (dw → 3×3 pleine, +3,47 M) | SECOND (crops 512) | −0,005 ❌ |
+| Décodeur élargi (dw → 3×3 pleine, +3,47 M, +12,15 GMACs) | SECOND (crops 512) | −0,005 ❌ |
 
 Le même réglage anti-déséquilibre est **décisif sur SECOND et neutre sur Hi-UCD** :
 il doit être calibré sur le taux de changement du dataset.

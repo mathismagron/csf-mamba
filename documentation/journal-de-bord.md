@@ -1077,15 +1077,60 @@ Leçon générale retenue : instrumenter avec des traces horodatées et flushée
 avant de supposer où part le temps. Sur `csf-gmacs`, l'hypothèse « le traçage
 fvcore est lent » était fausse — le traçage n'avait jamais commencé.
 
-### Incident — TIMEOUT du comptage GMACs (job 173649)
+### Coût mesuré du décodeur élargi — et une prévision fausse
 
-Le job de comptage a fini en **TIMEOUT à 1 h**. Cause : le traçage fvcore d'un
-modèle SSM est lent, et le script bouclait sur **les deux backbones**. Deux
-correctifs : walltime porté à 3 h, et variable `ENCODERS` pour ne mesurer que la
-variante manquante au lieu de tout reprendre. Prévision analytique en attente de
-confirmation : les trois convolutions élargies par décodeur coûtent 9·C²·H·W à
-128²/64²/32², soit **+8,1 GMACs** — 41,30 → ~49,4, toujours loin sous les 73,42
-de MambaSCD-Tiny.
+Mesure fvcore (job 197142, entrée 512², backend mamba) :
+
+| | paramètres | GMACs |
+|---|---|---|
+| référence (`dw`) | 20,80 M | 41,30 |
+| décodeur élargi (`full`) | **24,27 M** | **53,45** |
+
+**+3,47 M de paramètres — exactement la prévision — mais +12,15 GMACs au lieu
+des +8,15 annoncés.** L'écart n'est pas du bruit de mesure, c'est une erreur de
+raisonnement, et elle est instructive.
+
+J'avais compté trois convolutions élargies par décodeur, à 9·C²·H·W sur
+384@32², 192@64² et 96@128², soit 4,08 GMACs par décodeur et 8,15 pour les deux.
+Mais le décodeur sémantique est **partagé entre les deux dates** : ses poids sont
+uniques — d'où un compte de paramètres juste — alors que son calcul s'effectue
+**deux fois**, une par date. Le coût réel porte donc sur trois passes, pas deux :
+
+    3 × 4,077 − 0,074 (depthwise remplacées) = 12,16 GMACs
+
+contre 12,15 mesuré. La mesure et l'analyse corrigée concordent à 0,01 près, ce
+qui valide les deux. La leçon : « partagé » décrit les poids, pas le calcul.
+
+**Verdict d'efficience.** Le décodeur élargi coûte +17 % de paramètres et
+**+29 % de calcul** pour **−2,5 % de SeK**. Il est strictement dominé par la
+référence sur les trois axes. Le tableau d'efficience conserve donc la variante
+`dw`, et le mode `full` reste dans le code comme ablation documentée.
+
+### Incident — le venv sur Lustre coûte 70 minutes par job (5 août)
+
+Le même log chiffre enfin le problème d'infrastructure, sur nœud de calcul GPU :
+
+| étape | durée |
+|---|---|
+| `import torch` | **43 min 38** |
+| import fvcore | 1 min 31 |
+| import csf_mamba | 33 s |
+| instanciation du modèle sur CPU | **23 min 12** |
+| transfert sur GPU | 1 min 32 |
+| **traçage fvcore** | **10 min 31** |
+
+**70 minutes d'imports et de construction pour 10 minutes de traçage.** Mon
+hypothèse initiale — « le traçage fvcore est lent, 30 à 45 min par variante » —
+était donc fausse dans les deux sens : le traçage est rapide, et c'est
+l'environnement qui coûte. Cela explique rétrospectivement les deux TIMEOUTs
+(173649 à 1 h, 190707 à 5 h) sans rien devoir à notre code.
+
+43 minutes pour `import torch` sur un nœud de calcul est anormal et justifie un
+signalement au support d'Alliance. Le contournement documenté consiste à
+construire l'environnement dans `$SLURM_TMPDIR`, sur le disque local du nœud,
+plutôt que de l'activer depuis Lustre.
+
+### Incident — TIMEOUT du comptage GMACs (job 173649)
 
 ---
 
