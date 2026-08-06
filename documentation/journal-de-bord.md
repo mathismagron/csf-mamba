@@ -715,6 +715,51 @@ signal disponible**, non par la capacité du modèle.
 
 ---
 
+## Instantané au 29 juillet 2026
+
+> État des lieux tel qu'écrit ce jour-là, avant la conclusion sur Hi-UCD. Les
+> chantiers listés « à faire » ont depuis été menés et le meilleur résultat cité
+> a été dépassé — la suite du journal le raconte.
+
+**Acquis :** pipeline complet et reproductible sur GPU ; modèle ~20,8 M paramètres
+(vs 189 M pour Mamba-FCS) ; détection de changements fonctionnelle sur Hi-UCD
+(Fscd 0,227) ; outillage d'évaluation avec visualisations ; métriques garanties
+comparables ; **support des deux datasets** (Hi-UCD et SECOND) validé sur données
+réelles.
+
+**Verrou identifié : la LOCALISATION du changement.** La branche sémantique
+fonctionne (84 % de classification correcte sur SECOND une fois le changement
+détecté) ; ce sont les faux positifs et faux négatifs de détection qui pèsent 3,5×
+(Hi-UCD) à 5,2× (SECOND) plus lourd. IoU du changement : 39,7 % et 54,6 %.
+
+**Chantiers en cours :**
+
+| Chantier | État |
+|---|---|
+| Loss Lovász (optimise l'IoU) | ❌ réfutée — n'améliore pas l'IoU |
+| Sur-échantillonnage des tuiles avec changement (Hi-UCD) | 2 runs lancés (`ov3`, `ov10`) |
+| Crops 512 sur SECOND (décalage de longueur de séquence) | à faire |
+| Évaluation des checkpoints ChangeMamba avec notre code | à faire |
+
+**Meilleur résultat à ce jour** — SECOND, `w2lovasz` : SeK **19,31** avec 20,8 M
+paramètres, détection parfaitement calibrée (20,88 % prédits pour 20,07 % réels).
+À comparer aux checkpoints publiés par ChangeMamba eux-mêmes : SeK 22,08 pour
+21,51 M paramètres — soit **87 % de leur score à paramètres équivalents**.
+*(Corrigé le 5 août : « ~37 M / 56 % des paramètres » était faux, cf. supra.)*
+
+**Ensuite :**
+1. Premier chiffre sur SECOND, comparable à ChangeMamba (24,11) et Mamba-FCS (25,50).
+2. Études d'ablation — la contribution scientifique : damier vs CSSM-L1, ± FFT,
+   ± L_sc, ± loss SeK, mini vs tiny, crops 256 vs 512 (décalage de longueur de
+   séquence entre entraînement et test, spécifique aux modèles SSM).
+3. Comparaison efficience/performance (params, FLOPs, temps d'inférence). Option la
+   plus rigoureuse : évaluer les checkpoints ChangeMamba publiés (SeK 22,08 / 22,92)
+   avec **notre** code de métriques, pour éliminer tout doute de protocole.
+
+---
+
+---
+
 ## Conclusion sur Hi-UCD (30 juillet 2026)
 
 **Les quatre familles de leviers sont épuisées :**
@@ -1083,23 +1128,6 @@ Porter le seul IoU du changement à 0,80, sans toucher à la sémantique,
 dépasserait Mamba-FCS (0,2550). Tout le déficit restant tient dans cette unique
 quantité.
 
-### Incidents d'infrastructure — premier constat (5 août)
-
-Deux jobs tués par la limite de temps **sans produire une seule ligne Python**,
-malgré `python -u` : `csf-gmacs` (190707, 5 h, nœud GPU) et `csf-classes`
-(194247, 20 min, nœud CPU). Aucun n'a atteint son premier `print`. Le même jour,
-`csf-eval` s'est terminé normalement en 1 h 03 avec le même venv.
-
-Point commun des deux jobs bloqués : l'import de torch depuis le venv sur Lustre.
-`csf-classes` a été réécrit pour ne plus dépendre de torch du tout — il lit
-`CLASS_NAMES` par analyse syntaxique du source et n'utilise que numpy et Pillow,
-fournis par `scipy-stack`. Relancé sans venv, il a terminé en **3 min 30**
-(job 196374). Cela **incrimine le venv sur Lustre**, sans le prouver formellement.
-
-Leçon générale retenue : instrumenter avec des traces horodatées et flushées
-avant de supposer où part le temps. Sur `csf-gmacs`, l'hypothèse « le traçage
-fvcore est lent » était fausse — le traçage n'avait jamais commencé.
-
 ### Coût mesuré du décodeur élargi — et une prévision fausse
 
 Mesure fvcore (job 197142, entrée 512², backend mamba) :
@@ -1128,74 +1156,6 @@ qui valide les deux. La leçon : « partagé » décrit les poids, pas le calcul
 **+29 % de calcul** pour **−2,5 % de SeK**. Il est strictement dominé par la
 référence sur les trois axes. Le tableau d'efficience conserve donc la variante
 `dw`, et le mode `full` reste dans le code comme ablation documentée.
-
-### Incidents d'infrastructure — le chiffrage (5 août)
-
-Le même log chiffre enfin le problème d'infrastructure, sur nœud de calcul GPU :
-
-| étape | durée |
-|---|---|
-| `import torch` | **43 min 38** |
-| import fvcore | 1 min 31 |
-| import csf_mamba | 33 s |
-| instanciation du modèle sur CPU | **23 min 12** |
-| transfert sur GPU | 1 min 32 |
-| **traçage fvcore** | **10 min 31** |
-
-**70 minutes d'imports et de construction pour 10 minutes de traçage.** Mon
-hypothèse initiale — « le traçage fvcore est lent, 30 à 45 min par variante » —
-était donc fausse dans les deux sens : le traçage est rapide, et c'est
-l'environnement qui coûte. Cela explique rétrospectivement les deux TIMEOUTs
-(173649 à 1 h, 190707 à 5 h) sans rien devoir à notre code.
-
-43 minutes pour `import torch` sur un nœud de calcul est anormal et justifie un
-signalement au support d'Alliance. Le contournement documenté consiste à
-construire l'environnement dans `$SLURM_TMPDIR`, sur le disque local du nœud,
-plutôt que de l'activer depuis Lustre.
-
----
-
-## Instantané au 29 juillet 2026 (historique — dépassé)
-
-> ⚠️ Section conservée telle qu'écrite le 29 juillet, pour la trace chronologique.
-> **Elle est périmée** : les chantiers « à faire » ont été menés et le meilleur
-> résultat cité (SeK 19,31) a été dépassé. Pour l'état courant, voir la phase 6 et
-> « Positionnement final sur SECOND ».
-
-**Acquis :** pipeline complet et reproductible sur GPU ; modèle ~20,8 M paramètres
-(vs 189 M pour Mamba-FCS) ; détection de changements fonctionnelle sur Hi-UCD
-(Fscd 0,227) ; outillage d'évaluation avec visualisations ; métriques garanties
-comparables ; **support des deux datasets** (Hi-UCD et SECOND) validé sur données
-réelles.
-
-**Verrou identifié : la LOCALISATION du changement.** La branche sémantique
-fonctionne (84 % de classification correcte sur SECOND une fois le changement
-détecté) ; ce sont les faux positifs et faux négatifs de détection qui pèsent 3,5×
-(Hi-UCD) à 5,2× (SECOND) plus lourd. IoU du changement : 39,7 % et 54,6 %.
-
-**Chantiers en cours :**
-
-| Chantier | État |
-|---|---|
-| Loss Lovász (optimise l'IoU) | ❌ réfutée — n'améliore pas l'IoU |
-| Sur-échantillonnage des tuiles avec changement (Hi-UCD) | 2 runs lancés (`ov3`, `ov10`) |
-| Crops 512 sur SECOND (décalage de longueur de séquence) | à faire |
-| Évaluation des checkpoints ChangeMamba avec notre code | à faire |
-
-**Meilleur résultat à ce jour** — SECOND, `w2lovasz` : SeK **19,31** avec 20,8 M
-paramètres, détection parfaitement calibrée (20,88 % prédits pour 20,07 % réels).
-À comparer aux checkpoints publiés par ChangeMamba eux-mêmes : SeK 22,08 pour
-21,51 M paramètres — soit **87 % de leur score à paramètres équivalents**.
-*(Corrigé le 5 août : « ~37 M / 56 % des paramètres » était faux, cf. supra.)*
-
-**Ensuite :**
-1. Premier chiffre sur SECOND, comparable à ChangeMamba (24,11) et Mamba-FCS (25,50).
-2. Études d'ablation — la contribution scientifique : damier vs CSSM-L1, ± FFT,
-   ± L_sc, ± loss SeK, mini vs tiny, crops 256 vs 512 (décalage de longueur de
-   séquence entre entraînement et test, spécifique aux modèles SSM).
-3. Comparaison efficience/performance (params, FLOPs, temps d'inférence). Option la
-   plus rigoureuse : évaluer les checkpoints ChangeMamba publiés (SeK 22,08 / 22,92)
-   avec **notre** code de métriques, pour éliminer tout doute de protocole.
 
 ---
 
