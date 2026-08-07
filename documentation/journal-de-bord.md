@@ -138,6 +138,23 @@ ci-dessus proviennent d'un tirage aléatoire de 1 500 tuiles par split.)*
 Recette : VMamba-mini pré-entraîné, crops 256, batch 8, AMP bf16, LR cosine + warmup,
 warmup SeK, loss CE + SeK + L_sc.
 
+**Reproduction.** Ce run a été lancé au commit **`572d7ed`**, avant l'existence de
+`--bcd-change-weight` et `--lambda-dice` (ajoutés le 23 juillet par `b999e64` et
+`66abaa6`). Le relancer avec le `train.sbatch` actuel donnerait autre chose : les
+défauts d'aujourd'hui incluent une CE pondérée à 10 et une Dice à 1,0. Pour le
+reproduire à l'identique, se placer sur ce commit :
+
+    git checkout 572d7ed
+    python -m scripts.train --data-root $SLURM_TMPDIR/hi-ucd --dataset hi_ucd \
+        --encoder vmamba_mini --encoder-pretrained "$CKPT" \
+        --core chess --backend mamba --crop-size 256 --batch-size 8 \
+        --epochs 100 --seed 42 --output $SCRATCH/csf-mamba-runs/hiucd_mini_chess
+
+C'est la leçon générale : **un script qui ne fixe pas explicitement ses paramètres
+ne fige rien** — il capte les défauts du jour. Les sbatch actuels journalisent la
+recette complète sur une ligne `== config` au démarrage, ce qui rend le log
+auto-suffisant même si les défauts changent plus tard.
+
 | SeK | Fscd | mIoU | OA |
 |---|---|---|---|
 | **0.000** | 0.000 | ~0.50 | 0.9995 |
