@@ -44,6 +44,8 @@ def parse_args():
                    help="Poids des tuiles contenant du changement au tirage "
                         "(1 = uniforme). Utile sur Hi-UCD où 9 %% seulement en ont.")
     p.add_argument("--lr", type=float, default=1e-4)
+    p.add_argument("--lr-schedule", default="cosine", choices=["cosine", "constant"],
+                   help="Après le warmup : décroissance cosine (défaut) ou LR constant.")
     p.add_argument("--min-lr", type=float, default=1e-6, help="Plancher de la décroissance cosine.")
     p.add_argument("--warmup-iters", type=int, default=1500, help="Montée linéaire du LR.")
     p.add_argument("--sek-warmup-iters", type=int, default=20000,
@@ -54,6 +56,13 @@ def parse_args():
                    help="Poids de la loss Dice sur le changement (0 pour désactiver).")
     p.add_argument("--lambda-lovasz", type=float, default=0.0,
                    help="Poids de la loss Lovász sur le changement (optimise l'IoU).")
+    p.add_argument("--lambda-sek", type=float, default=0.5,
+                   help="Poids du terme SeK différentiable (0 = terme retiré).")
+    p.add_argument("--lambda-sc", type=float, default=0.1,
+                   help="Poids de la cohérence sémantique L_sc (0 = terme retiré).")
+    p.add_argument("--fft-stages", default="0,1",
+                   help="Stages portant la branche fréquentielle, séparés par des "
+                        "virgules. Chaîne vide = branche FFT retirée.")
     p.add_argument("--lambda-sem-change", type=float, default=0.0,
                    help="Poids de la CE sémantique restreinte aux zones changées "
                         "(0 = désactivé, comme les runs 1-2).")
@@ -85,18 +94,22 @@ def main():
     if args.encoder_pretrained and args.encoder.startswith("vmamba"):
         encoder_kwargs["pretrained_path"] = args.encoder_pretrained
 
+    fft_stages = tuple(int(x) for x in args.fft_stages.split(",") if x.strip())
     model = CSFMamba(
         num_semantic_classes=num_classes,
         encoder=args.encoder, core=args.core, backend=args.backend,
-        decoder_refine=args.decoder_refine,
+        decoder_refine=args.decoder_refine, fft_stages=fft_stages,
         encoder_kwargs=encoder_kwargs,
     ).to(device)
+    print("Stages FFT :", fft_stages if fft_stages else "aucun (branche retirée)")
     print("Paramètres :", count_parameters(model))
 
     criterion = CSFMambaLoss(
         num_semantic_classes=num_classes,
         bcd_change_weight=args.bcd_change_weight,
         lambda_dice=args.lambda_dice,
+        lambda_sek=args.lambda_sek,
+        lambda_sc=args.lambda_sc,
         lambda_sem_change=args.lambda_sem_change,
         lambda_lovasz=args.lambda_lovasz,
     ).to(device)
@@ -128,7 +141,8 @@ def main():
     if args.accum_steps > 1:
         print(f"accumulation x{args.accum_steps} : batch effectif "
               f"{args.batch_size * args.accum_steps}, {steps_per_epoch} pas d'optimiseur/époque")
-    scheduler = _warmup_cosine(optimizer, args.warmup_iters, total_iters, args.lr, args.min_lr)
+    scheduler = _make_scheduler(optimizer, args.lr_schedule, args.warmup_iters,
+                                total_iters, args.lr, args.min_lr)
     use_amp = args.amp and device == "cuda"
 
     out_dir = Path(args.output)
@@ -204,13 +218,25 @@ def main():
         torch.save(ckpt, out_dir / "last.pt")
 
 
-def _warmup_cosine(optimizer, warmup_iters, total_iters, base_lr, min_lr):
-    """Montée linéaire jusqu'à base_lr, puis décroissance cosine jusqu'à min_lr."""
+def _make_scheduler(optimizer, schedule, warmup_iters, total_iters, base_lr, min_lr):
+    """Montée linéaire jusqu'à base_lr, puis `cosine` ou `constant`.
+
+    Le warmup est commun aux deux : démarrer un SSM à plein LR diverge. Seule la
+    phase suivante diffère, ce qui isole bien le facteur étudié.
+
+    `constant` sert d'ablation au `cosine` par défaut. Attention à l'interprétation :
+    la décroissance du LR est mêlée à la sélection de la meilleure époque, puisque
+    `best.pt` retient le meilleur SeK en validation. Un schedule constant produit
+    des courbes plus bruitées en fin d'entraînement, donc un maximum sur 100 époques
+    mécaniquement plus optimiste. Comparer aussi les valeurs de la DERNIÈRE époque.
+    """
     import math
 
     def lr_lambda(it):
         if it < warmup_iters:
             return (it + 1) / max(1, warmup_iters)
+        if schedule == "constant":
+            return 1.0
         progress = (it - warmup_iters) / max(1, total_iters - warmup_iters)
         cosine = 0.5 * (1 + math.cos(math.pi * min(1.0, progress)))
         return (min_lr + (base_lr - min_lr) * cosine) / base_lr

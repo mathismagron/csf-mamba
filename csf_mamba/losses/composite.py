@@ -149,13 +149,17 @@ class CSFMambaLoss(nn.Module):
         # SeK (verbatim Mamba-FCS) : pilotée par le change_mask, opère sur les deux
         # branches sémantiques. `apply_sek=False` pendant le warmup (la sémantique
         # doit d'abord apprendre avant que SeK, qui la suppose correcte, aide).
-        if apply_sek:
+        # `lambda_sek > 0` est indispensable, pas cosmétique : la SeK émet des NaN
+        # quand kappa est négatif (documenté sur Hi-UCD), et 0 x NaN = NaN. Sans ce
+        # garde-fou, l'ablation « lambda_sek=0 » n'annulerait pas le terme, elle
+        # contaminerait le total.
+        if apply_sek and self.lambda_sek > 0:
             terms["sek"] = self.lambda_sek * self.sek(
                 outputs["sem_t1"], outputs["sem_t2"],
                 targets["sem_t1"], targets["sem_t2"], change_mask,
             )
 
-        if "feat_t1" in outputs and "unchanged" in targets:
+        if self.lambda_sc > 0 and "feat_t1" in outputs and "unchanged" in targets:
             terms["sc"] = self.lambda_sc * semantic_consistency_loss(
                 outputs["feat_t1"], outputs["feat_t2"], targets["unchanged"]
             )

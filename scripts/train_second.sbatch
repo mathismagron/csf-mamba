@@ -47,6 +47,12 @@ LOVASZ="${LOVASZ:-0}"        # poids de la loss Lovász (optimise l'IoU)
 CROP="${CROP:-256}"          # taille du crop d'entraînement (512 = tuile entière)
 BATCH="${BATCH:-8}"          # micro-batch
 ACCUM="${ACCUM:-1}"          # accumulation : batch effectif = BATCH x ACCUM
+CORE="${CORE:-chess}"        # coeur du C²S² : chess (défaut) ou l1
+SEED="${SEED:-42}"            # graine : change TOUT l'aléa (init, ordre, augmentations)
+LAMBDA_SEK="${LAMBDA_SEK:-0.5}"    # poids du terme SeK différentiable (0 = retiré)
+LAMBDA_SC="${LAMBDA_SC:-0.1}"      # poids de la cohérence sémantique L_sc (0 = retiré)
+FFT_STAGES="${FFT_STAGES:-0,1}"    # stages de la branche fréquentielle ("" = retirée)
+LR_SCHEDULE="${LR_SCHEDULE:-cosine}"  # cosine (défaut) ou constant
 DECODER_REFINE="${DECODER_REFINE:-dw}"  # dw = référence, full = décodeur élargi
 ENCODER="${ENCODER:-vmamba_mini}"  # vmamba_mini (13,8M) ou vmamba_tiny (28M)
 TAG="${TAG:-nobal}"          # suffixe du dossier de sortie
@@ -61,7 +67,7 @@ DATA_ROOT="$SLURM_TMPDIR/SECOND"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/second_mini_chess_$TAG"
-echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ crop=$CROP batch=$BATCH x accum=$ACCUM enc=$ENCODER dec=$DECODER_REFINE epochs=$EPOCHS -> $OUT =="
+echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ crop=$CROP batch=$BATCH x accum=$ACCUM enc=$ENCODER dec=$DECODER_REFINE core=$CORE seed=$SEED sek=$LAMBDA_SEK sc=$LAMBDA_SC fft=[$FFT_STAGES] lr=$LR_SCHEDULE epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
@@ -70,7 +76,7 @@ python -m scripts.train \
     --encoder "$ENCODER" \
     --decoder-refine "$DECODER_REFINE" \
     --encoder-pretrained "$CKPT" \
-    --core chess \
+    --core "$CORE" \
     --backend mamba \
     --crop-size "$CROP" \
     --batch-size "$BATCH" \
@@ -81,6 +87,10 @@ python -m scripts.train \
     --lambda-sem-change 0 \
     --sek-warmup-iters 0 \
     --epochs "$EPOCHS" \
-    --seed 42 \
+    --seed "$SEED" \
+    --lambda-sek "$LAMBDA_SEK" \
+    --lambda-sc "$LAMBDA_SC" \
+    --fft-stages "$FFT_STAGES" \
+    --lr-schedule "$LR_SCHEDULE" \
     --resume auto \
     --output "$OUT"
