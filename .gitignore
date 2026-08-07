@@ -13,6 +13,8 @@ pretrained_weight/
 # Sorties d'entraînement
 runs/
 logs/
+# Logs Slurm — filet de sécurité si un job en écrit hors de logs/
+*.out
 *.pt
 *.pth
 

@@ -5,7 +5,10 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --time=3:00:00
-#SBATCH --output=csf-gmacs-%j.out
+#SBATCH --output=logs/csf-gmacs-%j.out
+#
+# Le dossier logs/ doit exister avant la soumission (mkdir -p logs) : Slurm
+# n'ouvre pas le fichier de sortie si son dossier est absent, et le job échoue.
 #
 # Compte GMACs + paramètres. Nécessite un GPU (kernel selective_scan).
 # Compare les deux variantes de backbone pour le tableau d'efficience.

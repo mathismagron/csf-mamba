@@ -5,7 +5,10 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
 #SBATCH --time=3:00:00
-#SBATCH --output=csf-eval-%j.out
+#SBATCH --output=logs/csf-eval-%j.out
+#
+# Le dossier logs/ doit exister avant la soumission (mkdir -p logs) : Slurm
+# n'ouvre pas le fichier de sortie si son dossier est absent, et le job échoue.
 #
 # Évalue un checkpoint : tableau complet des métriques + diagnostic + visualisations.
 #

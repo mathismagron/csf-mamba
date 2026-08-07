@@ -4,7 +4,10 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=1:00:00
-#SBATCH --output=csf-classes-%j.out
+#SBATCH --output=logs/csf-classes-%j.out
+#
+# Le dossier logs/ doit exister avant la soumission (mkdir -p logs) : Slurm
+# n'ouvre pas le fichier de sortie si son dossier est absent, et le job échoue.
 #
 # Vérifie l'association indice -> classe sémantique de SECOND.
 #

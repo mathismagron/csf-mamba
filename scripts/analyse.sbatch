@@ -4,7 +4,10 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
 #SBATCH --time=0:15:0
-#SBATCH --output=csf-analyse-%j.out
+#SBATCH --output=logs/csf-analyse-%j.out
+#
+# Le dossier logs/ doit exister avant la soumission (mkdir -p logs) : Slurm
+# n'ouvre pas le fichier de sortie si son dossier est absent, et le job échoue.
 #
 # Analyses légères (CPU) sur les sorties d'évaluation déjà produites. À lancer en
 # job : sur un nœud de connexion, le simple démarrage de Python depuis le venv

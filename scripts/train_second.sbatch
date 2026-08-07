@@ -5,7 +5,10 @@
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=64G
 #SBATCH --time=08:00:00
-#SBATCH --output=csf-second-%j.out
+#SBATCH --output=logs/csf-second-%j.out
+#
+# Le dossier logs/ doit exister avant la soumission (mkdir -p logs) : Slurm
+# n'ouvre pas le fichier de sortie si son dossier est absent, et le job échoue.
 #
 # Entraînement sur SECOND — le benchmark de référence du domaine.
 # 2 968 paires train / 1 694 test (split officiel). ~371 steps/époque, ~3-4 h.

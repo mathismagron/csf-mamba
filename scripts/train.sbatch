@@ -5,7 +5,10 @@
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=64G
 #SBATCH --time=24:00:00
-#SBATCH --output=csf-mamba-%j.out
+#SBATCH --output=logs/csf-mamba-%j.out
+#
+# Le dossier logs/ doit exister avant la soumission (mkdir -p logs) : Slurm
+# n'ouvre pas le fichier de sortie si son dossier est absent, et le job échoue.
 #
 # Entraînement sur Hi-UCD (crops 256, batch 8, AMP bf16, LR cosine+warmup,
 # warmup SeK). ~14 h pour 100 époques. Reprise auto : si le job atteint la limite

@@ -4,7 +4,10 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=0:30:0
-#SBATCH --output=csf-stats-%j.out
+#SBATCH --output=logs/csf-stats-%j.out
+#
+# Le dossier logs/ doit exister avant la soumission (mkdir -p logs) : Slurm
+# n'ouvre pas le fichier de sortie si son dossier est absent, et le job échoue.
 #
 # Statistiques d'un dataset (CPU seulement, pas de GPU) : taux de changement,
 # distribution des classes dans les zones changées, matrice de transition.

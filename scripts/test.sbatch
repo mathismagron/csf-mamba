@@ -5,7 +5,10 @@
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=64G
 #SBATCH --time=0:20:0
-#SBATCH --output=csf-test-%j.out
+#SBATCH --output=logs/csf-test-%j.out
+#
+# Le dossier logs/ doit exister avant la soumission (mkdir -p logs) : Slurm
+# n'ouvre pas le fichier de sortie si son dossier est absent, et le job échoue.
 #
 # Run de test rapide (QOS debug) : vérifie que le kernel + VMamba + tout le
 # pipeline tournent sur GPU. 10 batches, 1 époque, batch 2 (le 512x512 pleine
