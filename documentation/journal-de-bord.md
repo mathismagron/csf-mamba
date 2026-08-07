@@ -955,7 +955,9 @@ soutiennent en revanche un énoncé solide :
 ### ⚠️ Ce qui n'a jamais été fait
 
 **Les ablations des composants propres à CSF-Mamba** — ± FFT, ± L_sc, damier vs
-CSSM-L1, ± loss SeK — prévues au plan initial, n'ont **jamais été lancées**. On ne
+CSSM-L1, ± loss SeK — prévues au plan initial, n'ont **jamais été lancées**.
+*(Mise à jour du 7 août : les quatre sont désormais câblées et lançables, cf.
+phase 7 ; elles restent à exécuter.)* On ne
 sait donc pas si le C²S²-Block, la branche fréquentielle ou la CGA résiduelle
 contribuent au résultat. C'est à la fois :
 - la **contribution scientifique manquante** du projet (un modèle efficient sans
@@ -1176,6 +1178,153 @@ référence sur les trois axes. Le tableau d'efficience conserve donc la variant
 
 ---
 
+## Phase 7 — Protocole statistique (7 août 2026)
+
+### Le constat qui déclenche la phase
+
+Réunion avec le maître de stage : **plusieurs graines par configuration, moyenne
+et écart-type**. La demande vise juste, et le projet en avait un besoin précis.
+
+Le plancher de bruit utilisé depuis fin juillet — ±0,004 de SeK — provient d'un
+**unique réplicat accidentel**, en crops 256. Deux valeurs, donc aucun écart-type,
+et pas sur la configuration de référence. Or les deux dernières conclusions
+reposent sur des écarts à peine supérieurs :
+
+| Conclusion | Écart mesuré | Seuil supposé |
+|---|---|---|
+| Le décodeur élargi ne sert pas | −0,005 | ±0,004 |
+| Le backbone tiny ne sert pas en crops 512 | −0,005 | ±0,004 |
+
+Si l'écart-type réel vaut 0,006 plutôt que 0,004, **les deux tombent**. Elles ne
+sont pas fausses pour autant — elles ne sont simplement pas établies. C'est la
+faiblesse méthodologique principale du projet à ce jour.
+
+### Ce que le budget permet, et ce qu'il ne permet pas
+
+La demande incluait un **balayage combinatoire des hyperparamètres de loss**. Le
+calcul a été fait avant de s'engager : six termes à deux niveaux, c'est 2⁶ = 64
+configurations ; à 4 graines et 14 h par entraînement en crops 512, cela donne
+**3 584 heures GPU**, soit 37 jours même en tenant quatre jobs en parallèle. Hors
+d'atteinte, et pas d'un facteur qu'un peu plus de moyens comblerait.
+
+Plan retenu à la place, ~430 heures GPU (4-5 jours de temps de mur à 4 jobs
+concurrents) :
+
+| Étape | Contenu | Coût |
+|---|---|---|
+| A | 4 graines de la référence + 4 en LR constant | 98 h |
+| B | Criblage des losses **en crops 256** (4× moins cher), un facteur à la fois, 3 graines | 53 h |
+| C | Confirmation en crops 512 des 2 meilleures configurations, 4 graines | 112 h |
+| D | Ablations d'architecture en crops 512, 3 graines | 168 h |
+
+Le criblage en crops 256 est un compromis assumé : l'ablation croisée backbone ×
+résolution a montré que ces leviers **ne s'additionnent pas**, donc rien ne
+garantit qu'un effet vu en 256 se retrouve en 512. D'où l'étape C, non
+négociable.
+
+Le balayage de la **taille de batch** est relégué en fin de liste : l'accumulation
+de gradient découple déjà le batch effectif de la mémoire, et l'effet de ce
+réglage passe surtout par son interaction avec le learning rate. À traiter avec
+lui, pas séparément.
+
+### Câblage — six réglages sortis du code
+
+`SEED`, `LAMBDA_SEK`, `LAMBDA_SC`, `FFT_STAGES`, `CORE` et `LR_SCHEDULE` étaient
+écrits en dur et ne pouvaient varier qu'en éditant le source. Ils deviennent des
+options de `train.py` alimentées par variables d'environnement. Les valeurs par
+défaut reproduisent la référence à l'identique.
+
+Nouveau : `--lr-schedule {cosine, constant}`. Le warmup reste **commun aux deux** —
+démarrer un SSM à plein régime diverge — de sorte que seule la phase de
+décroissance varie.
+
+**Défaut trouvé en testant le câblage.** Mettre un poids à zéro ne retirait pas le
+terme correspondant de la loss composite : il le multipliait par zéro. Anodin en
+apparence, sauf que la loss SeK **émet des NaN quand kappa est négatif**
+(comportement documenté sur Hi-UCD), et `0 × NaN = NaN`. L'ablation
+`LAMBDA_SEK=0` aurait donc **contaminé le total au lieu de l'annuler**, et le run
+aurait divergé sans cause apparente. Les termes SeK et L_sc sont désormais gardés
+par leur poids, comme les autres l'étaient déjà.
+
+C'est le genre de défaut qu'un câblage révèle et qu'une valeur en dur masque :
+tant que `lambda_sek` valait 0,5, le chemin fautif n'était jamais emprunté.
+
+### Outil d'agrégation
+
+`scripts/aggregate_seeds.py` regroupe les runs par configuration (suffixe `-sN`
+retiré) et produit moyenne, écart-type et écart au témoin. Trois choix de
+conception :
+
+1. **L'écart est exprimé en σ, pas en valeur absolue.** « −0,005 » ne se lit pas ;
+   « −3,2σ » se lit immédiatement. L'écart-type est **mis en commun** sur toutes
+   les configurations à au moins deux graines — l'estimer sur un seul groupe de
+   quatre serait trop instable.
+2. **Deux SeK sont rapportés.** Le *meilleur* sur 100 époques, ce que retient
+   `best.pt`, est un maximum sur une série bruitée : optimiste, et d'autant plus
+   qu'une configuration est instable. Le *final*, à la dernière époque, est
+   insensible au bruit de sélection. Pour comparer cosine et LR constant, c'est
+   le second qui tranche — un LR constant agite les fins d'entraînement et gonfle
+   mécaniquement le maximum sans que le modèle soit meilleur.
+3. **Les configurations à graine unique sont signalées comme non
+   interprétables** — ce qui vise nos six anciens runs SECOND.
+
+### ⚠️ Sélection de l'époque sur le split de test
+
+SECOND n'ayant pas de split de validation, l'entraînement tourne avec
+`--val-split test`, et `best.pt` retient **le meilleur SeK sur ce split**.
+Autrement dit, **l'époque est choisie sur le jeu de test** : les chiffres
+rapportés sont légèrement optimistes.
+
+Cela passait tant que seules nos configurations étaient comparées entre elles, et
+ChangeMamba procède de même, donc la comparabilité tient. Mais rapporter des
+moyennes sur plusieurs graines rend le biais visible, et un relecteur le verra.
+
+Correctif possible sans aucun coût de calcul : réserver 10 % du split
+d'entraînement comme validation, y sélectionner l'époque, rapporter sur le test.
+**Décision en attente** — changer de protocole en cours de projet demande l'accord
+du maître de stage, et rendrait les runs déjà lancés non directement comparables
+aux suivants.
+
+### Premier lot lancé
+
+Sept entraînements en crops 512 : trois graines supplémentaires de la référence
+(le run `crop512` existant tient lieu de graine 42) et quatre en LR constant.
+Résultats attendus sous ~14 h. Ils donneront **l'écart-type réel de la
+configuration de référence**, dont dépend l'interprétation de tout ce qui précède
+et de tout ce qui suivra.
+
+### Évaluation d'un checkpoint ChangeMamba avec notre code
+
+Chantier ouvert depuis fin juillet, enfin outillé
+(`scripts/evaluate_changemamba.py`). Leur modèle n'étant pas le nôtre, il faut
+instancier `ChangeMambaSCD` depuis `third_party/`, charger leurs poids publiés,
+puis brancher **nos** labels, **notre** split et **notre** évaluateur.
+
+**Piège identifié en lisant leur code** : ChangeMamba normalise ses entrées avec
+les statistiques ImageNet sur l'échelle **0-255**
+(`mean=[123,675 ; 116,28 ; 103,53]`), là où notre dataloader renvoie du `[0, 1]`.
+Leur passer nos tenseurs tels quels écraserait l'image dans une plage entièrement
+négative — vérifié : `[−2,12 ; −1,79]` au lieu de `[−2,10 ; +2,61]`, soit une
+image quasi constante. Le modèle aurait produit n'importe quoi et nous aurions
+publié un SeK effondré **à leur désavantage**, en croyant avoir mesuré leur
+performance.
+
+Garde-fous : arrêt si le `state_dict` ne correspond pas exactement au modèle
+(mauvaise config tiny/small/base laisserait des poids aléatoires), et comparaison
+automatique au SeK annoncé dans le nom du fichier — au-delà de 0,01 d'écart, le
+script refuse de présenter le chiffre comme exploitable.
+
+Deux issues, toutes deux utiles. Concordance : notre code de métriques reproduit
+le leur sur leur propre modèle, et le tableau d'efficience devient inattaquable —
+« évalué avec le même code » plutôt que « d'après les chiffres publiés ».
+Divergence : soit un détail de protocole échappe aux deux, soit leur chiffre
+n'est pas reproductible. Mieux vaut le savoir avant le rapport.
+
+Le chargement donnera aussi le **compte de paramètres exact** de MambaSCD-Tiny,
+réglant définitivement le « ~37 M » corrigé plus haut.
+
+---
+
 ## Notes de méthode
 
 - Chaque changement de recette part dans un **dossier de sortie distinct** pour ne pas
@@ -1184,5 +1333,10 @@ référence sur les trois axes. Le tableau d'efficience conserve donc la variant
   `.out` peut être perdu ; le CSV, non).
 - Reprise sur checkpoint (`last.pt` : modèle + optimiseur + scheduler + step) : un job
   interrompu par la limite de temps se relance sans perte.
+- **Plusieurs graines par configuration**, et un écart exprimé en σ plutôt qu'en
+  valeur absolue. Un écart inférieur à 2σ ne permet de conclure à rien.
+- **Un script qui ne fixe pas explicitement ses paramètres ne fige rien** : il
+  capte les défauts du jour, qui dérivent. D'où la ligne `== config :` au
+  démarrage de chaque sbatch, qui rend le log auto-suffisant.
 - Cinq tests de non-régression (`tests/`) : formes et budget du modèle, portage SeK,
   portage Lovász, portage des métriques, et validité du masque d'évaluation.
