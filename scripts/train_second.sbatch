@@ -4,7 +4,13 @@
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=64G
-#SBATCH --time=08:00:00
+#SBATCH --time=12:00:00
+#
+# 12 h : un run de 100 époques en crops 512 prend ~7 h 45 (mesuré sur 7 graines),
+# et 55 % de marge suffit. NE PAS demander 24 h « au cas où » : le backfill de
+# Slurm démarre en avance les jobs courts qui tiennent dans un trou d'agenda, et
+# une demande trois fois trop grosse retarde le départ sans rien apporter. Pour
+# 200 époques, --time=20:00:00 en ligne de commande.
 #SBATCH --output=logs/csf-second-%j.out
 #
 # Le dossier logs/ doit exister avant la soumission (mkdir -p logs) : Slurm
@@ -31,7 +37,7 @@
 # tuiles 512 entières — pour un modèle SSM, cela quadruple la longueur de séquence
 # entre les deux régimes. Pour tester l'effet de ce décalage, entraîner en 512 :
 #   CROP=512 BATCH=2 ACCUM=4 TAG=crop512 \
-#     sbatch --time=24:00:00 --export=ALL,CROP,BATCH,ACCUM,TAG scripts/train_second.sbatch
+#     sbatch --time=12:00:00 --export=ALL,CROP,BATCH,ACCUM,TAG scripts/train_second.sbatch
 # BATCH=2 x ACCUM=4 conserve le batch effectif de 8 : SEULE la résolution change
 # (512² en batch 8 sature l'A100). Compter ~4x le temps : ~14 h au lieu de ~3-4 h.
 #
@@ -39,7 +45,7 @@
 # leur raffinement est depthwise. DECODER_REFINE=full le passe en 3x3 complet
 # (24,08 M au total). À lancer sur la meilleure config connue (mini + crop512) :
 #   CROP=512 BATCH=2 ACCUM=4 DECODER_REFINE=full TAG=crop512-decfull \
-#     sbatch --time=24:00:00 \
+#     sbatch --time=12:00:00 \
 #       --export=ALL,CROP,BATCH,ACCUM,DECODER_REFINE,TAG scripts/train_second.sbatch
 set -euo pipefail
 
