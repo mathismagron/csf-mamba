@@ -116,19 +116,31 @@ def main():
     else:
         ref = max(stats, key=lambda k: stats[k]["best"][0])
 
-    # L'écart-type intra-configuration le plus fiable : mis en commun sur tous les
-    # groupes ayant au moins 2 graines. Un groupe seul en donne une estimation
-    # très instable ; les mettre en commun suppose une variance comparable, ce qui
-    # est raisonnable entre configurations proches.
-    pooled = [s["best"][1] for s in stats.values() if not math.isnan(s["best"][1])]
-    sigma = math.sqrt(statistics.fmean([s ** 2 for s in pooled])) if pooled else float("nan")
+    # Écart-type intra-configuration, mis en commun sur tous les groupes d'au
+    # moins 2 graines. Un groupe seul en donne une estimation très instable ; les
+    # mettre en commun suppose une variance comparable, raisonnable entre
+    # configurations proches.
+    #
+    # On met en commun les VARIANCES, pondérées par les degrés de liberté :
+    #
+    #     σ² = Σ (nᵢ−1)·sᵢ²  /  Σ (nᵢ−1)
+    #
+    # Une moyenne non pondérée ne serait exacte que si tous les groupes avaient la
+    # même taille — ce qui cesse d'être vrai dès qu'on mêle des groupes de 3 et de
+    # 4 graines. Et ce sont bien les variances qui s'additionnent, jamais les
+    # écarts-types.
+    pooled = [(s_["best"][1], s_["n"]) for s_ in stats.values()
+              if not math.isnan(s_["best"][1])]
+    num = sum((n - 1) * sd ** 2 for sd, n in pooled)
+    den = sum(n - 1 for _, n in pooled)
+    sigma = math.sqrt(num / den) if den else float("nan")
 
     # Comparer deux MOYENNES demande l'erreur-type de la différence,
     # SE = σ·√(1/n₁ + 1/n₂), et non σ seul. Diviser par σ surestime la certitude :
     # face au témoin à 4 graines, σ vaut 0,0089 mais SE vaut 0,0100 pour un run
     # unique et 0,0063 entre deux groupes de 4. On rapporte donc t = Δ/SE, et le
     # seuil est celui de Student au degré de liberté du σ mis en commun.
-    df = sum(s_["n"] - 1 for s_ in stats.values() if s_["n"] > 1)
+    df = den
     t_crit = {1: 12.71, 2: 4.30, 3: 3.18, 4: 2.78, 5: 2.57, 6: 2.45,
               7: 2.36, 8: 2.31, 9: 2.26, 10: 2.23}.get(df, 2.10 if df > 10 else float("inf"))
 
