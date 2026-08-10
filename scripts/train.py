@@ -56,6 +56,9 @@ def parse_args():
                    help="Poids de la loss Dice sur le changement (0 pour désactiver).")
     p.add_argument("--lambda-lovasz", type=float, default=0.0,
                    help="Poids de la loss Lovász sur le changement (optimise l'IoU).")
+    p.add_argument("--lambda-deep", type=float, default=0.0,
+                   help="Supervision profonde des cartes de changement par stage "
+                        "(0 = désactivée, valeur relative au terme BCD principal).")
     p.add_argument("--lambda-sek", type=float, default=0.5,
                    help="Poids du terme SeK différentiable (0 = terme retiré).")
     p.add_argument("--lambda-sc", type=float, default=0.1,
@@ -108,6 +111,7 @@ def main():
         num_semantic_classes=num_classes,
         bcd_change_weight=args.bcd_change_weight,
         lambda_dice=args.lambda_dice,
+        lambda_deep=args.lambda_deep,
         lambda_sek=args.lambda_sek,
         lambda_sc=args.lambda_sc,
         lambda_sem_change=args.lambda_sem_change,

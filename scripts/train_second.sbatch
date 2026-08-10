@@ -52,6 +52,7 @@ BATCH="${BATCH:-8}"          # micro-batch
 ACCUM="${ACCUM:-1}"          # accumulation : batch effectif = BATCH x ACCUM
 CORE="${CORE:-chess}"        # coeur du C²S² : chess (défaut) ou l1
 SEED="${SEED:-42}"            # graine : change TOUT l'aléa (init, ordre, augmentations)
+LAMBDA_DEEP="${LAMBDA_DEEP:-0}"     # supervision profonde des {CM_i} (0 = désactivée)
 LAMBDA_SEK="${LAMBDA_SEK:-0.5}"    # poids du terme SeK différentiable (0 = retiré)
 LAMBDA_SC="${LAMBDA_SC:-0.1}"      # poids de la cohérence sémantique L_sc (0 = retiré)
 FFT_STAGES="${FFT_STAGES:-0,1}"    # stages de la branche fréquentielle ("" = retirée)
@@ -70,7 +71,7 @@ DATA_ROOT="$SLURM_TMPDIR/SECOND"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/second_mini_chess_$TAG"
-echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ crop=$CROP batch=$BATCH x accum=$ACCUM enc=$ENCODER dec=$DECODER_REFINE core=$CORE seed=$SEED sek=$LAMBDA_SEK sc=$LAMBDA_SC fft=[$FFT_STAGES] lr=$LR_SCHEDULE epochs=$EPOCHS -> $OUT =="
+echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ crop=$CROP batch=$BATCH x accum=$ACCUM enc=$ENCODER dec=$DECODER_REFINE core=$CORE seed=$SEED deep=$LAMBDA_DEEP sek=$LAMBDA_SEK sc=$LAMBDA_SC fft=[$FFT_STAGES] lr=$LR_SCHEDULE epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
@@ -91,6 +92,7 @@ python -m scripts.train \
     --sek-warmup-iters 0 \
     --epochs "$EPOCHS" \
     --seed "$SEED" \
+    --lambda-deep "$LAMBDA_DEEP" \
     --lambda-sek "$LAMBDA_SEK" \
     --lambda-sc "$LAMBDA_SC" \
     --fft-stages "$FFT_STAGES" \

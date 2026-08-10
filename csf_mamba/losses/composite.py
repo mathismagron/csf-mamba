@@ -98,6 +98,7 @@ class CSFMambaLoss(nn.Module):
         lambda_dice: float = 1.0,
         lambda_sem_change: float = 0.0,
         lambda_lovasz: float = 0.0,
+        lambda_deep: float = 0.0,
         sek_non_change_class: int = 0,
         bcd_change_weight: float = 1.0,
     ):
@@ -108,6 +109,7 @@ class CSFMambaLoss(nn.Module):
         self.lambda_dice = lambda_dice
         self.lambda_sem_change = lambda_sem_change
         self.lambda_lovasz = lambda_lovasz
+        self.lambda_deep = lambda_deep
         self.ce = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
         # BCD pondéré : la classe 1 (changement) est rare -> on la sur-pondère
         # pour éviter que le modèle collapse vers « aucun changement » (SeK=0).
@@ -138,6 +140,38 @@ class CSFMambaLoss(nn.Module):
             terms["lovasz"] = self.lambda_lovasz * lovasz_softmax(
                 outputs["bcd"].softmax(dim=1), targets["change"], ignore=IGNORE_INDEX
             )
+
+        # Supervision PROFONDE des cartes de changement par stage.
+        #
+        # Le décodeur binaire produit une carte de changement à chaque étage
+        # ({CM_i}) et ces cartes alimentent la CGA du décodeur sémantique — mais
+        # rien ne les contraignait : la loss ne touchait que `bcd`, la carte
+        # finale. Le signal qui guide toute la branche sémantique était donc appris
+        # sans supervision directe.
+        #
+        # Deux effets attendus, tous deux visant le verrou mesuré (IoU du
+        # changement bloqué à ~56 % sous cinq familles de leviers) : un signal de
+        # localisation à chaque échelle, et un guidage plus net pour la CGA.
+        #
+        # Les logits sont remontés à la résolution de la cible plutôt que la cible
+        # sous-échantillonnée : à stride 32 une tuile 512 fait 16x16, où un
+        # changement fin disparaîtrait purement et simplement — et cela préserve
+        # `ignore_index` exactement.
+        #
+        # Poids décroissant en 0,5^i du plus fin au plus grossier, normalisé pour
+        # sommer à 1 : `lambda_deep` se lit alors directement comme le poids de la
+        # supervision profonde RELATIF au terme BCD principal.
+        if self.lambda_deep > 0 and outputs.get("change_maps"):
+            deep, total_w = 0.0, 0.0
+            for i, cm in enumerate(outputs["change_maps"]):
+                w = 0.5 ** i
+                up = nn.functional.interpolate(
+                    cm, size=targets["change"].shape[-2:],
+                    mode="bilinear", align_corners=False,
+                )
+                deep = deep + w * self.ce_bcd(up, targets["change"])
+                total_w += w
+            terms["deep"] = self.lambda_deep * deep / total_w
 
         # Supervision sémantique CIBLÉE sur les zones changées (cf. semantic_change_ce).
         if self.lambda_sem_change > 0:
