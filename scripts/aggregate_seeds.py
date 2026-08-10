@@ -123,14 +123,25 @@ def main():
     pooled = [s["best"][1] for s in stats.values() if not math.isnan(s["best"][1])]
     sigma = math.sqrt(statistics.fmean([s ** 2 for s in pooled])) if pooled else float("nan")
 
+    # Comparer deux MOYENNES demande l'erreur-type de la différence,
+    # SE = σ·√(1/n₁ + 1/n₂), et non σ seul. Diviser par σ surestime la certitude :
+    # face au témoin à 4 graines, σ vaut 0,0089 mais SE vaut 0,0100 pour un run
+    # unique et 0,0063 entre deux groupes de 4. On rapporte donc t = Δ/SE, et le
+    # seuil est celui de Student au degré de liberté du σ mis en commun.
+    df = sum(s_["n"] - 1 for s_ in stats.values() if s_["n"] > 1)
+    t_crit = {1: 12.71, 2: 4.30, 3: 3.18, 4: 2.78, 5: 2.57, 6: 2.45,
+              7: 2.36, 8: 2.31, 9: 2.26, 10: 2.23}.get(df, 2.10 if df > 10 else float("inf"))
+
     print(f"\nMétrique : {args.metric}   |   témoin : {ref}")
     if not math.isnan(sigma):
         print(f"Écart-type mis en commun sur {len(pooled)} configuration(s) : "
               f"σ = {sigma:.4f}   (l'ancien plancher supposé était 0,0040)")
+        print(f"Seuil de significativité à 95 % : |t| > {t_crit:.2f}  (df = {df})")
     print()
-    header = f"| {'configuration':<38} | n | {'meilleur':^18} | {'final':^18} | IoU chgt | écart témoin |"
-    print(header)
-    print("|" + "-" * 40 + "|---|" + "-" * 20 + "|" + "-" * 20 + "|----------|--------------|")
+    print(f"| {'configuration':<38} | n | {'meilleur':^18} | {'final':^18} | IoU chgt | "
+          f"{'écart au témoin':^28} |")
+    print("|" + "-" * 40 + "|---|" + "-" * 20 + "|" + "-" * 20 + "|----------|"
+          + "-" * 30 + "|")
 
     for name in sorted(stats, key=lambda k: -stats[k]["best"][0]):
         s = stats[name]
@@ -138,11 +149,14 @@ def main():
         if name == ref:
             verdict = "— (témoin)"
         elif math.isnan(sigma) or sigma == 0:
-            verdict = f"{delta:+.4f}  (σ ?)"
+            verdict = f"{delta:+.4f}  (σ inconnu)"
         else:
-            verdict = f"{delta:+.4f} = {delta / sigma:+.1f}σ"
+            se = sigma * math.sqrt(1 / s["n"] + 1 / stats[ref]["n"])
+            t = delta / se
+            label = "ÉTABLI" if abs(t) > t_crit else "non établi"
+            verdict = f"{delta:+.4f}  t={t:+.2f}  {label}"
         print(f"| {name:<38} | {s['n']} | {fmt(*s['best']):^18} | "
-              f"{fmt(*s['last']):^18} | {s['iou']:8.4f} | {verdict:<12} |")
+              f"{fmt(*s['last']):^18} | {s['iou']:8.4f} | {verdict:<28} |")
 
     print("\nÉpoques des pics par configuration :")
     for name in sorted(stats):
@@ -154,7 +168,13 @@ def main():
               "n'y est pas interprétable :")
         for n in singles:
             print(f"    {n}")
-    print("\nRepère : un écart inférieur à 2σ ne permet de conclure à rien.")
+    print("\n« non établi » ne veut pas dire « identique » : cela veut dire que ce")
+    print("nombre de graines ne permet pas de les distinguer. Pour détecter un effet")
+    print("de taille Δ entre deux configurations, il faut environ 8σ²/Δ² graines")
+    print("de chaque côté :")
+    if not math.isnan(sigma):
+        for d in (0.005, 0.010, 0.015, 0.020):
+            print(f"    Δ = {d:.3f}  ->  {math.ceil(8 * sigma ** 2 / d ** 2):3d} graines par configuration")
 
 
 if __name__ == "__main__":
