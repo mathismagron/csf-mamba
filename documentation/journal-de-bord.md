@@ -395,6 +395,11 @@ Cinq runs de 100 époques, dont un **réplicat involontaire** (`w20` reproduit l
 config du run 3) qui fournit une mesure du **bruit run-à-run : ±0,004 de SeK**.
 Cette valeur sert de seuil de significativité pour tout ce qui suit.
 
+> ⚠️ **Rétractation du 10 août.** Ce plancher est **sous-estimé de moitié**. Mesuré
+> sur 4 graines de la configuration de référence, l'écart-type vaut **0,0089**.
+> Deux points ne font pas un écart-type : toutes les conclusions tirées d'écarts
+> inférieurs à ~0,013 sont à relire à la lumière de la phase 7.
+
 **SECOND — effet des mécanismes anti-déséquilibre**
 
 | Config | OA | Fscd | mIoU | SeK |
@@ -860,6 +865,12 @@ Quatre configurations, toutes sur 100 époques, SECOND (`WEIGHT=1 DICE=0 LOVASZ=
 | Crop 256 → 512 | backbone tiny | +0,003 (dans le bruit) |
 | Backbone mini → tiny | crops 512 | **−0,005** ❌ |
 
+> ⚠️ **Rétractation du 10 août.** Cette lecture supposait un bruit de ±0,004.
+> Il vaut 0,0089 : `mini + crop512` mesuré sur 4 graines donne 0,2104 ± 0,0106, et
+> l'écart à `crop512_tiny` tombe à t = −0,12. **La non-additivité n'est pas
+> établie**, pas plus que le +0,018 du backbone en crops 256 (t = +1,41). Voir la
+> phase 7.
+
 **Les deux leviers ne s'additionnent pas.** Pris séparément ils apportent +0,018 et
 +0,026 ; combinés, le résultat (0,2092) est **inférieur** au meilleur des deux
 (0,2143). Ils corrigent donc la **même limitation** — vraisemblablement la quantité
@@ -1019,6 +1030,13 @@ Bilan de **toutes** les configurations entraînées sur SECOND, l'IoU du changem
 
 Le décodeur élargi donne **SeK 0,2089 contre 0,2143** : −0,0054, soit un peu
 au-delà du plancher de bruit de ±0,004. Pas un effondrement, mais aucun gain.
+
+> ⚠️ **Rétractation du 10 août.** La référence vaut en réalité 0,2104 ± 0,0106 sur
+> 4 graines, et le bruit 0,0089 — le 0,2143 était le meilleur des quatre tirages.
+> L'écart tombe à −0,0015, soit **t = −0,15 : indécidable**. Le décodeur élargi
+> n'apporte rien, ce qui reste acquis, mais rien ne permet d'affirmer qu'il
+> dégrade. La conclusion sur l'IoU ci-dessous n'est en revanche pas affectée :
+> elle repose sur une platitude, pas sur un écart.
 
 Et surtout, la colonne qui compte : **IoU du changement 0,5597 contre 0,5621**.
 +3,47 M de paramètres injectés directement là où le problème était supposé se
@@ -1292,6 +1310,122 @@ Sept entraînements en crops 512 : trois graines supplémentaires de la référe
 Résultats attendus sous ~14 h. Ils donneront **l'écart-type réel de la
 configuration de référence**, dont dépend l'interprétation de tout ce qui précède
 et de tout ce qui suivra.
+
+### Résultats du premier lot — σ = 0,0089
+
+Sept entraînements terminés en ~7 h 45 chacun. Contrôle passé : les sept lignes
+`== config` portent bien sept graines distinctes et le bon schedule.
+
+**L'écart-type run-à-run de la configuration de référence vaut 0,0089** — soit
+**plus du double** du ±0,004 supposé depuis fin juillet, et 4 % de la valeur
+mesurée. Le plancher historique venait d'un unique réplicat accidentel : deux
+points ne font pas un écart-type.
+
+| Configuration | n | meilleur SeK | SeK final | époques du pic |
+|---|---|---|---|---|
+| référence (cosine) | 4 | **0,2104 ± 0,0106** | 0,2048 ± 0,0083 | 42, 56, 62, 63 |
+| LR constant | 4 | 0,2063 ± 0,0068 | 0,1978 ± 0,0103 | 87, 88, 92, 95 |
+
+**Notre chiffre phare était le meilleur des quatre tirages.** Le journal et le
+README citaient 0,2143 ; la moyenne est **0,2104 ± 0,0106**, avec une erreur-type
+de 0,0053. Le 0,2143 n'est pas aberrant — il se situe à 0,37 écart-type au-dessus
+de la moyenne — mais c'est la moyenne qu'il faut rapporter.
+
+### ⚠️ Erreur de méthode corrigée dans l'analyse elle-même
+
+Première lecture faite en divisant l'écart par σ. **C'est faux** : comparer deux
+*moyennes* demande l'erreur-type de la *différence*,
+
+    SE = σ · √(1/n₁ + 1/n₂)
+
+Face au témoin à 4 graines, σ vaut 0,0089 mais SE vaut **0,0100** contre un run
+unique et **0,0063** entre deux groupes de 4. Diviser par σ surestimait la
+certitude. Le seuil est en outre celui de Student au degré de liberté du σ mis en
+commun — ici df = 6, donc |t| > **2,45**, et non 2. `scripts/aggregate_seeds.py`
+applique désormais le bon test.
+
+### Toutes les ablations refaites en comparaisons appariées
+
+Second correctif : l'agrégateur compare tout au témoin `crop512`, ce qui pour une
+ablation en crops 256 **mélange le facteur étudié et le changement de résolution**.
+Chaque effet est donc recalculé entre configurations ne différant que par lui.
+
+| Facteur | Dataset | Δ SeK | t | Statut |
+|---|---|---|---|---|
+| **Retirer la compensation de déséquilibre** | SECOND c256 | **+0,032** | +2,56 | ✅ établi |
+| Crops 256 → 512 | SECOND mini | +0,022 | +2,22 | limite |
+| Backbone mini → tiny | SECOND c256 | +0,018 | +1,41 | ? |
+| Lovász | SECOND c256 | −0,006 | −0,50 | ? |
+| Poids 2 + Lovász | SECOND c256 | +0,005 | +0,38 | ? |
+| Backbone mini → tiny | SECOND c512 | −0,001 | −0,12 | ? |
+| Décodeur élargi | SECOND c512 | −0,002 | −0,15 | ? |
+| LR cosine → constant | SECOND c512 | −0,004 | −0,65 | ? |
+| **Sur-échantillonnage ×3** | Hi-UCD | **+0,037** | +2,96 | ✅ établi |
+| Crops 512 (vs 256) | Hi-UCD | −0,024 | −1,88 | ? |
+| Supervision sémantique ciblée | Hi-UCD | +0,019 | +1,53 | ? |
+| Sur-échantillonnage ×10 (vs ×3) | Hi-UCD | −0,015 | −1,15 | ? |
+| Backbone mini → tiny | Hi-UCD | −0,009 | −0,74 | ? |
+| Sur-échantillonnage ×5 (vs ×3) | Hi-UCD | −0,003 | −0,25 | ? |
+
+**Deux effets sur quatorze résistent**, et ce sont les deux plus gros — tous deux
+liés aux **données**, aucun à l'architecture ni à l'optimisation.
+
+Le σ n'ayant été mesuré que sur SECOND en crops 512, son application à Hi-UCD est
+une **hypothèse** : aucun réplicat n'existe sur ce dataset.
+
+### Ce que ces résultats rétractent, et ce qu'ils épargnent
+
+**Rétracté** — trois affirmations du journal ne sont plus soutenues :
+
+- « le décodeur élargi dégrade de 0,005 » (phase 6) → t = −0,15, indécidable ;
+- « le backbone tiny dégrade en crops 512, les leviers ne s'additionnent pas »
+  (phase 5) → t = −0,12, indécidable ;
+- « le poids 2 + Lovász apporte +0,005 » → t = +0,38, indécidable.
+
+L'absence de *gain* reste acquise dans les trois cas : aucun n'a jamais amélioré
+quoi que ce soit. C'est l'affirmation qu'ils **dégradent** qui était de trop.
+
+**Épargné**, et c'est l'essentiel :
+
+1. **Le plafond de l'IoU du changement.** 0,546 à 0,561 sur les huit
+   configurations SECOND. Cette conclusion ne repose pas sur un petit écart mais
+   sur une **platitude à travers tout ce qui a été essayé** — le bruit ne
+   l'atteint pas. C'était le résultat principal de la phase 6, il est intact.
+2. **La conclusion sur Hi-UCD.** Elle s'appuie sur une mesure du dataset
+   (9,4 % de tuiles porteuses contre 99,9 % sur SECOND) et sur le recul
+   systématique de l'époque du pic, non sur des écarts de SeK.
+3. **Tout le travail de correction de bugs** — masque de validité, portages
+   verbatim, mapping des classes, comptage des GMACs.
+
+### Le seul effet nouveau : le LR constant est sous-entraîné
+
+Sur le SeK, cosine et constant sont indiscernables (t = −0,65). Mais l'époque du
+pic les sépare **totalement** :
+
+    cosine    [42, 56, 62, 63]
+    constant  [87, 88, 92, 95]
+
+Aucun recouvrement, quatre graines contre quatre — Mann-Whitney p = 0,029. Avec un
+LR constant, le modèle culmine dans les toutes dernières époques : **il progressait
+encore quand l'entraînement s'est arrêté**. La lecture n'est donc pas « constant
+est moins bon » mais « constant est sous-entraîné à 100 époques ». D'où la question
+suivante, plus intéressante que celle de départ : que donne un LR constant sur 200
+époques ? Trois graines lancées.
+
+### Décisions prises
+
+**Biais de sélection** : l'écart entre « meilleur » et « final » vaut +0,0056 sur
+le témoin, soit 0,63σ — réel mais inférieur au bruit. On conserve le protocole
+actuel et on **rapporte les deux colonnes** plutôt que de découper un split de
+validation, qui coûterait 56 heures GPU pour corriger un biais plus petit que
+l'incertitude.
+
+**Budget d'ablations** : détecter 0,010 demanderait 7 graines par configuration,
+soit ~217 h GPU pour les quatre ablations d'architecture. Décision : **s'en tenir
+à la détection des gros effets** (≥ 0,015 environ, à 3 graines) et consacrer le
+temps disponible aux chantiers restants — balayage de la taille de batch, des
+hyperparamètres de loss, recherche de la bonne composition de loss. Les effets
+inférieurs à 0,015 resteront explicitement marqués comme indécidables.
 
 ### Évaluation d'un checkpoint ChangeMamba avec notre code
 

@@ -23,37 +23,60 @@ ChangeMamba, qui étiquette ses sorties fvcore « GFLOPs » alors qu'il s'agit d
 | Mamba-FCS | 189,54 M | 263,15 | 88,62 | 65,78 | 74,07 | **25,50** |
 | MambaSCD-Base | 89,99 M | 211,55 | — | — | — | *22,92* |
 | **MambaSCD-Tiny** | 21,51 M | 73,42 | — | — | — | *22,08* |
-| **CSF-Mamba** | **20,80 M** | **41,30** | 87,57 | 62,10 | 72,00 | **21,44** |
-| CSF-Mamba, décodeur élargi | 24,27 M | 53,45 | 87,24 | 61,67 | 71,70 | 20,89 |
+| **CSF-Mamba** | **20,80 M** | **41,30** | 87,57 | 62,10 | 72,00 | **21,04 ± 1,06** |
+| CSF-Mamba, décodeur élargi | 24,27 M | 53,45 | 87,24 | 61,67 | 71,70 | 20,89 † |
 
-*(SeK en italique = checkpoints publiés par ChangeMamba, évalués par eux.)*
+*(SeK en italique = checkpoints publiés par ChangeMamba, évalués par eux.
+† une seule graine — non comparable au ± de la ligne CSF-Mamba.)*
+
+**Notre SeK est une moyenne sur 4 graines**, pas un run isolé. L'écart-type
+run-à-run vaut **0,0089**, mesuré sur 8 entraînements ne différant que par la
+graine. Un chiffre unique de cette distribution peut s'écarter de ±0,02 : toute
+comparaison portant sur moins de 0,013 d'écart, à 4 graines, est indécidable.
 
 **Le résultat d'efficience** — face à MambaSCD-Tiny, seul modèle de taille comparable :
-**−3 % de paramètres, −44 % de calcul, pour −2,9 % de SeK**. Face à Mamba-FCS :
-**6,4× moins de calcul et 9,1× moins de paramètres** pour −16 % de SeK.
+**−3 % de paramètres, −44 % de calcul, pour −4,7 % de SeK**. Face à Mamba-FCS :
+**6,4× moins de calcul et 9,1× moins de paramètres** pour −17 % de SeK.
+L'écart à MambaSCD-Tiny (0,0104) est du même ordre que notre écart-type
+run-à-run (0,0089) : les deux modèles sont proches à la précision de la mesure.
 
 Répartition du coût (512²) : convolutions 63 %, `MambaInnerFn` (C²S²) 12 %,
 matmul 12 %, einsum 9 %, scan sélectif du backbone 3 %. Le modèle est dominé par
 ses parties convolutionnelles, non par la machinerie SSM.
 
-**Ablations établies** (bruit run-à-run mesuré : ±0,004 de SeK) :
+**Ablations — ⚠️ statut révisé le 10 août 2026.** L'écart-type run-à-run vaut
+**0,0089** de SeK, mesuré sur 8 entraînements ne différant que par la graine, et
+non ±0,004 comme supposé jusque-là — ce plancher venait d'un unique réplicat
+accidentel. Toutes les comparaisons sont refaites ci-dessous **appariées** (un seul
+facteur change) et testées sur `t = Δ / SE`, avec `SE = σ·√(1/n₁+1/n₂)` ; le seuil
+à 95 % est |t| > 2,45.
 
-| Facteur | Dataset | Effet sur le SeK |
-|---|---|---|
-| Retirer la compensation de déséquilibre | SECOND (20 % de pixels chgt) | **+3,2** ✅ |
-| Supervision sémantique ciblée | Hi-UCD (1,4 % de pixels chgt) | **+0,019** ✅ |
-| Poids de changement 20 → 5 | Hi-UCD | +0,0003 (nul) |
-| Loss Lovász (optimise l'IoU) | les deux | **−0,006 à −0,009** ❌ |
-| Poids de changement 1 → 2 | SECOND | +0,005 (limite du bruit) |
-| **Sur-échantillonnage ×3** | Hi-UCD | **+0,037** ✅ (mais niveau absolu faible) |
-| Sur-échantillonnage ×10 | Hi-UCD | +0,023 (moins bon que ×3) |
-| **Crops 512 (vs 256)** | SECOND (backbone mini) | **+0,026** ✅ |
-| Backbone mini → tiny | SECOND (crops 256) | **+0,018** ✅ |
-| Backbone mini → tiny | SECOND (crops 512) | −0,005 (non additif) |
-| Crops 512 (vs 256) | Hi-UCD | −0,024 ❌ (perte d'augmentation) |
-| Backbone ×1,8 (20,8 → 36,9 M) | Hi-UCD | −0,009 ❌ |
-| Sur-échantillonnage ×5 | Hi-UCD | −0,003 (= ×3, plateau) |
-| Décodeur élargi (dw → 3×3 pleine, +3,47 M, +12,15 GMACs) | SECOND (crops 512) | −0,005 ❌ |
+| Facteur | Dataset | Δ SeK | t | Statut |
+|---|---|---|---|---|
+| **Retirer la compensation de déséquilibre** | SECOND, c256 | **+0,032** | +2,56 | ✅ **établi** |
+| Crops 256 → 512 | SECOND, mini | +0,022 | +2,22 | limite |
+| Backbone mini → tiny | SECOND, c256 | +0,018 | +1,41 | ? |
+| Lovász | SECOND, c256 | −0,006 | −0,50 | ? |
+| Poids 2 + Lovász | SECOND, c256 | +0,005 | +0,38 | ? |
+| Backbone mini → tiny | SECOND, c512 | −0,001 | −0,12 | ? |
+| Décodeur élargi (+3,47 M, +12,15 GMACs) | SECOND, c512 | −0,002 | −0,15 | ? |
+| LR cosine → constant | SECOND, c512 | −0,004 | −0,65 | ? |
+| **Sur-échantillonnage ×3** | Hi-UCD | **+0,037** | +2,96 | ✅ **établi** |
+| Crops 512 (vs 256) | Hi-UCD | −0,024 | −1,88 | ? |
+| Supervision sémantique ciblée | Hi-UCD | +0,019 | +1,53 | ? |
+| Sur-échantillonnage ×10 (vs ×3) | Hi-UCD | −0,015 | −1,15 | ? |
+| Backbone mini → tiny | Hi-UCD | −0,009 | −0,74 | ? |
+| Sur-échantillonnage ×5 (vs ×3) | Hi-UCD | −0,003 | −0,25 | ? |
+
+**« ? » ne signifie pas « effet nul »** mais « indécidable à ce nombre de graines ».
+La plupart de ces runs n'en ont qu'une : détecter 0,010 en demanderait 7 de chaque
+côté, détecter 0,020 en demande 2. Le σ n'a été mesuré que sur SECOND en crops 512 ;
+son application à Hi-UCD est une **hypothèse**, faute de réplicat sur ce dataset.
+
+**Deux effets seulement résistent** — et ce sont les deux plus gros, tous deux
+liés aux **données** plutôt qu'à l'architecture ou à l'optimisation : calibrer la
+compensation de déséquilibre sur le taux de changement du dataset, et
+sur-échantillonner les tuiles porteuses de signal.
 
 Le même réglage anti-déséquilibre est **décisif sur SECOND et neutre sur Hi-UCD** :
 il doit être calibré sur le taux de changement du dataset.
