@@ -29,9 +29,15 @@ SPLIT="${SPLIT:-test}"
 
 if [ ! -f "$CKPT" ]; then
     echo "checkpoint introuvable : $CKPT"
-    echo "Les poids publiés sont sur la page HuggingFace de ChangeMamba"
-    echo "(MambaSCD_Tiny_SECOND_SeK_0.2208.pth). Les déposer dans"
-    echo "\$SCRATCH/pretrained_weight/ ou pointer CKPT ailleurs."
+    echo
+    echo "Le récupérer depuis le dépôt Zenodo 15479555 — le même que le backbone"
+    echo "VMamba et le SECOND prétraité. Sur un nœud de CONNEXION (accès réseau) :"
+    echo
+    echo "  FILES=\"$(basename "$CKPT")\" \\"
+    echo "    scripts/download_pretrained.sh \$SCRATCH/pretrained_weight"
+    echo
+    echo "puis relancer ce job. Variante Base disponible :"
+    echo "  MambaSCD_Base_SECOND_SeK_0.2292.pth"
     exit 1
 fi
 
