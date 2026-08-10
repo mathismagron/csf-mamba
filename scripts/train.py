@@ -178,7 +178,11 @@ def main():
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_amp):
                 outputs = model(batch["img_t1"], batch["img_t2"])
             # Loss en fp32 (SeK/log sensibles à la précision) : on caste les sorties.
-            outputs = {k: (v.float() if torch.is_tensor(v) else v) for k, v in outputs.items()}
+            # `change_maps` est une LISTE de tenseurs : le test `torch.is_tensor`
+            # la laissait passer telle quelle, donc en bfloat16, et la CE pondérée
+            # de la supervision profonde recevait des logits bf16 avec un poids
+            # fp32 -> « expected scalar type BFloat16 but found Float ».
+            outputs = {k: _to_fp32(v) for k, v in outputs.items()}
             losses = criterion(outputs, _targets_from_batch(batch), apply_sek=apply_sek)
 
             # Accumulation : on divise pour que le gradient moyen soit celui du
@@ -220,6 +224,15 @@ def main():
             torch.save(model.state_dict(), out_dir / "best.pt")
             print(f"  -> nouveau meilleur SeK {best_sek:.4f}, sauvé dans best.pt")
         torch.save(ckpt, out_dir / "last.pt")
+
+
+def _to_fp32(v):
+    """Caste en fp32 un tenseur, ou chaque tenseur d'une liste/tuple."""
+    if torch.is_tensor(v):
+        return v.float()
+    if isinstance(v, (list, tuple)):
+        return type(v)(x.float() if torch.is_tensor(x) else x for x in v)
+    return v
 
 
 def _make_scheduler(optimizer, schedule, warmup_iters, total_iters, base_lr, min_lr):
