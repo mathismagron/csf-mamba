@@ -1427,7 +1427,70 @@ temps disponible aux chantiers restants — balayage de la taille de batch, des
 hyperparamètres de loss, recherche de la bonne composition de loss. Les effets
 inférieurs à 0,015 resteront explicitement marqués comme indécidables.
 
-### Évaluation d'un checkpoint ChangeMamba avec notre code
+### Supervision profonde des cartes de changement (10 août)
+
+**Constat de départ.** Le décodeur binaire produit une carte de changement à
+chaque étage (strides 4, 8, 16, 32). Ces cartes alimentent la CGA du décodeur
+sémantique — mais **aucune loss ne les touchait** : seule la carte finale était
+supervisée. Le signal qui oriente toute la branche sémantique était donc appris
+sans contrainte directe.
+
+C'est une supervision profonde manquante, pratique standard en prédiction dense,
+et elle vise exactement le verrou mesuré : l'IoU du changement bloqué à ~56 %
+sous les cinq familles de leviers déjà testées.
+
+**Mise en œuvre** (`--lambda-deep`, défaut 0). Les logits de chaque étage sont
+remontés à la résolution de la cible plutôt que la cible sous-échantillonnée : à
+stride 32 une tuile 512 fait 16×16, où un changement fin disparaîtrait, et cela
+préserve `ignore_index` exactement. Poids décroissant en 0,5^i du plus fin au
+plus grossier, normalisé pour sommer à 1, de sorte que `lambda_deep` se lise
+comme le poids relatif au terme BCD principal. Coût nul en inférence.
+
+**Bug rencontré — une politique de type contournée par un conteneur.** Les neuf
+premiers runs ont planté au tout premier lot :
+
+    RuntimeError: expected scalar type BFloat16 but found Float
+
+La boucle d'entraînement caste les sorties du modèle en fp32 avant la loss, la
+SeK et ses logarithmes étant sensibles à la précision :
+
+    outputs = {k: (v.float() if torch.is_tensor(v) else v) for k, v in ...}
+
+Or `change_maps` est une **liste** de tenseurs. `torch.is_tensor` la laissait
+passer telle quelle, donc en bfloat16, et la CE pondérée recevait des logits bf16
+avec un poids fp32. Toutes les autres sorties étaient castées ; celle-là seule ne
+l'était pas — d'où un bug invisible tant que personne ne consommait ces cartes.
+
+La leçon dépasse ce cas : **une politique de conversion appliquée par
+`torch.is_tensor` saute silencieusement tout ce qui est emballé dans une liste ou
+un tuple.** Le cast s'applique désormais aux conteneurs.
+
+Détail utile pour le diagnostic : les jobs affichaient ~1 h 57 de walltime, ce
+qui laissait croire à un plantage tardif. En réalité le crash était immédiat —
+ces deux heures étaient presque entièrement du chargement d'environnement.
+`metrics.csv` vide et `grep -c "^epoch"` à zéro l'ont établi tout de suite.
+
+### Comparaison ChangeMamba — reportée (10 août)
+
+L'évaluation d'un checkpoint ChangeMamba publié avec notre code de métriques est
+**bloquée par un décalage de version**, non par notre code :
+
+    checkpoint  : decoder_bcd.st_block_41.0.weight
+    notre build : decoder_bcd.stage_blocks.0.cat.0.weight
+
+Le dépôt cloné dans `third_party/` est à un commit qui a **refactorisé le
+décodeur** ; les poids publiés datent d'avant. 558 poids manquants, 590
+inattendus. Le garde-fou du script a refusé de produire un chiffre — un
+chargement partiel aurait donné un modèle à moitié aléatoire et un SeK
+artificiellement bas, attribué à tort à leur modèle.
+
+La voie propre serait de se placer sur le commit contemporain des poids, ce que
+le clone superficiel (`--depth 1`) empêche sans `git fetch --unshallow`.
+**Décision : reporté.** Le tableau d'efficience reste valable avec les chiffres
+qu'ils publient ; cette évaluation apporterait une garantie de protocole
+supplémentaire, pas un résultat nouveau.
+
+### Évaluation d'un checkpoint ChangeMamba avec notre code (mise en place)
 
 Chantier ouvert depuis fin juillet, enfin outillé
 (`scripts/evaluate_changemamba.py`). Leur modèle n'étant pas le nôtre, il faut
