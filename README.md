@@ -1,15 +1,20 @@
 # CSF-Mamba
 
-*Change-aware Spatio-Frequency Mamba* — architecture Mamba **efficiente** (cible
-~15M paramètres) pour la **détection sémantique de changements** (SCD), visant à
-battre le SOTA (Mamba-FCS, 189M) sur Hi-UCD et SECOND.
+*Change-aware Spatio-Frequency Mamba* — architecture Mamba **efficiente** (20,8 M
+paramètres) pour la **détection sémantique de changements** (SCD).
+
+**Résultat principal, SECOND :** SeK **0,2228 ± 0,0019** sur 7 graines, soit
+**100,9 % du SeK de MambaSCD-Tiny pour 56 % de son calcul** et 97 % de ses
+paramètres. L'objectif initial — battre Mamba-FCS (189 M) — n'était pas
+atteignable à ce budget ; l'énoncé soutenu est celui de l'efficience à
+performance égale face au modèle de taille comparable.
 
 - Conception et raisonnement d'architecture : `documentation/plan_recap_CSF-Mamba2.md`
 - **Journal de bord** (chronologie, décisions, résultats des runs) :
   `documentation/journal-de-bord.md` — matière première du rapport
 - Lancer un entraînement / une évaluation : `RUN.md`
 
-## État actuel (3 août 2026)
+## État actuel (11 août 2026)
 
 Pipeline complet validé sur GPU (Narval, A100), **20,8 M paramètres**, deux datasets
 supportés et validés sur données réelles.
@@ -23,50 +28,74 @@ ChangeMamba, qui étiquette ses sorties fvcore « GFLOPs » alors qu'il s'agit d
 | Mamba-FCS | 189,54 M | 263,15 | 88,62 | 65,78 | 74,07 | **25,50** |
 | MambaSCD-Base | 89,99 M | 211,55 | — | — | — | *22,92* |
 | **MambaSCD-Tiny** | 21,51 M | 73,42 | — | — | — | *22,08* |
-| **CSF-Mamba** | **20,80 M** | **41,30** | 87,57 | 62,10 | 72,00 | **21,04 ± 1,06** |
+| CSF-Mamba, recette initiale | 20,80 M | 41,30 | 87,57 | 62,10 | 72,00 | 21,03 ± 1,05 |
+| **CSF-Mamba, sans loss SeK** | **20,80 M** | **41,30** | — | — | — | **22,28 ± 0,19** |
+| CSF-Mamba, meilleure config ‡ | 20,80 M | 41,30 | — | — | — | 22,64 ± 0,23 |
 | CSF-Mamba, décodeur élargi | 24,27 M | 53,45 | 87,24 | 61,67 | 71,70 | 20,89 † |
 
-*(SeK en italique = checkpoints publiés par ChangeMamba, évalués par eux.
-† une seule graine — non comparable au ± de la ligne CSF-Mamba.)*
+*(SeK en italique = checkpoints publiés par ChangeMamba, évalués par eux, sans
+écart-type connu. † une seule graine. ‡ `nosek` + supervision profonde + LR
+constant sur 200 époques, 3 graines — meilleure de treize configurations
+essayées, donc sujette à un effet de sélection : le chiffre à citer est celui de
+la ligne en gras, obtenu par un changement unique sur 7 graines.)*
 
-**Notre SeK est une moyenne sur 4 graines**, pas un run isolé. L'écart-type
-run-à-run vaut **0,0089**, mesuré sur 8 entraînements ne différant que par la
-graine. Un chiffre unique de cette distribution peut s'écarter de ±0,02 : toute
-comparaison portant sur moins de 0,013 d'écart, à 4 graines, est indécidable.
+**Tous nos SeK sont des moyennes sur plusieurs graines**, jamais un run isolé.
+L'écart-type run-à-run mis en commun vaut **0,0059**, mesuré sur 40 entraînements.
 
-**Le résultat d'efficience** — face à MambaSCD-Tiny, seul modèle de taille comparable :
-**−3 % de paramètres, −44 % de calcul, pour −4,7 % de SeK**. Face à Mamba-FCS :
-**6,4× moins de calcul et 9,1× moins de paramètres** pour −17 % de SeK.
-L'écart à MambaSCD-Tiny (0,0104) est du même ordre que notre écart-type
-run-à-run (0,0089) : les deux modèles sont proches à la précision de la mesure.
+⚠️ **La recette initiale échoue une fois sur quatre.** Ses 8 graines forment deux
+modes : six à 0,2157 ± 0,0036, deux effondrées à 0,1959 et 0,1923 — uniformément
+mauvaises (kappa 0,304 contre 0,333). Retirer la loss SeK supprime ce mode de
+défaillance **et** divise l'écart-type par cinq (0,0105 → 0,0019, F = 30,5 pour
+un seuil de 4,21).
+
+**Le résultat d'efficience** — face à MambaSCD-Tiny, seul modèle de taille
+comparable : **−3 % de paramètres, −44 % de calcul, et +0,9 % de SeK**. Face à
+Mamba-FCS : **6,4× moins de calcul et 9,1× moins de paramètres** pour 87 % de son
+SeK. Ni le retrait de la loss SeK ni la supervision profonde ne coûtent quoi que
+ce soit en inférence — paramètres et GMACs sont inchangés.
 
 Répartition du coût (512²) : convolutions 63 %, `MambaInnerFn` (C²S²) 12 %,
 matmul 12 %, einsum 9 %, scan sélectif du backbone 3 %. Le modèle est dominé par
 ses parties convolutionnelles, non par la machinerie SSM.
 
-**Ablations — ⚠️ statut révisé le 10 août 2026.** L'écart-type run-à-run vaut
-**0,0089** de SeK, mesuré sur 8 entraînements ne différant que par la graine, et
-non ±0,004 comme supposé jusque-là — ce plancher venait d'un unique réplicat
-accidentel. Toutes les comparaisons sont refaites ci-dessous **appariées** (un seul
-facteur change) et testées sur `t = Δ / SE`, avec `SE = σ·√(1/n₁+1/n₂)` ; le seuil
-à 95 % est |t| > 2,45.
+**Ablations sur SECOND** — comparaisons appariées (un seul facteur change),
+testées par `t = Δ/SE`. « ÉTABLI » exige que **les deux** tests concordent : la
+variance mise en commun *et* celle de Welch, qui ne suppose pas les variances
+égales. Le second est indispensable ici, la recette initiale étant cinq fois plus
+dispersée que les autres.
 
-| Facteur | Dataset | Δ SeK | t | Statut |
-|---|---|---|---|---|
-| **Retirer la compensation de déséquilibre** | SECOND, c256 | **+0,032** | +2,56 | ✅ **établi** |
-| Crops 256 → 512 | SECOND, mini | +0,022 | +2,22 | limite |
-| Backbone mini → tiny | SECOND, c256 | +0,018 | +1,41 | ? |
-| Lovász | SECOND, c256 | −0,006 | −0,50 | ? |
-| Poids 2 + Lovász | SECOND, c256 | +0,005 | +0,38 | ? |
-| Backbone mini → tiny | SECOND, c512 | −0,001 | −0,12 | ? |
-| Décodeur élargi (+3,47 M, +12,15 GMACs) | SECOND, c512 | −0,002 | −0,15 | ? |
-| LR cosine → constant | SECOND, c512 | −0,004 | −0,65 | ? |
-| **Sur-échantillonnage ×3** | Hi-UCD | **+0,037** | +2,96 | ✅ **établi** |
-| Crops 512 (vs 256) | Hi-UCD | −0,024 | −1,88 | ? |
-| Supervision sémantique ciblée | Hi-UCD | +0,019 | +1,53 | ? |
-| Sur-échantillonnage ×10 (vs ×3) | Hi-UCD | −0,015 | −1,15 | ? |
-| Backbone mini → tiny | Hi-UCD | −0,009 | −0,74 | ? |
-| Sur-échantillonnage ×5 (vs ×3) | Hi-UCD | −0,003 | −0,25 | ? |
+| Facteur | n | Δ SeK | t comm. | t Welch | Statut |
+|---|---|---|---|---|---|
+| **Retirer la loss SeK** | 7 | **+0,0125** | +4,09 | +3,30 | ✅ **établi** |
+| Retirer loss SeK + L_sc + FFT | 3 | +0,0120 | +3,01 | +3,16 | ✅ établi |
+| LR constant, 200 époques | 3 | +0,0098 | +2,45 | +2,52 | ✅ établi |
+| Supervision profonde, λ = 2,0 | 3 | +0,0089 | +2,24 | +2,22 | partiel |
+| Supervision profonde, λ = 1,0 | 3 | +0,0073 | +1,83 | +1,78 | ? |
+| Retirer `L_sc` | 3 | +0,0064 | +1,60 | +1,63 | ? |
+| Retirer la branche FFT | 3 | +0,0046 | +1,14 | +1,00 | ? |
+| Cosine, 200 époques | 3 | +0,0019 | +0,49 | +0,36 | ? |
+| Backbone mini → tiny (c512) | 1 | −0,0012 | −0,19 | — | ? |
+| Décodeur élargi (+3,47 M, +12,15 GMACs) | 1 | −0,0014 | −0,22 | — | ? |
+| LR constant, 100 époques | 4 | −0,0041 | −1,13 | −0,81 | ? |
+
+**Trois conclusions nettes.**
+
+**1. Le retrait de la loss SeK est le seul levier qui compte**, et il agit de deux
+façons : +0,0071 de performance typique (établi même face aux seules graines non
+effondrées de la référence, t = 4,34) et +0,0054 par disparition du mode de
+défaillance. Cette loss, portée verbatim de Mamba-FCS, produit des NaN dès que
+kappa passe négatif — le journal le documentait depuis juillet.
+
+**2. Les effets ne s'additionnent pas.** Retirer les trois composants donne
+0,2224, soit exactement le résultat du seul retrait de la loss SeK (0,2228), là
+où l'additivité prédisait 0,2338. Corollaire utile : **la branche FFT peut être
+supprimée sans coût** — mêmes performances, 92 448 paramètres en moins. Le « F »
+de CSF-Mamba ne gagne pas sa place.
+
+**3. Pour le LR, c'est le schedule et non la durée.** Le cosine ne tire rien de
+200 époques (+0,0020, non établi) ; le LR constant en tire +0,0138 (établi). Mais
+`constant 200` contre `cosine 200` reste à t = 1,62 : le LR constant *a besoin*
+de 200 époques, sans qu'on puisse encore dire qu'il bat le cosine.
 
 **« ? » ne signifie pas « effet nul »** mais « indécidable à ce nombre de graines ».
 La plupart de ces runs n'en ont qu'une : détecter 0,010 en demanderait 7 de chaque
