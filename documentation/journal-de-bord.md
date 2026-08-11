@@ -1581,8 +1581,6 @@ réglant définitivement le « ~37 M » corrigé plus haut.
 
 ## Phase 8 — Le résultat principal (11 août 2026)
 
-Vingt runs, tous revenus. Les six questions du pré-enregistrement sont tranchées.
-
 ### La référence n'était pas bruitée : elle échouait
 
 Ses 8 graines ne forment pas une distribution gaussienne mais **deux modes** :
@@ -1685,6 +1683,39 @@ Le 0,2208 de ChangeMamba est un chiffre publié **sans écart-type**. Nous ignor
 sa variabilité, et l'évaluation de leur checkpoint avec notre code reste bloquée
 par un décalage de version du dépôt tiers. La comparaison est donc entre notre
 moyenne mesurée et leur point publié.
+
+### Pré-enregistrement du lot du 12 août (13 runs)
+
+Deux objectifs, écrits avant les résultats comme le lot précédent.
+
+**1. Consolider le modèle candidat.** `best` porte le meilleur chiffre du projet
+(0,2264) mais sur 3 graines seulement. Quatre de plus le mettent au niveau de
+preuve de `nosek` (7 graines), ce qui compte puisque c'est la ligne du tableau
+d'efficience la plus exposée.
+
+**2. Encadrer la supervision profonde — en corrigeant le régime de test.** Le
+balayage λ = 0,2 / 0,5 / 1,0 / 2,0 a été mené **sur la recette initiale**, celle
+qui contient la loss SeK et s'effondre une fois sur quatre. L'optimum trouvé dans
+ce régime n'a aucune raison de valoir dans celui qu'on retient désormais. Le
+nouveau balayage se fait donc **par-dessus `nosek`**, dont les 7 graines
+constituent le témoin à λ = 0.
+
+Les incréments observés décélèrent en doublant λ : +0,0040 (0,2 → 0,5), puis
++0,0018 (0,5 → 1,0), puis +0,0016 (1,0 → 2,0). La réponse est logarithmique et
+n'a pas encore tourné. On teste λ = 2, 4 et 8 : si la décélération se poursuit
+sans retournement, l'optimum est au-delà et il faudra le dire ; si une valeur
+redescend, l'optimum est encadré et la courbe en cloche est bien plus défendable
+qu'une droite qu'on a cessé de suivre.
+
+| Lot | Configuration | n | Question |
+|---|---|---|---|
+| `best-s3..s6` | `nosek` + deep 1,0 + LR constant + 200 ép. | +4 | Le 0,2264 tient-il à 7 graines ? |
+| `nosek-deep2/4/8` | `nosek` + deep λ | 3×3 | Où est l'optimum de λ, dans le bon régime ? |
+
+**Réserve notée d'avance :** un optimum de λ trouvé ici s'appliquerait à `nosek`
+en cosine sur 100 époques, pas nécessairement à `best` qui tourne en LR constant
+sur 200 époques. Si les deux divergent, il faudra un dernier lot combiné plutôt
+que de transposer.
 
 ---
 
