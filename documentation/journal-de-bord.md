@@ -241,6 +241,12 @@ empiriquement que c'est sans danger : le `clamp(min=0)` annule le gradient de ce
 et les gradients des autres termes restent finis. La loss SeK est donc simplement
 *muette*, elle ne corrompt pas l'entraînement.
 
+> ⚠️ **Rétractation du 11 août.** « Sans danger » était faux. Sur 8 graines de la
+> configuration de référence, **deux runs sur huit s'effondrent** (SeK 0,196 et
+> 0,192 contre 0,216 pour les six autres). Retirer ce terme supprime le mode de
+> défaillance et divise l'écart-type par cinq. Elle ne corrompt pas *chaque* run —
+> elle en fait dérailler un sur quatre. Voir la phase 8.
+
 **Résultat partiel (8 premières époques) — effet marginal à ce stade.**
 
 Comparaison époque par époque avec le run 2 (les deux `metrics.csv` existent) :
@@ -1570,6 +1576,115 @@ n'est pas reproductible. Mieux vaut le savoir avant le rapport.
 
 Le chargement donnera aussi le **compte de paramètres exact** de MambaSCD-Tiny,
 réglant définitivement le « ~37 M » corrigé plus haut.
+
+---
+
+## Phase 8 — Le résultat principal (11 août 2026)
+
+Vingt runs, tous revenus. Les six questions du pré-enregistrement sont tranchées.
+
+### La référence n'était pas bruitée : elle échouait
+
+Ses 8 graines ne forment pas une distribution gaussienne mais **deux modes** :
+
+| | SeK | n |
+|---|---|---|
+| runs normaux | 0,2157 ± 0,0036 | 6 |
+| runs effondrés | 0,1959 et 0,1923 | 2 |
+
+**La recette initiale échoue une fois sur quatre.** Les runs effondrés le sont
+uniformément — kappa 0,304 contre 0,333, Fscd 0,600 contre 0,622 — ce sont donc
+de vrais échecs de convergence, pas des artefacts de métrique.
+
+Le σ = 0,0105 qui bloquait toutes les conclusions depuis le 7 août n'était pas du
+bruit de mesure : c'était le mélange de deux populations. Voilà pourquoi le test
+de Welch refusait ce que la variance mise en commun acceptait — la mise en commun
+diluait une anomalie réelle dans la moyenne des autres groupes.
+
+### Retirer la loss SeK — le résultat du stage
+
+| | SeK | σ | n |
+|---|---|---|---|
+| référence | 0,2103 | **0,0105** | 8 |
+| `lambda_sek=0` | **0,2228** | **0,0019** | 7 |
+
+**+0,0125, établi par les deux tests** (t = 4,09 en variance mise en commun,
+t = 3,30 en Welch). C'est la comparaison la mieux dotée du projet.
+
+Le gain se décompose en deux parts, toutes deux réelles :
+
+- **+0,0071** de meilleure performance typique — établi même en comparant aux
+  seules 6 graines **non effondrées** de la référence (t = 4,34, df = 7,3) ;
+- **+0,0054** par disparition pure et simple du mode de défaillance.
+
+**L'écart de stabilité est établi séparément** : F = 30,5 pour un seuil de 4,21 à
+df 7 et 6. Retirer ce terme rend l'entraînement **cinq fois plus reproductible**.
+
+Ce résultat était prévisible depuis juillet sans qu'on en tire les conséquences :
+le journal documente que cette loss **produit des NaN dès que kappa passe
+négatif**, que son `clamp(min=0)` annule alors le gradient, et que Mamba-FCS
+eux-mêmes la retardent de 150 000 itérations sur tout dataset autre que SECOND.
+Nous avions conclu « elle est simplement muette, elle ne corrompt pas
+l'entraînement ». **C'était faux** : elle ne corrompt pas chaque run, elle en fait
+dérailler un sur quatre.
+
+### Les questions pré-enregistrées, dans l'ordre
+
+**1. Additivité des trois retraits — PRÉDICTION FAUSSE.** J'attendais +0,023 en
+cumulant. Résultat : `minimal` (0,2224) est **identique** à `nosek` seul (0,2228),
+là où l'additivité prédisait 0,2338. Le retrait de la loss SeK explique tout ;
+`L_sc` et la branche FFT n'apportent rien par-dessus.
+
+Corollaire exploitable : puisque `minimal` égale `nosek` **en ayant retiré la
+FFT**, on peut supprimer cette branche sans coût — mêmes performances, 92 448
+paramètres en moins. Le **F** de CSF-Mamba ne gagne pas sa place, et c'est
+mesuré, pas supposé.
+
+**2. Le LR : le schedule, pas la durée.**
+
+| | Δ | verdict |
+|---|---|---|
+| cosine 100 → cosine 200 | +0,0020 | non établi |
+| constant 100 → constant 200 | **+0,0138** | **établi** |
+| cosine 200 → constant 200 | +0,0078 | non établi (t = 1,62) |
+
+Le cosine ne tire rien de 200 époques ; le LR constant en tire beaucoup.
+L'hypothèse « constant était sous-entraîné à 100 époques », formulée à partir des
+seules époques de pic, est confirmée. En revanche on ne peut **pas** encore dire
+que constant bat cosine — seulement qu'il lui faut 200 époques.
+
+**3. Supervision profonde : toujours monotone.** +0,0015 → +0,0055 → +0,0073 →
++0,0089 pour λ = 0,2 / 0,5 / 1,0 / 2,0. L'optimum n'est pas encore encadré.
+
+**4. Modèle candidat final.** `best` (loss SeK retirée + supervision profonde 1,0
++ LR constant 200 époques) : **0,2264 ± 0,0023**, meilleur résultat du projet.
+
+### Positionnement final
+
+| Méthode | Params | GMACs | SeK |
+|---|---|---|---|
+| Mamba-FCS | 189,54 M | 263,15 | 25,50 |
+| MambaSCD-Tiny | 21,51 M | 73,42 | 22,08 |
+| **CSF-Mamba, sans loss SeK** | **20,80 M** | **41,30** | **22,28 ± 0,19** (n = 7) |
+| CSF-Mamba, meilleure config | 20,80 M | 41,30 | 22,64 ± 0,23 (n = 3) |
+
+**CSF-Mamba dépasse MambaSCD-Tiny** — 100,9 % de son SeK avec 97 % de ses
+paramètres et **56 % de son calcul**. Ni le retrait de la loss ni la supervision
+profonde ne coûtent quoi que ce soit en inférence.
+
+Et l'IoU du changement, bloqué à ~0,560 depuis juillet sous cinq familles de
+leviers, monte à **0,5732** (`nosek`) et **0,5756** (`best`). Le plafond a bougé.
+
+### Deux réserves à conserver dans le rapport
+
+`best` est la meilleure de treize configurations essayées, avec 3 graines : elle
+est sujette à un **effet de sélection**. Le chiffre à mettre en avant est celui
+de `nosek` — 7 graines, un changement unique et principiel.
+
+Le 0,2208 de ChangeMamba est un chiffre publié **sans écart-type**. Nous ignorons
+sa variabilité, et l'évaluation de leur checkpoint avec notre code reste bloquée
+par un décalage de version du dépôt tiers. La comparaison est donc entre notre
+moyenne mesurée et leur point publié.
 
 ---
 
