@@ -69,6 +69,41 @@ def read_run(run_dir: Path, metric: str):
     return float(best[metric]), int(best["epoch"]), float(last[metric]), iou
 
 
+# Seuils bilatéraux à 95 % de la loi de Student, par degré de liberté.
+T95 = {1: 12.71, 2: 4.30, 3: 3.18, 4: 2.78, 5: 2.57, 6: 2.45, 7: 2.36,
+       8: 2.31, 9: 2.26, 10: 2.23, 12: 2.18, 15: 2.13, 20: 2.09, 30: 2.04}
+
+
+def t_threshold(df: float) -> float:
+    """Seuil à 95 % pour un df quelconque, arrondi conservativement."""
+    if df < 1:
+        return float("inf")
+    keys = sorted(T95)
+    for k in keys:
+        if df <= k:
+            return T95[k]
+    return 1.96
+
+
+def welch(a: dict, b: dict):
+    """t de Welch entre deux groupes, et s'il franchit le seuil.
+
+    Ne suppose PAS des variances égales : SE = √(s₁²/n₁ + s₂²/n₂), avec le degré
+    de liberté de Welch-Satterthwaite. C'est le test conservateur, et le seul
+    valide quand un groupe est nettement plus dispersé que l'autre.
+    """
+    (ma, sa), na = a["best"], a["n"]
+    (mb, sb), nb = b["best"], b["n"]
+    if na < 2 or nb < 2:
+        return None, False
+    va, vb = sa ** 2 / na, sb ** 2 / nb
+    if va + vb == 0:
+        return None, False
+    t = (ma - mb) / math.sqrt(va + vb)
+    df = (va + vb) ** 2 / (va ** 2 / (na - 1) + vb ** 2 / (nb - 1))
+    return t, abs(t) > t_threshold(df)
+
+
 def mean_sd(values):
     """Moyenne et écart-type d'échantillon (n-1). L'écart-type n'a pas de sens à n=1."""
     m = statistics.fmean(values)
@@ -141,8 +176,7 @@ def main():
     # unique et 0,0063 entre deux groupes de 4. On rapporte donc t = Δ/SE, et le
     # seuil est celui de Student au degré de liberté du σ mis en commun.
     df = den
-    t_crit = {1: 12.71, 2: 4.30, 3: 3.18, 4: 2.78, 5: 2.57, 6: 2.45,
-              7: 2.36, 8: 2.31, 9: 2.26, 10: 2.23}.get(df, 2.10 if df > 10 else float("inf"))
+    t_crit = t_threshold(df)
 
     print(f"\nMétrique : {args.metric}   |   témoin : {ref}")
     if not math.isnan(sigma):
@@ -150,25 +184,35 @@ def main():
               f"σ = {sigma:.4f}   (l'ancien plancher supposé était 0,0040)")
         print(f"Seuil de significativité à 95 % : |t| > {t_crit:.2f}  (df = {df})")
     print()
-    print(f"| {'configuration':<38} | n | {'meilleur':^18} | {'final':^18} | IoU chgt | "
-          f"{'écart au témoin':^28} |")
-    print("|" + "-" * 40 + "|---|" + "-" * 20 + "|" + "-" * 20 + "|----------|"
-          + "-" * 30 + "|")
+    print(f"| {'configuration':<34} | n | {'meilleur':^18} | IoU chgt | {'Δ':^9} | "
+          f"{'t comm.':^8} | {'t Welch':^8} | {'verdict':^12} |")
+    print("|" + "-" * 36 + "|---|" + "-" * 20 + "|----------|" + "-" * 11 + "|"
+          + "-" * 10 + "|" + "-" * 10 + "|" + "-" * 14 + "|")
 
     for name in sorted(stats, key=lambda k: -stats[k]["best"][0]):
         s = stats[name]
         delta = s["best"][0] - stats[ref]["best"][0]
         if name == ref:
-            verdict = "— (témoin)"
-        elif math.isnan(sigma) or sigma == 0:
-            verdict = f"{delta:+.4f}  (σ inconnu)"
+            print(f"| {name:<34} | {s['n']} | {fmt(*s['best']):^18} | {s['iou']:8.4f} | "
+                  f"{'—':^9} | {'—':^8} | {'—':^8} | {'témoin':^12} |")
+            continue
+        se_p = sigma * math.sqrt(1 / s["n"] + 1 / stats[ref]["n"])
+        t_p = delta / se_p
+        ok_p = abs(t_p) > t_crit
+
+        # Welch : chaque groupe apporte SA propre variabilité, sans supposer les
+        # variances égales. Indispensable ici — le témoin a été jusqu'à cinq fois
+        # plus dispersé que les autres groupes, et la mise en commun le diluait.
+        # Non calculable à une seule graine, faute d'écart-type.
+        t_w, ok_w = welch(s, stats[ref])
+        if t_w is None:
+            verdict, tw_txt = ("appuyé" if ok_p else "non établi"), "  n=1"
         else:
-            se = sigma * math.sqrt(1 / s["n"] + 1 / stats[ref]["n"])
-            t = delta / se
-            label = "ÉTABLI" if abs(t) > t_crit else "non établi"
-            verdict = f"{delta:+.4f}  t={t:+.2f}  {label}"
-        print(f"| {name:<38} | {s['n']} | {fmt(*s['best']):^18} | "
-              f"{fmt(*s['last']):^18} | {s['iou']:8.4f} | {verdict:<28} |")
+            tw_txt = f"{t_w:+.2f}"
+            verdict = ("ÉTABLI" if ok_p and ok_w else
+                       "partiel" if ok_p or ok_w else "non établi")
+        print(f"| {name:<34} | {s['n']} | {fmt(*s['best']):^18} | {s['iou']:8.4f} | "
+              f"{delta:+9.4f} | {t_p:^+8.2f} | {tw_txt:^8} | {verdict:^12} |")
 
     print("\nÉpoques des pics par configuration :")
     for name in sorted(stats):
@@ -180,6 +224,10 @@ def main():
               "n'y est pas interprétable :")
         for n in singles:
             print(f"    {n}")
+    print("\nVerdicts : ÉTABLI = les deux tests concordent. « partiel » = seule la")
+    print("variance mise en commun conclut, pas Welch — il manque des graines, le")
+    print("résultat est prometteur mais pas acquis. « appuyé » = groupe à une seule")
+    print("graine, Welch incalculable, donc jamais concluant à lui seul.")
     print("\n« non établi » ne veut pas dire « identique » : cela veut dire que ce")
     print("nombre de graines ne permet pas de les distinguer. Pour détecter un effet")
     print("de taille Δ entre deux configurations, il faut environ 8σ²/Δ² graines")
