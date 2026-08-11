@@ -1427,6 +1427,57 @@ temps disponible aux chantiers restants — balayage de la taille de batch, des
 hyperparamètres de loss, recherche de la bonne composition de loss. Les effets
 inférieurs à 0,015 resteront explicitement marqués comme indécidables.
 
+### Pré-enregistrement du lot du 11 août (20 runs)
+
+Écrit **avant** les résultats, délibérément. Avec une vingtaine de comparaisons,
+certaines ressortiront « significatives » par pur hasard — à 20 tests au seuil de
+5 %, on en attend une. Fixer à l'avance ce que chaque run doit trancher et
+comment le lire est la seule protection simple contre la pêche aux résultats.
+C'est aussi ce qui distinguera, dans le rapport, une hypothèse testée d'une
+observation reconstruite après coup.
+
+Contexte : les sept configurations du lot précédent sont **toutes** au-dessus du
+témoin, et les deux premières (`nosek` +0,0125, `constlr200` +0,0096) passent le
+test en variance mise en commun mais **pas** le test de Welch. Le blocage vient
+du témoin, dont l'écart-type (0,0106) est deux à cinq fois celui de tous les
+autres groupes — sa graine 2 a produit 0,19594 contre ~0,215 pour les trois
+autres, sur une configuration pourtant identique.
+
+| Lot | Ce qui varie vs référence | n | Question tranchée |
+|---|---|---|---|
+| `crop512-s4..s7` | rien (graines 4-7) | 4 | Le témoin est-il instable, ou la graine 2 était-elle un accident isolé ? |
+| `crop512-nosek-s3..s6` | `lambda_sek=0` | 4 | Le +0,0125 du retrait de la loss SeK résiste-t-il à Welch ? |
+| `crop512-minimal` | `lambda_sek=0` **et** `lambda_sc=0` **et** FFT retirée | 3 | Les trois retraits s'additionnent-ils (+0,023 attendu) ou interagissent-ils ? |
+| `crop512-cos200` | 200 époques, cosine | 3 | Le gain de `constlr200` venait-il du schedule ou seulement des 200 époques ? |
+| `crop512-deep2.0` | `lambda_deep=2.0` | 3 | La dose-réponse monotone (0,2 → 0,5 → 1,0) continue-t-elle, ou 1,0 est-il l'optimum ? |
+| `crop512-best` | `lambda_sek=0` + `lambda_deep=1.0` + LR constant + 200 époques | 3 | **Modèle candidat final** — pas une ablation |
+
+**Lectures décidées à l'avance :**
+
+1. **Témoin.** Si aucune des 4 nouvelles graines ne descend sous 0,20, la graine 2
+   était un accident et la moyenne remontera vers 0,215 — auquel cas **tous les
+   écarts du tableau précédent rétréciront**. Si une autre y descend, le témoin
+   est réellement instable, et l'écart de stabilité avec `nosek` (σ 0,0106 contre
+   0,0026) devient un résultat en soi : la loss SeK, dont le journal documente
+   déjà les NaN à kappa négatif, déstabiliserait l'entraînement. Cette seconde
+   lecture serait aussi défendable que le gain de SeK lui-même.
+2. **`nosek` à 8 graines.** Verdict pris sur **Welch**, pas sur la variance mise
+   en commun — c'est le test conservateur, et les deux ne s'accordaient pas.
+3. **`minimal`.** Additivité attendue à +0,023, soit un SeK autour de 0,233, au-
+   dessus de MambaSCD-Tiny (0,2208), avec un modèle **plus léger** de 92 448
+   paramètres. Un résultat en deçà signifierait que les composants interagissent,
+   ce qui est une information et non un échec.
+4. **`cos200`.** C'est le **témoin manquant** de `constlr200` : sans lui, on ne
+   peut pas attribuer le gain au schedule plutôt qu'à la durée.
+5. **`deep2.0`.** Une courbe en cloche encadrant l'optimum vaut bien mieux qu'un
+   point isolé.
+6. **`best`.** À rapporter séparément des ablations. Son but est de maximiser le
+   chiffre, pas d'expliquer : s'il gagne, on ne saura pas lequel des trois
+   ingrédients a payé, et c'est assumé.
+
+Budget : ~205 heures GPU. Les runs à 200 époques prennent ~15 h 30, les autres
+~8 h.
+
 ### Supervision profonde des cartes de changement (10 août)
 
 **Constat de départ.** Le décodeur binaire produit une carte de changement à
