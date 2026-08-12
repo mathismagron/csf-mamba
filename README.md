@@ -14,7 +14,7 @@ performance égale face au modèle de taille comparable.
   `documentation/journal-de-bord.md` — matière première du rapport
 - Lancer un entraînement / une évaluation : `RUN.md`
 
-## État actuel (11 août 2026)
+## État actuel (12 août 2026)
 
 Pipeline complet validé sur GPU (Narval, A100), **20,8 M paramètres**, deux datasets
 supportés et validés sur données réelles.
@@ -31,6 +31,7 @@ ChangeMamba, qui étiquette ses sorties fvcore « GFLOPs » alors qu'il s'agit d
 | CSF-Mamba, recette initiale | 20,80 M | 41,30 | 87,57 | 62,10 | 72,00 | 21,03 ± 1,05 |
 | **CSF-Mamba, sans loss SeK** | **20,80 M** | **41,30** | — | — | — | **22,28 ± 0,19** |
 | **CSF-Mamba, meilleure config ‡** | **20,80 M** | **41,30** | — | — | — | **22,64 ± 0,20** |
+| CSF-Mamba **sans C²S²**, sans loss SeK | **16,48 M** | à mesurer | — | — | — | 22,12 ± 0,11 |
 | CSF-Mamba, décodeur élargi | 24,27 M | 53,45 | 87,24 | 61,67 | 71,70 | 20,89 † |
 
 *(SeK en italique = checkpoints publiés par ChangeMamba, évalués par eux, sans
@@ -49,7 +50,14 @@ un seuil de 4,21).
 
 **Le résultat d'efficience** — face à MambaSCD-Tiny, seul modèle de taille
 comparable : **−3 % de paramètres, −44 % de calcul, et +0,9 % de SeK** pour la
-configuration au changement unique, **+2,5 %** pour la meilleure. Face à
+configuration au changement unique, **+2,5 %** pour la meilleure.
+
+⚠️ **Et le C²S² ne contribue pas.** Le retirer entièrement — damier, MCA-SF et
+scan S6 — coûte −0,0016 de SeK, avec un intervalle de confiance à 95 %
+[−0,0036 ; **+0,0004**] : ce bloc ne *peut pas* apporter plus de quatre
+dix-millièmes. Il pèse pourtant **4,31 M de paramètres**, soit 20,7 % du modèle.
+Le variant allégé à 16,48 M est donc meilleur sur l'axe efficience, à performance
+indistinguable. Face à
 Mamba-FCS : **6,4× moins de calcul et 9,1× moins de paramètres** pour 87 % de son
 SeK. Ni le retrait de la loss SeK ni la supervision profonde ne coûtent quoi que
 ce soit en inférence — paramètres et GMACs sont inchangés.
@@ -77,6 +85,23 @@ dispersée que les autres.
 | Backbone mini → tiny (c512) | 1 | −0,0012 | −0,19 | — | ? |
 | Décodeur élargi (+3,47 M, +12,15 GMACs) | 1 | −0,0014 | −0,22 | — | ? |
 | LR constant, 100 époques | 4 | −0,0041 | −1,13 | −0,81 | ? |
+
+**Ablations d'architecture, menées par-dessus `nosek`** (4 graines chacune,
+témoin à 7 graines, σ = 0,0017) :
+
+| Composant retiré | Δ SeK | IC 95 % | Statut |
+|---|---|---|---|
+| CGA (« Change-aware ») | +0,0011 | [−0,0006 ; +0,0030] | ? |
+| MCA-SF | −0,0015 | [−0,0052 ; +0,0024] | ? |
+| **C²S² entier** (−4,31 M params) | −0,0017 | [−0,0036 ; +0,0004] | ? |
+| **DySample → bilinéaire** | **−0,0074** | [−0,0093 ; −0,0055] | ✅ **établi** |
+
+**Un seul composant architectural gagne sa place : DySample** — et c'est une
+brique reprise de ChessMamba, pas une contribution de ce travail. Ni le C²S²
+(le *Spatio*), ni la branche FFT (le *Frequency*), ni la CGA (le *Change-aware*)
+ne contribuent de façon détectable. Le résultat d'efficience est réel, mais son
+explication tient au backbone VMamba-mini, au décodeur avec DySample, au retrait
+de la loss SeK, aux crops 512 et au LR constant sur 200 époques.
 
 **Balayage de la supervision profonde, mené par-dessus `nosek`** — c'est-à-dire
 dans le régime qu'on retient, et non sur la recette défectueuse. Témoin : les

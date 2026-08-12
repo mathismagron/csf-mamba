@@ -1657,7 +1657,9 @@ que constant bat cosine — seulement qu'il lui faut 200 époques.
 **4. Modèle candidat final.** `best` (loss SeK retirée + supervision profonde 1,0
 + LR constant 200 époques) : **0,2264 ± 0,0023**, meilleur résultat du projet.
 
-### Positionnement final
+### Positionnement au soir du 11 août
+
+*(État de ce jour-là. Le tableau à jour est en fin de phase 9.)*
 
 | Méthode | Params | GMACs | SeK |
 |---|---|---|---|
@@ -1672,6 +1674,43 @@ profonde ne coûtent quoi que ce soit en inférence.
 
 Et l'IoU du changement, bloqué à ~0,560 depuis juillet sous cinq familles de
 leviers, monte à **0,5732** (`nosek`) et **0,5756** (`best`). Le plafond a bougé.
+
+---
+
+## Phase 9 — Les ablations d'architecture (12 août 2026)
+
+### Pré-enregistrement du lot du 12 août (13 runs)
+
+Deux objectifs, écrits avant les résultats comme le lot précédent.
+
+**1. Consolider le modèle candidat.** `best` porte le meilleur chiffre du projet
+(0,2264) mais sur 3 graines seulement. Quatre de plus le mettent au niveau de
+preuve de `nosek` (7 graines), ce qui compte puisque c'est la ligne du tableau
+d'efficience la plus exposée.
+
+**2. Encadrer la supervision profonde — en corrigeant le régime de test.** Le
+balayage λ = 0,2 / 0,5 / 1,0 / 2,0 a été mené **sur la recette initiale**, celle
+qui contient la loss SeK et s'effondre une fois sur quatre. L'optimum trouvé dans
+ce régime n'a aucune raison de valoir dans celui qu'on retient désormais. Le
+nouveau balayage se fait donc **par-dessus `nosek`**, dont les 7 graines
+constituent le témoin à λ = 0.
+
+Les incréments observés décélèrent en doublant λ : +0,0040 (0,2 → 0,5), puis
++0,0018 (0,5 → 1,0), puis +0,0016 (1,0 → 2,0). La réponse est logarithmique et
+n'a pas encore tourné. On teste λ = 2, 4 et 8 : si la décélération se poursuit
+sans retournement, l'optimum est au-delà et il faudra le dire ; si une valeur
+redescend, l'optimum est encadré et la courbe en cloche est bien plus défendable
+qu'une droite qu'on a cessé de suivre.
+
+| Lot | Configuration | n | Question |
+|---|---|---|---|
+| `best-s3..s6` | `nosek` + deep 1,0 + LR constant + 200 ép. | +4 | Le 0,2264 tient-il à 7 graines ? |
+| `nosek-deep2/4/8` | `nosek` + deep λ | 3×3 | Où est l'optimum de λ, dans le bon régime ? |
+
+**Réserve notée d'avance :** un optimum de λ trouvé ici s'appliquerait à `nosek`
+en cosine sur 100 époques, pas nécessairement à `best` qui tourne en LR constant
+sur 200 époques. Si les deux divergent, il faudra un dernier lot combiné plutôt
+que de transposer.
 
 ### Balayage de la supervision profonde dans le bon régime (12 août)
 
@@ -1724,6 +1763,92 @@ Une dernière expérience est en cours pour le vérifier : `nosek` + LR constant
 200 époques **sans** supervision profonde, 7 graines. Si elle égale `best`, le
 modèle final se réduit à **un retrait et un réglage d'entraînement**.
 
+### Ablations d'architecture — aucun composant propre ne gagne sa place
+
+Quatre ablations, 4 graines chacune, toutes **par-dessus `nosek`** dont les
+7 graines servent de témoin. Écart-type mis en commun sur ce sous-ensemble :
+σ = 0,0017, df = 30, seuil |t| > 2,04.
+
+| Composant retiré | n | SeK | IoU chgt | Δ | t comm. | t Welch | Statut |
+|---|---|---|---|---|---|---|---|
+| CGA (« Change-aware ») | 4 | 0,2240 ± 0,0008 | 0,5745 | **+0,0011** | +1,09 | +1,42 | non établi |
+| — `nosek` (témoin) | 7 | 0,2228 ± 0,0019 | 0,5732 | — | — | — | témoin |
+| MCA-SF | 4 | 0,2214 ± 0,0032 | 0,5701 | −0,0015 | −1,39 | −0,82 | non établi |
+| **C²S² ENTIER** | 4 | 0,2212 ± 0,0011 | 0,5682 | −0,0017 | −1,59 | −1,83 | non établi |
+| **DySample → bilinéaire** | 4 | 0,2154 ± 0,0010 | 0,5641 | **−0,0074** | −7,14 | −8,58 | ✅ **ÉTABLI** |
+
+**Ce ne sont pas des « on ne sait pas », ce sont des bornes.** Intervalles de
+confiance à 95 % sur la contribution de chaque composant :
+
+| Composant | Δ | IC 95 % |
+|---|---|---|
+| C²S² entier | −0,0016 | [−0,0036 ; **+0,0004**] |
+| CGA | +0,0012 | [−0,0006 ; +0,0030] |
+| MCA-SF | −0,0014 | [−0,0052 ; +0,0024] |
+| DySample | −0,0074 | [−0,0093 ; −0,0055] |
+
+L'IC du C²S² plafonne à **+0,0004** : ce bloc ne *peut pas* contribuer plus que
+quatre dix-millièmes de SeK. C'est une affirmation bien plus forte qu'une absence
+de conclusion.
+
+Et les quatre graines de `noc2s2` sont serrées — 0,2224 / 0,2211 / 0,2197 /
+0,2215, écart-type 0,0011, aucun effondrement. **Le modèle sans C²S² s'entraîne
+même plus régulièrement que celui qui l'a** (σ 0,0011 contre 0,0019).
+
+**Un seul composant architectural est établi : DySample** (−0,0074, t = −8,5 en
+Welch). Et c'est une brique reprise de ChessMamba, pas une contribution du projet.
+
+**Ce que cela signifie.** Le résultat d'efficience tient — il est mesuré sur
+7 graines. Mais **son explication n'est pas celle qu'annonce le nom du modèle** :
+ni le C²S² (le *Spatio*), ni la branche fréquentielle (le *Frequency*, déjà
+écartée le 11 août), ni la CGA (le *Change-aware*) ne contribuent de façon
+détectable. Ce qui produit la performance : le backbone VMamba-mini, le décodeur
+avec DySample, le retrait de la loss SeK, les crops 512 et le LR constant sur
+200 époques.
+
+**Conséquence chiffrée, et elle est favorable :** retirer le C²S² fait passer le
+modèle de **20,80 M à 16,48 M de paramètres — 20,7 % de moins** — à performance
+indistinguable. Sur l'axe efficience, c'est un modèle *meilleur*.
+
+    20 796 443  modèle complet (backend mamba, relevé dans le log d'entraînement)
+    −5 883 840  les quatre C²S²
+    +1 571 040  les quatre ConcatFusion
+    ─────────
+    16 483 643  soit 16,48 M
+
+⚠️ **Piège relevé au passage :** le C²S² ne compte pas le même nombre de
+paramètres selon le backend — **5 883 840 avec `mamba`** (le kernel réel, utilisé
+par tous les entraînements) contre **5 693 760 avec `ref`** (l'implémentation
+PyTorch pure, seule testable sans GPU). Un écart de 190 080. Calculer ce bilan
+depuis une mesure locale aurait donné 16,67 M au lieu de 16,48 M. **Le chiffre à
+citer est celui du backend effectivement entraîné**, relevé dans le log.
+
+Le comptage de GMACs de cette variante est lancé, ainsi qu'un candidat `lean`
+(sans C²S², sans loss SeK, LR constant 200 époques) sur 7 graines.
+
+### Attribution à l'intérieur du modèle candidat
+
+Les 7 graines de `nosek-constlr200` (sans supervision profonde) permettent enfin
+de décomposer l'avantage de `best` :
+
+| Configuration | n | SeK | vs `nosek` |
+|---|---|---|---|
+| `nosek` | 7 | 0,2228 ± 0,0019 | — |
+| `nosek` + LR constant 200 ép. | 7 | 0,2242 ± 0,0011 | +0,0014 (non établi) |
+| `nosek` + supervision profonde λ=2 | 3 | 0,2248 ± 0,0017 | +0,0020 (non établi) |
+| **`best`** (les deux) | 7 | **0,2264 ± 0,0020** | **+0,0036 (établi, t = 3,45)** |
+
+**Les deux petits effets s'additionnent** : +0,0014 et +0,0020 donnent +0,0034,
+contre +0,0036 mesuré. Pris isolément, aucun n'atteint le seuil ; combinés, ils
+le franchissent. `best` contre `nosek-constlr200` donne d'ailleurs +0,0022 avec
+t = 2,55, **établi** — la supervision profonde contribue donc bien, mais faiblement.
+
+C'est le contraire de ce qu'on avait observé le 11 août sur les *retraits*, où
+`nosek` seul égalait `nosek + nosc + nofft`. Additivité des petits gains,
+non-additivité des retraits : les deux constats sont cohérents si l'on admet que
+la loss SeK causait un dommage unique, que plusieurs mécanismes compensaient
+partiellement mais sans se cumuler.
+
 ### Positionnement final sur SECOND
 
 | Méthode | Params | GMACs | SeK |
@@ -1733,9 +1858,31 @@ modèle final se réduit à **un retrait et un réglage d'entraînement**.
 | **CSF-Mamba, sans loss SeK** | **20,80 M** | **41,30** | 22,28 ± 0,19 (n = 7) |
 | **CSF-Mamba, meilleure config** | **20,80 M** | **41,30** | **22,64 ± 0,20** (n = 7) |
 
+| CSF-Mamba **sans C²S²**, sans loss SeK | **16,48 M** | à mesurer | 22,12 ± 0,11 (n = 4) |
+
 IC 95 % de la moyenne de la meilleure configuration : **[0,2245 ; 0,2283]**,
 entièrement au-dessus du 0,2208 de MambaSCD-Tiny, pour **97 % de ses paramètres
 et 56 % de son calcul**.
+
+La dernière ligne est celle qui déplace le cadrage : à performance
+indistinguable de `nosek` (Δ = −0,0016, IC [−0,0036 ; +0,0004]), elle pèse
+**20,7 % de paramètres en moins**. Son coût en GMACs est en cours de mesure, et
+un candidat `lean` combinant ce retrait avec la recette d'entraînement optimisée
+tourne sur 7 graines.
+
+**Bilan des composants du modèle**, au terme des ablations :
+
+| Composant | Verdict |
+|---|---|
+| Backbone VMamba-mini | indispensable (non ablaté, c'est l'ossature) |
+| **DySample** | ✅ **établi** — le seul composant architectural qui compte |
+| C²S² (damier + MCA-SF + S6) | contribution bornée à +0,0004 |
+| Branche FFT | non établi (+0,0046 au retrait) |
+| CGA | non établi (+0,0011 au retrait) |
+| Loss SeK | ❌ **nocive** — retrait établi, +0,0125 |
+| Loss `L_sc` | non établi (+0,0064 au retrait) |
+| Supervision profonde | +0,0022, établi mais faible |
+| Crops 512, LR constant 200 ép. | établis
 
 ### Deux réserves à conserver dans le rapport
 
@@ -1749,39 +1896,6 @@ Le 0,2208 de ChangeMamba est un chiffre publié **sans écart-type**. Nous ignor
 sa variabilité, et l'évaluation de leur checkpoint avec notre code reste bloquée
 par un décalage de version du dépôt tiers. La comparaison est donc entre notre
 moyenne mesurée et leur point publié.
-
-### Pré-enregistrement du lot du 12 août (13 runs)
-
-Deux objectifs, écrits avant les résultats comme le lot précédent.
-
-**1. Consolider le modèle candidat.** `best` porte le meilleur chiffre du projet
-(0,2264) mais sur 3 graines seulement. Quatre de plus le mettent au niveau de
-preuve de `nosek` (7 graines), ce qui compte puisque c'est la ligne du tableau
-d'efficience la plus exposée.
-
-**2. Encadrer la supervision profonde — en corrigeant le régime de test.** Le
-balayage λ = 0,2 / 0,5 / 1,0 / 2,0 a été mené **sur la recette initiale**, celle
-qui contient la loss SeK et s'effondre une fois sur quatre. L'optimum trouvé dans
-ce régime n'a aucune raison de valoir dans celui qu'on retient désormais. Le
-nouveau balayage se fait donc **par-dessus `nosek`**, dont les 7 graines
-constituent le témoin à λ = 0.
-
-Les incréments observés décélèrent en doublant λ : +0,0040 (0,2 → 0,5), puis
-+0,0018 (0,5 → 1,0), puis +0,0016 (1,0 → 2,0). La réponse est logarithmique et
-n'a pas encore tourné. On teste λ = 2, 4 et 8 : si la décélération se poursuit
-sans retournement, l'optimum est au-delà et il faudra le dire ; si une valeur
-redescend, l'optimum est encadré et la courbe en cloche est bien plus défendable
-qu'une droite qu'on a cessé de suivre.
-
-| Lot | Configuration | n | Question |
-|---|---|---|---|
-| `best-s3..s6` | `nosek` + deep 1,0 + LR constant + 200 ép. | +4 | Le 0,2264 tient-il à 7 graines ? |
-| `nosek-deep2/4/8` | `nosek` + deep λ | 3×3 | Où est l'optimum de λ, dans le bon régime ? |
-
-**Réserve notée d'avance :** un optimum de λ trouvé ici s'appliquerait à `nosek`
-en cosine sur 100 époques, pas nécessairement à `best` qui tourne en LR constant
-sur 200 époques. Si les deux divergent, il faudra un dernier lot combiné plutôt
-que de transposer.
 
 ---
 
