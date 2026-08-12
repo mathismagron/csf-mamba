@@ -30,14 +30,13 @@ ChangeMamba, qui étiquette ses sorties fvcore « GFLOPs » alors qu'il s'agit d
 | **MambaSCD-Tiny** | 21,51 M | 73,42 | — | — | — | *22,08* |
 | CSF-Mamba, recette initiale | 20,80 M | 41,30 | 87,57 | 62,10 | 72,00 | 21,03 ± 1,05 |
 | **CSF-Mamba, sans loss SeK** | **20,80 M** | **41,30** | — | — | — | **22,28 ± 0,19** |
-| CSF-Mamba, meilleure config ‡ | 20,80 M | 41,30 | — | — | — | 22,64 ± 0,23 |
+| **CSF-Mamba, meilleure config ‡** | **20,80 M** | **41,30** | — | — | — | **22,64 ± 0,20** |
 | CSF-Mamba, décodeur élargi | 24,27 M | 53,45 | 87,24 | 61,67 | 71,70 | 20,89 † |
 
 *(SeK en italique = checkpoints publiés par ChangeMamba, évalués par eux, sans
 écart-type connu. † une seule graine. ‡ `nosek` + supervision profonde + LR
-constant sur 200 époques, 3 graines — meilleure de treize configurations
-essayées, donc sujette à un effet de sélection : le chiffre à citer est celui de
-la ligne en gras, obtenu par un changement unique sur 7 graines.)*
+constant sur 200 époques, **7 graines**. IC 95 % de la moyenne :
+**[0,2245 ; 0,2283]**, entièrement au-dessus du 0,2208 de MambaSCD-Tiny.)*
 
 **Tous nos SeK sont des moyennes sur plusieurs graines**, jamais un run isolé.
 L'écart-type run-à-run mis en commun vaut **0,0059**, mesuré sur 40 entraînements.
@@ -49,7 +48,8 @@ défaillance **et** divise l'écart-type par cinq (0,0105 → 0,0019, F = 30,5 p
 un seuil de 4,21).
 
 **Le résultat d'efficience** — face à MambaSCD-Tiny, seul modèle de taille
-comparable : **−3 % de paramètres, −44 % de calcul, et +0,9 % de SeK**. Face à
+comparable : **−3 % de paramètres, −44 % de calcul, et +0,9 % de SeK** pour la
+configuration au changement unique, **+2,5 %** pour la meilleure. Face à
 Mamba-FCS : **6,4× moins de calcul et 9,1× moins de paramètres** pour 87 % de son
 SeK. Ni le retrait de la loss SeK ni la supervision profonde ne coûtent quoi que
 ce soit en inférence — paramètres et GMACs sont inchangés.
@@ -78,7 +78,17 @@ dispersée que les autres.
 | Décodeur élargi (+3,47 M, +12,15 GMACs) | 1 | −0,0014 | −0,22 | — | ? |
 | LR constant, 100 époques | 4 | −0,0041 | −1,13 | −0,81 | ? |
 
-**Trois conclusions nettes.**
+**Balayage de la supervision profonde, mené par-dessus `nosek`** — c'est-à-dire
+dans le régime qu'on retient, et non sur la recette défectueuse. Témoin : les
+7 graines de `nosek`.
+
+| λ | n | SeK | Δ vs `nosek` | Statut |
+|---|---|---|---|---|
+| 2,0 | 3 | 0,2248 ± 0,0017 | +0,0020 | ? |
+| 4,0 | 3 | 0,2231 ± 0,0004 | +0,0003 | ? |
+| 8,0 | 3 | 0,2214 ± 0,0021 | −0,0014 | ? |
+
+**Quatre conclusions nettes.**
 
 **1. Le retrait de la loss SeK est le seul levier qui compte**, et il agit de deux
 façons : +0,0071 de performance typique (établi même face aux seules graines non
@@ -92,7 +102,19 @@ où l'additivité prédisait 0,2338. Corollaire utile : **la branche FFT peut ê
 supprimée sans coût** — mêmes performances, 92 448 paramètres en moins. Le « F »
 de CSF-Mamba ne gagne pas sa place.
 
-**3. Pour le LR, c'est le schedule et non la durée.** Le cosine ne tire rien de
+**3. Les gains apparents n'étaient que des compensations.** La supervision
+profonde valait **+0,0089** sur la recette initiale ; par-dessus `nosek` elle ne
+vaut plus que **+0,0020**, non établi. Les trois quarts de son bénéfice
+n'étaient pas un gain mais un rattrapage partiel des dégâts de la loss SeK. Même
+mécanique que l'absence d'additivité : **tout ce qui semblait aider ne faisait
+que compenser un terme de loss défectueux.**
+
+Conséquence de méthode : un balayage d'hyperparamètre mené dans un régime
+défectueux mesure la défaillance, pas l'hyperparamètre. Le premier balayage,
+conduit avec la loss SeK active, aurait fait conclure à tort que la supervision
+profonde contribue.
+
+**4. Pour le LR, c'est le schedule et non la durée.** Le cosine ne tire rien de
 200 époques (+0,0020, non établi) ; le LR constant en tire +0,0138 (établi). Mais
 `constant 200` contre `cosine 200` reste à t = 1,62 : le LR constant *a besoin*
 de 200 époques, sans qu'on puisse encore dire qu'il bat le cosine.

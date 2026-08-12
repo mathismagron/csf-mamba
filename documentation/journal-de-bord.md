@@ -1673,11 +1673,77 @@ profonde ne coûtent quoi que ce soit en inférence.
 Et l'IoU du changement, bloqué à ~0,560 depuis juillet sous cinq familles de
 leviers, monte à **0,5732** (`nosek`) et **0,5756** (`best`). Le plafond a bougé.
 
+### Balayage de la supervision profonde dans le bon régime (12 août)
+
+Le premier balayage (λ = 0,2 / 0,5 / 1,0 / 2,0) avait été mené **sur la recette
+initiale**, celle qui contient la loss SeK et s'effondre une fois sur quatre. Il
+montrait une réponse monotone croissante, jusqu'à +0,0089 à λ = 2. Refait
+par-dessus `nosek`, dont les 7 graines servent de témoin :
+
+| λ | n | SeK | Δ vs `nosek` | t comm. | t Welch | Statut |
+|---|---|---|---|---|---|---|
+| 0 (`nosek`) | 7 | 0,2228 ± 0,0019 | — | — | — | témoin |
+| 2,0 | 3 | 0,2248 ± 0,0017 | +0,0020 | +1,64 | +1,60 | non établi |
+| 4,0 | 3 | 0,2231 ± 0,0004 | +0,0003 | +0,25 | +0,40 | non établi |
+| 8,0 | 3 | 0,2214 ± 0,0021 | −0,0014 | −1,21 | −1,04 | non établi |
+
+**La réponse est plate.** Au mieux une bosse molle à λ = 2, non établie.
+
+**Le chiffre qui compte est la comparaison des deux régimes :**
+
+    λ = 2 sur la recette initiale : +0,0089
+    λ = 2 par-dessus `nosek`      : +0,0020
+
+**Les trois quarts du bénéfice apparent de la supervision profonde n'étaient pas
+un gain, mais une compensation partielle des dégâts de la loss SeK.**
+
+C'est exactement la mécanique de l'absence d'additivité constatée la veille, et
+les deux constats se rejoignent en un seul récit : **tout ce qui semblait aider
+ne faisait que rattraper un terme de loss défectueux.** Le projet n'a qu'un vrai
+levier — le retrait de la loss SeK.
+
+**Leçon de méthode, la plus transposable du stage :** un balayage
+d'hyperparamètre mené dans un régime défectueux **mesure la défaillance, pas
+l'hyperparamètre**. Le premier balayage, conduit avec la loss SeK active, aurait
+conduit à écrire dans le rapport que la supervision profonde contribue — avec
+une belle courbe monotone à l'appui. Le pré-enregistrement du 12 août avait noté
+ce risque avant de relancer ; c'est ce qui a évité l'erreur.
+
+### Modèle candidat consolidé
+
+`best` (loss SeK retirée + supervision profonde 1,0 + LR constant sur 200
+époques) porté à **7 graines : 0,2264 ± 0,0020**. Contre `nosek` : +0,0036,
+t = 3,45, **établi**.
+
+Comme la supervision profonde n'apporte rien par-dessus `nosek`, cet avantage
+vient selon toute vraisemblance du **LR constant sur 200 époques**. Les époques
+de pic le corroborent — [85, 89, 96, 116, 133, 153, 178] — le modèle progresse
+tard, ce que 100 époques ne permettent pas d'exploiter.
+
+Une dernière expérience est en cours pour le vérifier : `nosek` + LR constant
+200 époques **sans** supervision profonde, 7 graines. Si elle égale `best`, le
+modèle final se réduit à **un retrait et un réglage d'entraînement**.
+
+### Positionnement final sur SECOND
+
+| Méthode | Params | GMACs | SeK |
+|---|---|---|---|
+| Mamba-FCS | 189,54 M | 263,15 | 25,50 |
+| MambaSCD-Tiny | 21,51 M | 73,42 | 22,08 |
+| **CSF-Mamba, sans loss SeK** | **20,80 M** | **41,30** | 22,28 ± 0,19 (n = 7) |
+| **CSF-Mamba, meilleure config** | **20,80 M** | **41,30** | **22,64 ± 0,20** (n = 7) |
+
+IC 95 % de la moyenne de la meilleure configuration : **[0,2245 ; 0,2283]**,
+entièrement au-dessus du 0,2208 de MambaSCD-Tiny, pour **97 % de ses paramètres
+et 56 % de son calcul**.
+
 ### Deux réserves à conserver dans le rapport
 
-`best` est la meilleure de treize configurations essayées, avec 3 graines : elle
-est sujette à un **effet de sélection**. Le chiffre à mettre en avant est celui
-de `nosek` — 7 graines, un changement unique et principiel.
+`best` est la meilleure de treize configurations essayées. Consolidée à 7 graines
+le 12 août, sa moyenne est solide, mais **le choix de cette configuration**
+résulte d'une sélection parmi beaucoup : le récit le plus défendable reste celui
+de `nosek`, un changement unique et principiel, avec `best` présenté comme la
+recette d'entraînement optimisée par-dessus.
 
 Le 0,2208 de ChangeMamba est un chiffre publié **sans écart-type**. Nous ignorons
 sa variabilité, et l'évaluation de leur checkpoint avec notre code reste bloquée
