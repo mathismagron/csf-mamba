@@ -46,6 +46,10 @@ def parse_args():
                    help="Fragment identifiant la configuration témoin, pour la "
                         "colonne d'écart. Par défaut : le meilleur SeK moyen.")
     p.add_argument("--metric", default="sek", choices=["sek", "fscd", "miou", "oa", "kappa"])
+    p.add_argument("--min-epochs", type=int, default=0,
+                   help="Ignore les runs ayant écrit moins de N époques. Un run "
+                        "encore en cours a un `metrics.csv` partiel : son maximum "
+                        "est bas et tire tout son groupe vers le bas.")
     return p.parse_args()
 
 
@@ -66,7 +70,7 @@ def read_run(run_dir: Path, metric: str):
     # IoU du changement reconstruit : SeK = kappa * exp(IoU) / e.
     sek, kappa = float(best["sek"]), float(best["kappa"])
     iou = 1 + math.log(sek / kappa) if sek > 0 and kappa > 0 else float("nan")
-    return float(best[metric]), int(best["epoch"]), float(last[metric]), iou
+    return float(best[metric]), int(best["epoch"]), float(last[metric]), iou, len(rows)
 
 
 # Seuils bilatéraux à 95 % de la loi de Student, par degré de liberté.
@@ -105,10 +109,25 @@ def welch(a: dict, b: dict):
 
 
 def mean_sd(values):
-    """Moyenne et écart-type d'échantillon (n-1). L'écart-type n'a pas de sens à n=1."""
-    m = statistics.fmean(values)
-    sd = statistics.stdev(values) if len(values) > 1 else float("nan")
+    """Moyenne et écart-type d'échantillon (n-1), en ignorant les NaN.
+
+    L'IoU du changement vaut NaN quand SeK ou kappa est négatif — ce qui arrive
+    sur un run encore en cours, dont le `metrics.csv` ne contient que les
+    premières époques. `statistics.stdev` lève alors une AttributeError obscure
+    (il passe par des Fraction, où NaN n'entre pas). On filtre en amont : un
+    tableau partiel doit rester lisible, l'agrégation servant justement à suivre
+    des lots en cours d'exécution.
+    """
+    vals = [v for v in values if not math.isnan(v)]
+    if not vals:
+        return float("nan"), float("nan")
+    m = statistics.fmean(vals)
+    sd = statistics.stdev(vals) if len(vals) > 1 else float("nan")
     return m, sd
+
+
+def iou_txt(v: float) -> str:
+    return "—" if math.isnan(v) else f"{v:.4f}"
 
 
 def fmt(m, sd):
@@ -126,18 +145,23 @@ def main():
         if r is None:
             print(f"  (ignoré, pas de metrics.csv exploitable : {d.name})")
             continue
-        groups.setdefault(config_name(d), []).append(r)
+        if r[4] < args.min_epochs:
+            print(f"  (ignoré, {r[4]} époques < --min-epochs {args.min_epochs} : {d.name})")
+            continue
+        groups.setdefault(config_name(d), []).append((r, d.name))
 
     if not groups:
         raise SystemExit("aucun run exploitable")
 
     stats = {}
-    for name, runs in groups.items():
+    for name, entries in groups.items():
+        runs = [r for r, _ in entries]
         best_m, best_sd = mean_sd([r[0] for r in runs])
         last_m, last_sd = mean_sd([r[2] for r in runs])
         iou_m, _ = mean_sd([r[3] for r in runs])
         stats[name] = dict(n=len(runs), best=(best_m, best_sd), last=(last_m, last_sd),
-                           iou=iou_m, epochs=[r[1] for r in runs])
+                           iou=iou_m, epochs=[r[1] for r in runs],
+                           lengths=[(r[4], nom) for r, nom in entries])
 
     # Témoin : celui demandé, sinon le meilleur en moyenne.
     if args.ref:
@@ -193,7 +217,7 @@ def main():
         s = stats[name]
         delta = s["best"][0] - stats[ref]["best"][0]
         if name == ref:
-            print(f"| {name:<34} | {s['n']} | {fmt(*s['best']):^18} | {s['iou']:8.4f} | "
+            print(f"| {name:<34} | {s['n']} | {fmt(*s['best']):^18} | {iou_txt(s['iou']):>8} | "
                   f"{'—':^9} | {'—':^8} | {'—':^8} | {'témoin':^12} |")
             continue
         se_p = sigma * math.sqrt(1 / s["n"] + 1 / stats[ref]["n"])
@@ -211,7 +235,7 @@ def main():
             tw_txt = f"{t_w:+.2f}"
             verdict = ("ÉTABLI" if ok_p and ok_w else
                        "partiel" if ok_p or ok_w else "non établi")
-        print(f"| {name:<34} | {s['n']} | {fmt(*s['best']):^18} | {s['iou']:8.4f} | "
+        print(f"| {name:<34} | {s['n']} | {fmt(*s['best']):^18} | {iou_txt(s['iou']):>8} | "
               f"{delta:+9.4f} | {t_p:^+8.2f} | {tw_txt:^8} | {verdict:^12} |")
 
     print("\nÉpoques des pics par configuration :")
@@ -224,6 +248,24 @@ def main():
               "n'y est pas interprétable :")
         for n in singles:
             print(f"    {n}")
+    # Un run encore en cours a un metrics.csv tronqué : son maximum est bas et
+    # tire la moyenne de son groupe vers le bas, ce qui ferait conclure à tort
+    # qu'une ablation dégrade. On refuse de laisser passer ça en silence.
+    suspects = []
+    for name, s_ in stats.items():
+        longueurs = [n for n, _ in s_["lengths"]]
+        if longueurs and min(longueurs) < 0.8 * max(longueurs):
+            suspects.append((name, s_["lengths"]))
+    if suspects:
+        print("\n⛔ GROUPES HÉTÉROGÈNES — des runs ont bien moins d'époques que")
+        print("   leurs voisins : ils sont vraisemblablement encore en cours, et")
+        print("   leur maximum partiel FAUSSE la moyenne du groupe.")
+        for name, longueurs in suspects:
+            print(f"   {name}")
+            for n_ep, nom in sorted(longueurs):
+                print(f"       {n_ep:>4} époques   {nom}")
+        print("   -> relancer avec --min-epochs (p. ex. 95 pour des runs de 100).")
+
     print("\nVerdicts : ÉTABLI = les deux tests concordent. « partiel » = seule la")
     print("variance mise en commun conclut, pas Welch — il manque des graines, le")
     print("résultat est prometteur mais pas acquis. « appuyé » = groupe à une seule")
