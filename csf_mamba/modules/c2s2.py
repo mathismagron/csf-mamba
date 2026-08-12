@@ -26,6 +26,7 @@ class C2S2Block(nn.Module):
         d_state: int = 16,
         backend: str = "auto",
         distance: str = "l1",
+        mcasf: bool = True,
     ):
         super().__init__()
         if core not in {"chess", "l1"}:
@@ -34,7 +35,8 @@ class C2S2Block(nn.Module):
         self.norm = nn.LayerNorm(channels)
 
         if core == "chess":
-            self.local = MCASF(channels)
+            # nn.Identity convient : MCASF préserve exactement la forme.
+            self.local = MCASF(channels) if mcasf else nn.Identity()
             self.scan = SSMScan(channels, d_state=d_state, backend=backend)
         else:
             self.scan = CSSML1(channels, d_state=d_state, distance=distance)
@@ -54,3 +56,28 @@ class C2S2Block(nn.Module):
         seq = self.scan(self.norm(seq)) + seq
         ya, yb = deinterleave(seq, height, width)
         return ya + yb
+
+
+class ConcatFusion(nn.Module):
+    """Ablation du C²S² ENTIER : concaténation puis 1x1, sans SSM ni damier.
+
+    C'est l'ablation la plus radicale du modèle — elle retire d'un coup le
+    parcours en damier, l'agrégation MCA-SF et le scan sélectif S6, c'est-à-dire
+    toute la contribution architecturale, et les remplace par la fusion la plus
+    banale possible.
+
+    Interface identique à `C2S2Block` : (B,C,H,W) x2 -> (B,C,H,W). Si le modèle
+    s'en tire aussi bien, le C²S² ne contribue rien et le résultat d'efficience
+    tient entièrement au choix du backbone.
+    """
+
+    def __init__(self, channels: int, **_ignored):
+        super().__init__()
+        self.proj = nn.Sequential(
+            nn.Conv2d(2 * channels, channels, kernel_size=1),
+            nn.GroupNorm(1, channels),
+            nn.GELU(),
+        )
+
+    def forward(self, f1: torch.Tensor, f2: torch.Tensor) -> torch.Tensor:
+        return self.proj(torch.cat([f1, f2], dim=1))

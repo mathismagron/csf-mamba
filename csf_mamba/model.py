@@ -20,7 +20,7 @@ from torch import nn
 from .backbone.encoder import STAGE_CHANNELS, build_encoder
 from .decoders.binary import BinaryDecoder
 from .decoders.semantic import SharedSemanticDecoder
-from .modules.c2s2 import C2S2Block
+from .modules.c2s2 import C2S2Block, ConcatFusion
 from .modules.fusion import FFTBranch
 
 
@@ -35,6 +35,10 @@ class CSFMamba(nn.Module):
         fft_stages: tuple[int, ...] = (0, 1),
         channels: tuple[int, ...] = STAGE_CHANNELS,
         decoder_refine: str = "dw",
+        upsample: str = "dysample",
+        fusion: str = "c2s2",
+        cga: bool = True,
+        mcasf: bool = True,
         encoder_kwargs: dict | None = None,
     ):
         super().__init__()
@@ -42,15 +46,22 @@ class CSFMamba(nn.Module):
         self.fft_stages = set(fft_stages)
 
         self.encoder = build_encoder(encoder, **(encoder_kwargs or {}))
+        # `fusion="concat"` retire le C²S² entier — damier, MCA-SF et scan S6 —
+        # au profit d'une concaténation + 1x1. C'est l'ablation de la contribution
+        # architecturale elle-même.
+        block = {"c2s2": C2S2Block, "concat": ConcatFusion}[fusion]
         self.c2s2 = nn.ModuleList(
-            C2S2Block(c, core=core, backend=backend) for c in channels
+            block(c, core=core, backend=backend, mcasf=mcasf) for c in channels
         )
         self.fft = nn.ModuleDict(
             {str(i): FFTBranch(channels[i]) for i in self.fft_stages}
         )
-        self.binary_decoder = BinaryDecoder(channels, num_change, refine=decoder_refine)
+        self.binary_decoder = BinaryDecoder(
+            channels, num_change, refine=decoder_refine, upsample=upsample
+        )
         self.semantic_decoder = SharedSemanticDecoder(
-            channels, num_semantic_classes, num_change, refine=decoder_refine
+            channels, num_semantic_classes, num_change,
+            refine=decoder_refine, upsample=upsample, cga=cga,
         )
 
     def forward(self, img_t1: torch.Tensor, img_t2: torch.Tensor) -> dict:

@@ -56,6 +56,10 @@ LOVASZ="${LOVASZ:-0}"        # poids de la loss Lovász (optimise l'IoU)
 CROP="${CROP:-256}"          # taille du crop d'entraînement (512 = tuile entière)
 BATCH="${BATCH:-8}"          # micro-batch
 ACCUM="${ACCUM:-1}"          # accumulation : batch effectif = BATCH x ACCUM
+FUSION="${FUSION:-c2s2}"     # c2s2 | concat (ablation TOTALE du bloc)
+CGA="${CGA:-1}"              # 0 = retire la Change-Guided Attention
+MCASF="${MCASF:-1}"          # 0 = retire l'agrégation locale MCA-SF
+UPSAMPLE="${UPSAMPLE:-dysample}"   # dysample | bilinear
 CORE="${CORE:-chess}"        # coeur du C²S² : chess (défaut) ou l1
 SEED="${SEED:-42}"            # graine : change TOUT l'aléa (init, ordre, augmentations)
 LAMBDA_DEEP="${LAMBDA_DEEP:-0}"     # supervision profonde des {CM_i} (0 = désactivée)
@@ -77,7 +81,7 @@ DATA_ROOT="$SLURM_TMPDIR/SECOND"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/second_mini_chess_$TAG"
-echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ crop=$CROP batch=$BATCH x accum=$ACCUM enc=$ENCODER dec=$DECODER_REFINE core=$CORE seed=$SEED deep=$LAMBDA_DEEP sek=$LAMBDA_SEK sc=$LAMBDA_SC fft=[$FFT_STAGES] lr=$LR_SCHEDULE epochs=$EPOCHS -> $OUT =="
+echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ crop=$CROP batch=$BATCH x accum=$ACCUM enc=$ENCODER dec=$DECODER_REFINE fusion=$FUSION cga=$CGA mcasf=$MCASF up=$UPSAMPLE core=$CORE seed=$SEED deep=$LAMBDA_DEEP sek=$LAMBDA_SEK sc=$LAMBDA_SC fft=[$FFT_STAGES] lr=$LR_SCHEDULE epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
@@ -87,6 +91,10 @@ python -m scripts.train \
     --decoder-refine "$DECODER_REFINE" \
     --encoder-pretrained "$CKPT" \
     --core "$CORE" \
+    --fusion "$FUSION" \
+    --upsample "$UPSAMPLE" \
+    ${CGA:+$([ "$CGA" = 0 ] && echo --no-cga)} \
+    ${MCASF:+$([ "$MCASF" = 0 ] && echo --no-mcasf)} \
     --backend mamba \
     --crop-size "$CROP" \
     --batch-size "$BATCH" \

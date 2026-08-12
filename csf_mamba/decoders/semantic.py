@@ -9,9 +9,9 @@ décodeur binaire via une CGA résiduelle X·(1+σ(CM)).
 import torch
 from torch import nn
 
-from ..modules.fusion import ResidualCGA
+from ..modules.fusion import ResidualCGA, NoCGA
 from .binary import make_refine
-from .dysample import DySample
+from .dysample import DySample, make_upsampler
 
 
 class SharedSemanticDecoder(nn.Module):
@@ -21,6 +21,8 @@ class SharedSemanticDecoder(nn.Module):
         num_classes: int = 9,
         num_change: int = 2,
         refine: str = "dw",
+        upsample: str = "dysample",
+        cga: bool = True,
     ):
         super().__init__()
         self.channels = channels
@@ -28,14 +30,18 @@ class SharedSemanticDecoder(nn.Module):
         self.tau = nn.ParameterList(
             nn.Parameter(torch.zeros(2, c)) for c in channels
         )
-        self.cga = nn.ModuleList(ResidualCGA(num_change) for _ in channels)
+        self.cga = nn.ModuleList(
+            (ResidualCGA(num_change) if cga else NoCGA()) for _ in channels
+        )
 
         self.ups = nn.ModuleList()
         for i in reversed(range(len(channels) - 1)):
-            self.ups.append(_SemUp(channels[i + 1], channels[i], refine=refine))
+            self.ups.append(
+                _SemUp(channels[i + 1], channels[i], refine=refine, upsample=upsample)
+            )
 
         self.head = nn.Conv2d(channels[0], num_classes, kernel_size=1)
-        self.final_up = DySample(channels[0])
+        self.final_up = make_upsampler(channels[0], upsample)
 
     def _inject(self, feats: list[torch.Tensor], change_maps: list[torch.Tensor], date: int):
         out = []
@@ -62,9 +68,10 @@ class SharedSemanticDecoder(nn.Module):
 
 
 class _SemUp(nn.Module):
-    def __init__(self, in_channels: int, skip_channels: int, refine: str = "dw"):
+    def __init__(self, in_channels: int, skip_channels: int, refine: str = "dw",
+                 upsample: str = "dysample"):
         super().__init__()
-        self.up = DySample(in_channels)
+        self.up = make_upsampler(in_channels, upsample)
         self.reduce = nn.Conv2d(in_channels, skip_channels, kernel_size=1)
         self.refine = make_refine(skip_channels, refine)
 

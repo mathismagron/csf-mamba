@@ -27,6 +27,15 @@ def parse_args():
     p.add_argument("--encoder-pretrained", default=None,
                    help="Chemin du checkpoint ImageNet VMamba (cf. download_pretrained.sh)")
     p.add_argument("--core", default="chess", choices=["chess", "l1"])
+    p.add_argument("--fusion", default="c2s2", choices=["c2s2", "concat"],
+                   help="c2s2 = bloc complet ; concat = ablation TOTALE du C²S² "
+                        "(damier + MCA-SF + scan S6) au profit d'un concat 1x1.")
+    p.add_argument("--no-cga", dest="cga", action="store_false",
+                   help="Retire la Change-Guided Attention du décodeur sémantique.")
+    p.add_argument("--no-mcasf", dest="mcasf", action="store_false",
+                   help="Retire l'agrégation locale MCA-SF du C²S².")
+    p.add_argument("--upsample", default="dysample", choices=["dysample", "bilinear"],
+                   help="Rééchantillonnage des décodeurs : appris ou bilinéaire fixe.")
     p.add_argument("--decoder-refine", default="dw", choices=["dw", "full"],
                    help="Raffinement des décodeurs : depthwise (référence) ou 3x3 complet.")
     p.add_argument("--backend", default="auto", choices=["auto", "mamba", "ref"])
@@ -102,6 +111,8 @@ def main():
         num_semantic_classes=num_classes,
         encoder=args.encoder, core=args.core, backend=args.backend,
         decoder_refine=args.decoder_refine, fft_stages=fft_stages,
+        fusion=args.fusion, cga=args.cga, mcasf=args.mcasf,
+        upsample=args.upsample,
         encoder_kwargs=encoder_kwargs,
     ).to(device)
     print("Stages FFT :", fft_stages if fft_stages else "aucun (branche retirée)")

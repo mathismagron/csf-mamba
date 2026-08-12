@@ -47,3 +47,15 @@ class ResidualCGA(nn.Module):
                 change_map, size=x.shape[-2:], mode="bilinear", align_corners=False
             )
         return x * (1 + torch.sigmoid(self.to_gate(change_map)))
+
+
+class NoCGA(nn.Module):
+    """Ablation de la CGA : la carte de changement n'influence plus la sémantique.
+
+    Même signature que `ResidualCGA`, sans paramètre. Le décodeur sémantique
+    devient alors aveugle au changement — c'est précisément le « Change-aware »
+    du nom du modèle qu'on retire.
+    """
+
+    def forward(self, x: torch.Tensor, change_map: torch.Tensor) -> torch.Tensor:
+        return x

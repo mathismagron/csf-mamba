@@ -9,7 +9,7 @@ le décodeur sémantique via la CGA.
 import torch
 from torch import nn
 
-from .dysample import DySample
+from .dysample import DySample, make_upsampler
 
 
 def make_refine(channels: int, mode: str = "dw") -> nn.Sequential:
@@ -42,9 +42,10 @@ def make_refine(channels: int, mode: str = "dw") -> nn.Sequential:
 class UpBlock(nn.Module):
     """Fusion top-down : upsample le grossier, ajoute le fin, raffine (depthwise)."""
 
-    def __init__(self, in_channels: int, skip_channels: int, refine: str = "dw"):
+    def __init__(self, in_channels: int, skip_channels: int, refine: str = "dw",
+                 upsample: str = "dysample"):
         super().__init__()
-        self.up = DySample(in_channels)
+        self.up = make_upsampler(in_channels, upsample)
         self.reduce = nn.Conv2d(in_channels, skip_channels, kernel_size=1)
         self.refine = make_refine(skip_channels, refine)
 
@@ -56,16 +57,16 @@ class BinaryDecoder(nn.Module):
     """{Z_i} (fin -> grossier) -> Y_BCD (B,2,H,W) et {CM_i} par stage."""
 
     def __init__(self, channels: tuple[int, ...] = (96, 192, 384, 768), num_change: int = 2,
-                 refine: str = "dw"):
+                 refine: str = "dw", upsample: str = "dysample"):
         super().__init__()
         self.ups = nn.ModuleList(
-            UpBlock(channels[i + 1], channels[i], refine=refine) for i in reversed(range(len(channels) - 1))
+            UpBlock(channels[i + 1], channels[i], refine=refine, upsample=upsample) for i in reversed(range(len(channels) - 1))
         )
         # Une tête de changement par stage : sert Y_BCD (stage le plus fin) et {CM_i}.
         self.change_heads = nn.ModuleList(
             nn.Conv2d(c, num_change, kernel_size=1) for c in channels
         )
-        self.final_up = DySample(channels[0])
+        self.final_up = make_upsampler(channels[0], upsample)
         self.num_change = num_change
 
     def forward(self, feats: list[torch.Tensor]) -> dict:

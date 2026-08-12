@@ -48,3 +48,29 @@ class DySample(nn.Module):
             xg, grid, mode="bilinear", padding_mode="border", align_corners=False
         )
         return out.view(b, c, h * s, w * s)
+
+
+class BilinearUp(nn.Module):
+    """Rééchantillonnage bilinéaire fixe — ablation de DySample.
+
+    Même interface et même facteur d'échelle, mais aucun paramètre : les offsets
+    appris de DySample sont remplacés par une grille régulière. Sert à mesurer ce
+    que le rééchantillonnage appris apporte réellement.
+    """
+
+    def __init__(self, channels: int, scale: int = 2):
+        super().__init__()
+        self.scale = scale
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return nn.functional.interpolate(
+            x, scale_factor=self.scale, mode="bilinear", align_corners=False
+        )
+
+
+def make_upsampler(channels: int, mode: str = "dysample") -> nn.Module:
+    if mode == "dysample":
+        return DySample(channels)
+    if mode == "bilinear":
+        return BilinearUp(channels)
+    raise ValueError(f"mode de rééchantillonnage inconnu : {mode!r}")
