@@ -149,8 +149,23 @@ def main():
     _, num_classes = DATASETS[args.dataset]
     model = CSFMamba(num_semantic_classes=num_classes,
                      encoder=args.encoder, core=args.core, backend="mamba",
-                     decoder_refine=args.decoder_refine)
+                     decoder_refine=args.decoder_refine, fusion=args.fusion,
+                     cga=args.cga, mcasf=args.mcasf, upsample=args.upsample)
     log("modèle instancié sur CPU")
+
+    # Garde-fou : vérifier que le modèle CONSTRUIT correspond à ce qui est demandé.
+    # Un paramètre accepté par argparse mais oublié dans la construction produit un
+    # chiffre faux sous une bannière rassurante — c'est arrivé deux fois. On préfère
+    # un plantage à un nombre plausible et faux.
+    attendu = {"c2s2": "C2S2Block", "concat": "ConcatFusion"}[args.fusion]
+    obtenu = type(model.c2s2[0]).__name__
+    if obtenu != attendu:
+        raise SystemExit(f"⛔ --fusion {args.fusion} demandé mais le modèle contient "
+                         f"{obtenu} au lieu de {attendu}")
+    ventilation = {nom: sum(q.numel() for q in mod.parameters())
+                   for nom, mod in model.named_children()}
+    ventilation["total"] = sum(q.numel() for q in model.parameters())
+    log(f"modèle vérifié — c2s2 = {obtenu} | {ventilation}")
     model = model.cuda().eval()
     log("modèle transféré sur GPU")
 
