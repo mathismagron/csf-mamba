@@ -14,14 +14,19 @@ performance égale face au modèle de taille comparable.
   `documentation/journal-de-bord.md` — matière première du rapport
 - Lancer un entraînement / une évaluation : `RUN.md`
 
-## État actuel (12 août 2026)
+## État actuel (13 août 2026)
 
 Pipeline complet validé sur GPU (Narval, A100), **20,8 M paramètres**, deux datasets
 supportés et validés sur données réelles.
 
 **Résultat de référence — SECOND** (split officiel, code de métriques verbatim).
 GMACs mesurés en 512×512 avec fvcore, handlers SSM inclus — même convention que
-ChangeMamba, qui étiquette ses sorties fvcore « GFLOPs » alors qu'il s'agit de MACs :
+ChangeMamba, qui étiquette ses sorties fvcore « GFLOPs » alors qu'il s'agit de
+MACs. **Comptage audité** (13 août) : une seule opération non comptée porte des
+MACs, la FFT2, bornée à 0,126 GMACs soit 0,3 % du total ; tous les modules
+paramétrés sont dans le graphe, la projection d'entrée des blocs Mamba étant
+comptée via `aten::matmul` — 4,832 GMACs analytiques contre 4,832 mesurés. Voir
+la phase 10 du journal.
 
 | Méthode | Params | GMACs | OA | Fscd | mIoU | **SeK** |
 |---|---|---|---|---|---|---|
@@ -31,7 +36,7 @@ ChangeMamba, qui étiquette ses sorties fvcore « GFLOPs » alors qu'il s'agit d
 | CSF-Mamba, recette initiale | 20,80 M | 41,30 | 87,57 | 62,10 | 72,00 | 21,03 ± 1,05 |
 | **CSF-Mamba, sans loss SeK** | **20,80 M** | **41,30** | — | — | — | **22,28 ± 0,19** |
 | **CSF-Mamba, meilleure config ‡** | **20,80 M** | **41,30** | — | — | — | **22,64 ± 0,20** |
-| CSF-Mamba **sans C²S²**, sans loss SeK | **16,48 M** | à mesurer | — | — | — | 22,12 ± 0,11 |
+| CSF-Mamba **sans C²S²**, sans loss SeK | **16,48 M** | **31,42** | — | — | — | 22,12 ± 0,11 |
 | CSF-Mamba, décodeur élargi | 24,27 M | 53,45 | 87,24 | 61,67 | 71,70 | 20,89 † |
 
 *(SeK en italique = checkpoints publiés par ChangeMamba, évalués par eux, sans
@@ -55,9 +60,15 @@ configuration au changement unique, **+2,5 %** pour la meilleure.
 ⚠️ **Et le C²S² ne contribue pas.** Le retirer entièrement — damier, MCA-SF et
 scan S6 — coûte −0,0016 de SeK, avec un intervalle de confiance à 95 %
 [−0,0036 ; **+0,0004**] : ce bloc ne *peut pas* apporter plus de quatre
-dix-millièmes. Il pèse pourtant **4,31 M de paramètres**, soit 20,7 % du modèle.
-Le variant allégé à 16,48 M est donc meilleur sur l'axe efficience, à performance
-indistinguable. Face à
+dix-millièmes. Il pèse pourtant **4,31 M de paramètres et 9,88 GMACs**.
+
+| | vs MambaSCD-Tiny | vs Mamba-FCS |
+|---|---|---|
+| meilleure config (20,80 M, 41,30) | 96,7 % params, **56,3 % calcul**, 102,5 % SeK | 11,0 % params, 15,7 % calcul, 88,8 % SeK |
+| **sans C²S²** (16,48 M, 31,42) | **76,6 % params, 42,8 % calcul**, 100,2 % SeK | 8,7 % params, 11,9 % calcul, 86,7 % SeK |
+
+La variante allégée offre **la performance de MambaSCD-Tiny pour un quart de
+paramètres en moins et 57 % de calcul en moins**. Face à
 Mamba-FCS : **6,4× moins de calcul et 9,1× moins de paramètres** pour 87 % de son
 SeK. Ni le retrait de la loss SeK ni la supervision profonde ne coûtent quoi que
 ce soit en inférence — paramètres et GMACs sont inchangés.

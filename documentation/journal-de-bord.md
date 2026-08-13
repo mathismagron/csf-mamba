@@ -1884,6 +1884,10 @@ tourne sur 7 graines.
 | Supervision profonde | +0,0022, établi mais faible |
 | Crops 512, LR constant 200 ép. | établis
 
+---
+
+## Phase 10 — Audit et consolidation (13 août 2026)
+
 ### Audit du comptage de GMACs (13 août)
 
 Question du maître de stage : **le comptage est-il vraiment exhaustif ?** C'est
@@ -1982,6 +1986,78 @@ correspond plus au papier serait de la sur-revendication.
 > par ChangeMamba, non reproductibles depuis leur dépôt actuel car celui-ci a été
 > refactorisé depuis la publication, ce que confirme aussi l'incompatibilité de
 > leur propre checkpoint avec leur propre code.
+
+### GMACs de la variante allégée — mesurés et vérifiés (13 août)
+
+| | Params | GMACs |
+|---|---|---|
+| CSF-Mamba complet | 20,80 M | 41,30 |
+| **CSF-Mamba sans C²S²** | **16,48 M** | **31,42** |
+
+Le compte de paramètres correspond exactement au log d'entraînement des runs
+`noc2s2` (`total: 16483643`), et la baisse de GMACs s'explique **poste par poste** :
+
+    41,30  − 4,84 (MambaInnerFn)  − 4,83 (matmul / in_proj)
+           − 0,16 (net sur conv)  − 0,03 (layer_norm)  − 0,01 (group_norm)
+         = 31,43            mesuré : 31,42
+
+`MambaInnerFn` et `matmul` disparaissent entièrement : ils appartenaient au C²S².
+`einsum` (3,55) subsiste, il vient du backbone.
+
+Le poste `conv` mérite un mot car il **baisse** alors que `ConcatFusion` ajoute
+des convolutions 1×1. Le C²S² contenait aussi le MCA-SF, dont les branches
+dilatées coûtaient 1,367 GMACs, contre 1,208 pour les 1×1 qui les remplacent —
+net **−0,159**, contre −0,150 mesuré. Chaque poste s'explique ; rien ne flotte.
+
+### Positionnement final sur SECOND (13 août)
+
+| Méthode | Params | GMACs | SeK |
+|---|---|---|---|
+| Mamba-FCS | 189,54 M | 263,15 | 25,50 |
+| MambaSCD-Tiny | 21,51 M | 73,42 | 22,08 |
+| **CSF-Mamba**, meilleure config | 20,80 M | 41,30 | **22,64 ± 0,20** (n = 7) |
+| **CSF-Mamba sans C²S²** | **16,48 M** | **31,42** | 22,12 ± 0,11 (n = 4) |
+
+| | vs MambaSCD-Tiny | vs Mamba-FCS |
+|---|---|---|
+| meilleure config | 96,7 % params, **56,3 % calcul**, 102,5 % SeK | 11,0 % params, 15,7 % calcul, 88,8 % SeK |
+| sans C²S² | **76,6 % params, 42,8 % calcul**, 100,2 % SeK | 8,7 % params, 11,9 % calcul, 86,7 % SeK |
+
+La variante allégée offre **la performance de MambaSCD-Tiny pour un quart de
+paramètres en moins et 57 % de calcul en moins**. C'est nettement plus fort que
+le « −3 % de paramètres, −44 % de calcul » du 11 août — et obtenu en **retirant**
+la contribution architecturale du projet.
+
+*(Le 22,12 vient des 4 graines `noc2s2`, entraînées en cosine sur 100 époques.
+Les 7 graines de `lean` — même architecture, recette optimisée — sont en cours.
+Si elles se comportent comme `best` face à `nosek`, la variante allégée devrait
+atteindre 22,4-22,5.)*
+
+### ⚠️ Troisième occurrence du même défaut : un paramètre accepté mais non propagé
+
+Le job 836334 a affiché en bannière `fusion=concat` **tout en mesurant le modèle
+complet** — 20,80 M et 41,30 GMACs. Le sbatch passait bien `--fusion`, `argparse`
+l'acceptait, mais la construction du modèle l'ignorait : le remplacement de code
+visait une chaîne modifiée entre-temps, et `str.replace` ne signale rien quand son
+motif est absent.
+
+C'est la **troisième fois** en une journée qu'un paramètre accepté mais non
+propagé produit un nombre crédible et faux :
+
+| # | Symptôme | Ce qui l'a révélé |
+|---|---|---|
+| 1 | `FUSION` exporté vers un script qui l'ignorait | la bannière affichait `chess` |
+| 2 | 112 lignes du journal supprimées, section jamais réinsérée | un `grep -c` de contrôle |
+| 3 | `--fusion` accepté mais absent de la construction | les paramètres à 20,80 M |
+
+Le point commun n'est pas la distraction : **rien ne vérifiait le résultat**.
+D'où le garde-fou ajouté à `count_gmacs` — il compare le type du bloc réellement
+construit à celui demandé, s'arrête en cas de désaccord, et journalise la
+ventilation des paramètres. Un plantage vaut mieux qu'un nombre plausible.
+
+**Règle générale à retenir** : tout script dont le résultat est un chiffre doit
+afficher la configuration qu'il a *réellement* construite, et non celle qu'on lui
+a demandée. La ligne `== config` des sbatch d'entraînement suit le même principe.
 
 ### Deux réserves à conserver dans le rapport
 
