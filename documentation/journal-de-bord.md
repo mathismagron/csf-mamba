@@ -1884,6 +1884,105 @@ tourne sur 7 graines.
 | Supervision profonde | +0,0022, établi mais faible |
 | Crops 512, LR constant 200 ép. | établis
 
+### Audit du comptage de GMACs (13 août)
+
+Question du maître de stage : **le comptage est-il vraiment exhaustif ?** C'est
+l'argument central du projet, il ne pouvait pas reposer sur « on a ajouté des
+handlers ». Quatre vérifications, dont une contre une référence externe.
+
+#### Notre comptage : validé
+
+**Opérations non comptées.** fvcore ignore en silence ce qu'il ne sait pas
+traiter ; le script n'en affichait que les dix premières, on les liste désormais
+toutes. Sur quinze, **une seule porte des MACs** : `aten::fft_fft2`, bornée
+analytiquement à **0,126 GMACs, soit 0,30 % du total**. Les quatorze autres sont
+des additions, produits élément par élément, activations et permutations — dont
+`CrossScan`/`CrossMerge` de VMamba, qui ne sont que de la réorganisation de
+tenseurs. Total majoré FFT comprises : **41,42 GMACs**.
+
+**Modules jamais appelés — fausse alerte, prouvée.** L'audit signalait les vingt
+sous-modules des C²S² (`in_proj`, `conv1d`, `x_proj`, `dt_proj`, `out_proj`).
+Explication : `mamba_ssm` n'appelle pas `self.in_proj(x)` mais
+`self.in_proj.weight @ x`. Le module n'apparaît donc pas dans le graphe, alors
+que son calcul y figure bien, sous forme d'`aten::matmul`. Vérification
+analytique de la projection d'entrée :
+
+| stage | longueur de séquence | projection | GMACs |
+|---|---|---|---|
+| 0 | 32 768 | 96 → 384 | 1,208 |
+| 1 | 8 192 | 192 → 768 | 1,208 |
+| 2 | 2 048 | 384 → 1536 | 1,208 |
+| 3 | 512 | 768 → 3072 | 1,208 |
+| | | **total** | **4,832** |
+
+`aten::matmul` mesuré : **4,832 GMACs**. Concordance à la troisième décimale.
+Rien n'échappe au comptage.
+
+**Conclusion : 41,30 GMACs est exhaustif au sens des MACs**, et 41,42 en majorant
+les FFT.
+
+#### La référence publiée n'est pas reproductible — et ce n'est pas une erreur
+
+Le test décisif consistait à appliquer nos handlers au modèle de ChangeMamba,
+construit depuis leur code, et à comparer à leur table VIII. Il échoue :
+
+| | params publiés | mesurés | GMACs publiés | mesurés |
+|---|---|---|---|---|
+| MambaSCD-Tiny | 21,51 | **37,13** (+72,6 %) | 73,42 | **115,44** (+57,2 %) |
+| MambaSCD-Small | 54,28 | 58,51 (+7,8 %) | 146,70 | 159,79 (+8,9 %) |
+| MambaSCD-Base | 89,99 | 97,03 (+7,8 %) | 211,55 | 230,21 (+8,8 %) |
+
+Small et Base présentent un décalage **systématique et proportionnel de +7,8 %**.
+Tiny est à +72,6 %, ce qui relève d'autre chose. Reconstruction par variantes :
+
+| Configuration | Params | vs publié |
+|---|---|---|
+| Tiny du dépôt actuel — `depths [2,2,4,2]`, MLP actif | 37,13 M | +72,6 % |
+| Tiny, **MLP désactivé** | 19,57 M | −9,0 % |
+| Tiny, MLP désactivé, `depths [2,2,5,2]` | 20,33 M | −5,5 % |
+| Tiny, MLP désactivé, `depths [2,2,9,2]` | 23,38 M | +8,7 % |
+
+**Le point décisif : 21,51 M n'est atteignable qu'avec le MLP désactivé.** Avec le
+MLP actif, le plancher est à 37 M. La valeur publiée tombe entre nos deux
+reconstructions à MLP coupé.
+
+**Explication, et elle est banale : le dépôt public a évolué depuis la
+publication.** On en a déjà la preuve indépendante du 10 août — leur checkpoint
+publié ne se charge plus dans leur propre code actuel, 558 poids manquants et 590
+inattendus, le décodeur ayant été renommé (`st_block_41` → `stage_blocks.0.cat`).
+Les fichiers de configuration ont bougé de la même façon. **Les auteurs n'ont ni
+menti ni fait d'erreur** : ils ont publié des chiffres justes pour leur code
+d'alors, et le dépôt a continué à vivre. C'est le cas le plus courant en
+reproductibilité, et c'est pourquoi une table publiée est difficile à revérifier
+deux ans après.
+
+#### Ce que cela apporte à la comparaison
+
+Que 21,51 M exige le MLP désactivé signifie que **leur MambaSCD-Tiny et notre
+CSF-Mamba reposent sur le même choix architectural** — un backbone VMamba-Tiny
+avec la branche MLP coupée. C'est exactement la découverte de la phase 1, quand
+le « VMamba-Tiny ~14 M » du plan s'était révélé être la config `mini` (décision
+D3). Les deux équipes ont fait le même arbitrage, et la comparaison **20,80 M
+contre 21,51 M** oppose donc deux modèles de même famille et de même taille.
+
+**Décision : on conserve leurs chiffres publiés**, pas notre reconstruction à
+37,13 M / 115,44 GMACs. Deux raisons. C'est la référence que cite la littérature
+— Mamba-FCS reprend d'ailleurs leur ligne Base à l'identique dans sa table VI.
+Et c'est **la comparaison la plus défavorable pour nous** : revendiquer −44 % de
+paramètres sur la base d'une reconstruction faite depuis un dépôt qui ne
+correspond plus au papier serait de la sur-revendication.
+
+#### Formulation pour le rapport
+
+> Notre comptage de 41,30 GMACs est exhaustif au sens des MACs. Une seule
+> opération non comptée en porte, la FFT2, bornée à 0,126 GMACs soit 0,3 % du
+> total ; tous les modules paramétrés sont dans le graphe, la projection d'entrée
+> des blocs Mamba étant comptée via `aten::matmul` — vérifié analytiquement à
+> 4,832 GMACs contre 4,832 mesurés. La comparaison reprend les chiffres publiés
+> par ChangeMamba, non reproductibles depuis leur dépôt actuel car celui-ci a été
+> refactorisé depuis la publication, ce que confirme aussi l'incompatibilité de
+> leur propre checkpoint avec leur propre code.
+
 ### Deux réserves à conserver dans le rapport
 
 `best` est la meilleure de treize configurations essayées. Consolidée à 7 graines
@@ -1894,8 +1993,11 @@ recette d'entraînement optimisée par-dessus.
 
 Le 0,2208 de ChangeMamba est un chiffre publié **sans écart-type**. Nous ignorons
 sa variabilité, et l'évaluation de leur checkpoint avec notre code reste bloquée
-par un décalage de version du dépôt tiers. La comparaison est donc entre notre
-moyenne mesurée et leur point publié.
+par un décalage de version du dépôt tiers — décalage désormais **caractérisé**
+(audit du 13 août) : leur dépôt public a été refactorisé après publication, ce qui
+rend irreproductibles à la fois leur checkpoint et leur table de complexité. La
+comparaison est donc entre notre moyenne mesurée sur 7 graines et leur point
+publié, sans que cela mette en cause l'exactitude ni de l'un ni de l'autre.
 
 ---
 
