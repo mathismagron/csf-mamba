@@ -40,6 +40,12 @@ def parse_args():
     p.add_argument("--encoder", default="vmamba_mini", choices=["conv", "vmamba_mini", "vmamba_tiny"])
     p.add_argument("--core", default="chess", choices=["chess", "l1"])
     p.add_argument("--decoder-refine", default="dw", choices=["dw", "full"])
+    # Doivent reproduire l'architecture du checkpoint, sinon le state_dict ne se
+    # recharge pas : un modèle `concat` n'a pas les mêmes tenseurs qu'un `c2s2`.
+    p.add_argument("--fusion", default="c2s2", choices=["c2s2", "concat"])
+    p.add_argument("--no-cga", dest="cga", action="store_false")
+    p.add_argument("--no-mcasf", dest="mcasf", action="store_false")
+    p.add_argument("--upsample", default="dysample", choices=["dysample", "bilinear"])
     p.add_argument("--backend", default="mamba", choices=["auto", "mamba", "ref"])
     p.add_argument("--split", default="val")
     p.add_argument("--batch-size", type=int, default=4)
@@ -135,7 +141,9 @@ def main():
     dataset_cls, num_classes = DATASETS[args.dataset]
     model = CSFMamba(num_semantic_classes=num_classes,
                      encoder=args.encoder, core=args.core, backend=args.backend,
-                     decoder_refine=args.decoder_refine).to(device)
+                     decoder_refine=args.decoder_refine, fusion=args.fusion,
+                     cga=args.cga, mcasf=args.mcasf,
+                     upsample=args.upsample).to(device)
     load_checkpoint(model, args.checkpoint, device)
     model.eval()
 

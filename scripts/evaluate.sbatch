@@ -30,10 +30,15 @@ DATASET="${DATASET:-second}"
 DATA="${DATA:-$SCRATCH/SECOND}"
 SPLIT="${SPLIT:-test}"
 CKPT_NAME="${CKPT_NAME:-best.pt}"
+VIZ="${VIZ:-8}"   # nombre de panneaux d'illustration sauvés
 # Doivent correspondre à l'entraînement du checkpoint, sinon le state_dict ne
 # se recharge pas (le décodeur élargi n'a pas la même forme que la référence).
 ENCODER="${ENCODER:-vmamba_mini}"
 DECODER_REFINE="${DECODER_REFINE:-dw}"
+FUSION="${FUSION:-c2s2}"
+CGA="${CGA:-1}"
+MCASF="${MCASF:-1}"
+UPSAMPLE="${UPSAMPLE:-dysample}"
 
 module load python/3.11 cuda/12.2
 source "$SCRATCH/csf-venv-cu12/bin/activate"
@@ -46,5 +51,10 @@ python -m scripts.evaluate \
     --checkpoint "$SCRATCH/csf-mamba-runs/$RUN/$CKPT_NAME" \
     --encoder "$ENCODER" \
     --decoder-refine "$DECODER_REFINE" \
+    --fusion "$FUSION" \
+    --upsample "$UPSAMPLE" \
+    ${CGA:+$([ "$CGA" = 0 ] && echo --no-cga)} \
+    ${MCASF:+$([ "$MCASF" = 0 ] && echo --no-mcasf)} \
     --backend mamba \
+    --viz-samples "$VIZ" \
     --output "$SCRATCH/csf-mamba-runs/$RUN/eval_$SPLIT"
