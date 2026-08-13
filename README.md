@@ -36,7 +36,7 @@ la phase 10 du journal.
 | CSF-Mamba, recette initiale | 20,80 M | 41,30 | 87,57 | 62,10 | 72,00 | 21,03 ± 1,05 |
 | **CSF-Mamba, sans loss SeK** | **20,80 M** | **41,30** | — | — | — | **22,28 ± 0,19** |
 | **CSF-Mamba, meilleure config ‡** | **20,80 M** | **41,30** | — | — | — | **22,64 ± 0,20** |
-| CSF-Mamba **sans C²S²**, sans loss SeK | **16,48 M** | **31,42** | — | — | — | 22,12 ± 0,11 |
+| **CSF-Mamba `lean`** (sans C²S²) | **16,48 M** | **31,42** | — | — | — | **22,30 ± 0,18** |
 | CSF-Mamba, décodeur élargi | 24,27 M | 53,45 | 87,24 | 61,67 | 71,70 | 20,89 † |
 
 *(SeK en italique = checkpoints publiés par ChangeMamba, évalués par eux, sans
@@ -65,10 +65,11 @@ dix-millièmes. Il pèse pourtant **4,31 M de paramètres et 9,88 GMACs**.
 | | vs MambaSCD-Tiny | vs Mamba-FCS |
 |---|---|---|
 | meilleure config (20,80 M, 41,30) | 96,7 % params, **56,3 % calcul**, 102,5 % SeK | 11,0 % params, 15,7 % calcul, 88,8 % SeK |
-| **sans C²S²** (16,48 M, 31,42) | **76,6 % params, 42,8 % calcul**, 100,2 % SeK | 8,7 % params, 11,9 % calcul, 86,7 % SeK |
+| **`lean`, sans C²S²** (16,48 M, 31,42) | **76,6 % params, 42,8 % calcul, 101,0 % SeK** | 8,7 % params, 11,9 % calcul, 87,5 % SeK |
 
-La variante allégée offre **la performance de MambaSCD-Tiny pour un quart de
-paramètres en moins et 57 % de calcul en moins**. Face à
+La variante allégée **dépasse** MambaSCD-Tiny — IC 95 % de sa moyenne
+[0,2213 ; 0,2247], entièrement au-dessus de 0,2208 — avec **23 % de paramètres
+en moins et 57 % de calcul en moins**. Mesuré sur 7 graines. Face à
 Mamba-FCS : **6,4× moins de calcul et 9,1× moins de paramètres** pour 87 % de son
 SeK. Ni le retrait de la loss SeK ni la supervision profonde ne coûtent quoi que
 ce soit en inférence — paramètres et GMACs sont inchangés.

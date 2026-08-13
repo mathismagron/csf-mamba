@@ -2033,6 +2033,76 @@ Les 7 graines de `lean` — même architecture, recette optimisée — sont en c
 Si elles se comportent comme `best` face à `nosek`, la variante allégée devrait
 atteindre 22,4-22,5.)*
 
+### La variante allégée — 7 graines, résultat final (13 août)
+
+`lean` : sans C²S², sans loss SeK, LR constant sur 200 époques.
+**SeK 0,2230 ± 0,0018 sur 7 graines**, IC 95 % de la moyenne **[0,2213 ; 0,2247]**.
+
+#### ⚠️ Piège de lecture : `lean` et `best` diffèrent par DEUX facteurs
+
+La commande de lancement de `lean` omettait `LAMBDA_DEEP`. Les deux configurations
+ne diffèrent donc pas seulement par le C²S² :
+
+| | C²S² | supervision profonde |
+|---|---|---|
+| `best` | ✅ | ✅ (λ = 1,0) |
+| `lean` | ❌ | ❌ |
+
+L'écart `lean` − `best` de −0,0034 (établi) mélange les deux. Décomposé en
+comparaisons **appariées**, toutes à 7 graines de chaque côté :
+
+| Comparaison | Δ | t comm. / Welch | Verdict |
+|---|---|---|---|
+| retrait du C²S² *(seul facteur)* | −0,0012 | −0,98 / −1,51 | **non établi** |
+| ajout de la supervision profonde *(seul facteur)* | +0,0022 | +1,79 / +2,55 | non établi |
+| `lean` vs `best` *(les deux à la fois)* | −0,0034 | −2,77 / −3,34 | établi |
+
+**La conclusion sur le C²S² tient, et se renforce.** Trois mesures indépendantes :
+−0,0016 en cosine 100 (4 graines), −0,0012 en constant 200 (7 graines contre 7),
+et un intervalle de confiance plafonnant à +0,0004. Le bloc ne contribue pas de
+façon détectable, dans aucun des deux régimes, pour **4,31 M de paramètres et
+9,88 GMACs**.
+
+Leçon de méthode, redite parce qu'elle a failli coûter une conclusion fausse :
+**une comparaison n'a de sens que si un seul facteur change.** Le tableau brut
+était juste ; c'est son interprétation directe qui aurait été erronée.
+
+#### Positionnement de la variante allégée
+
+| | Params | GMACs | SeK |
+|---|---|---|---|
+| MambaSCD-Tiny | 21,51 M | 73,42 | 22,08 |
+| **CSF-Mamba `lean`** | **16,48 M** | **31,42** | **22,30 ± 0,18** (n = 7) |
+
+| | vs MambaSCD-Tiny | vs Mamba-FCS |
+|---|---|---|
+| paramètres | **76,6 %** | 8,7 % |
+| calcul | **42,8 %** | 11,9 % |
+| SeK | **101,0 %** | 87,5 % |
+
+L'intervalle de confiance de la moyenne, [0,2213 ; 0,2247], est **entièrement
+au-dessus** du 0,2208 de MambaSCD-Tiny. La variante allégée le dépasse donc avec
+**23 % de paramètres en moins et 57 % de calcul en moins**.
+
+C'est le résultat d'efficience le plus fort du projet — et il est obtenu en
+**retirant** la contribution architecturale qui donnait son nom au modèle.
+
+#### Le modèle est-il sous-entraîné à 200 époques ?
+
+Question soulevée par une graine de `best` culminant à l'époque 178. La bonne
+lecture n'est pas la valeur extrême mais **la position médiane des pics** :
+
+| | pic médian | étendue |
+|---|---|---|
+| `best` (constant 200) | 58 % de l'entraînement | 42 – 89 % |
+| `lean` (constant 200) | 52 % | 16 – 71 % |
+| constant 100 — sous-entraînement **avéré** | **90 %** | 87 – 95 % |
+
+Un modèle réellement sous-entraîné voit **toutes** ses graines culminer en fin de
+parcours — c'était le cas du LR constant sur 100 époques, où doubler la durée a
+rapporté +0,0138 (établi). Ici les pics sont répartis sur toute la plage, médiane
+à mi-parcours. **Rien ne justifie de prolonger à 300 époques.**
+
 ### ⚠️ Troisième occurrence du même défaut : un paramètre accepté mais non propagé
 
 Le job 836334 a affiché en bannière `fusion=concat` **tout en mesurant le modèle
