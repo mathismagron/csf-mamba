@@ -160,38 +160,47 @@ La plupart de ces runs n'en ont qu'une : détecter 0,010 en demanderait 7 de cha
 côté, détecter 0,020 en demande 2. Le σ n'a été mesuré que sur SECOND en crops 512 ;
 son application à Hi-UCD est une **hypothèse**, faute de réplicat sur ce dataset.
 
-**Deux effets seulement résistent** — et ce sont les deux plus gros, tous deux
-liés aux **données** plutôt qu'à l'architecture ou à l'optimisation : calibrer la
-compensation de déséquilibre sur le taux de changement du dataset, et
-sur-échantillonner les tuiles porteuses de signal.
+**Les effets établis, au terme des ablations.** Par ordre d'ampleur :
 
-Le même réglage anti-déséquilibre est **décisif sur SECOND et neutre sur Hi-UCD** :
-il doit être calibré sur le taux de changement du dataset.
+| Effet | Δ SeK | Nature |
+|---|---|---|
+| Retirer la loss SeK | **+0,0125** | loss |
+| Retirer la compensation de déséquilibre (SECOND) | **+0,032** | loss, calibrée sur les données |
+| Sur-échantillonner les tuiles changées (Hi-UCD) | **+0,037** | données |
+| DySample plutôt que bilinéaire | **+0,0074** | architecture |
+| LR constant sur 200 époques | +0,0098 | optimisation |
+| Crops 512 plutôt que 256 | +0,022 | résolution |
+
+**La compensation de déséquilibre doit être calibrée sur le taux de changement du
+dataset.** Elle est indispensable sur Hi-UCD (1,36 % de pixels changés — sans elle
+le modèle s'effondre à SeK 0,000) et **nuisible sur SECOND** (20,07 %, classes déjà
+presque équilibrées) : avec une pondération 5 plus Dice, le modèle prédisait 30,9 %
+de changement pour 20,1 % réels, ce qui détruisait la précision. La retirer a
+rapporté +0,032. Sur Hi-UCD, faire varier le poids de 20 à 5 n'a rien changé
+(+0,0003) : la compensation y est nécessaire quelle que soit sa valeur exacte.
+
+Ces réglages avaient été transportés de Hi-UCD vers SECOND par réflexe. **Un
+réglage anti-déséquilibre ne se recopie pas d'un jeu de données à l'autre.**
 
 **Le plafond de l'IoU du changement.** Reconstruit depuis `IoU_fg = 1 + ln(SeK/κ)`,
-il vaut **0,546 à 0,562 sur les sept configurations SECOND** — un étalement de
-0,016, deux fois moindre que celui du SeK (0,032). Trois modèles pourtant très
-différents y convergent au même point : référence 20,6 M → **0,5621**, encodeur
-élargi 36,9 M → **0,5594**, décodeur élargi 24,1 M → **0,5597**. Le plus petit est
-le meilleur. Ce qui sépare une bonne configuration d'une mauvaise sur SECOND n'est
-donc **pas la délimitation du changement** mais la qualité sémantique (κ, Fscd).
-Cinq familles de leviers — loss, données, résolution, capacité d'encodeur, capacité
-de décodeur — laissent ce plafond intact : il n'est imputable ni à l'optimisation,
-ni à la capacité, où qu'on la place.
-
-**Constat transversal :** les seuls leviers efficaces touchent aux **données**
-(densité du signal) et à la **résolution** — jamais à la loss. Cohérent avec le fait
-que la somme des erreurs de localisation (FN+FP) reste constante (~100 M sur SECOND)
-quelle que soit la loss : celles-ci déplacent le point de fonctionnement
-précision/rappel sans améliorer la courbe.
+il est resté entre **0,546 et 0,562** sur les configurations de juillet et début
+août — encodeur doublé, décodeur élargi, toutes les variantes de loss — avant de
+monter à **0,5732** avec le retrait de la loss SeK puis **0,5756** pour la
+meilleure configuration. Cinq familles de leviers (loss de localisation, données,
+résolution, capacité d'encodeur, capacité de décodeur) l'avaient laissé intact ;
+c'est le retrait d'un terme de loss nuisible qui l'a débloqué.
 
 **Hi-UCD — conclusion.** Les quatre familles de leviers (loss, données, capacité,
-résolution) sont épuisées : le meilleur SeK y plafonne à **0,053** contre 0,214 sur
-SECOND. Doubler le backbone *dégrade*, la résolution 512 *dégrade*, et l'époque du pic
-recule dès qu'on augmente la pression sur les données. **Le plafond est une propriété
-du jeu de données** — 1 130 tuiles porteuses de signal sur 12 000 — non du modèle.
-Hi-UCD est clos comme terrain d'optimisation, conservé comme dataset d'ablation et
-résultat de caractérisation.
+résolution) y sont épuisées : le meilleur SeK plafonne à **0,053** contre 0,226 sur
+SECOND. Doubler le backbone *dégrade*, la résolution 512 *dégrade*, et l'époque du
+pic recule dès qu'on augmente la pression sur les données. **Le plafond est une
+propriété du jeu de données** — 1 130 tuiles porteuses de signal sur 12 000 — non
+du modèle. Hi-UCD est clos comme terrain d'optimisation, conservé comme dataset
+d'ablation et résultat de caractérisation.
+
+⚠️ Le retrait de la loss SeK n'a **jamais été testé sur Hi-UCD**. C'est pourtant
+le dataset où le kappa négatif — cause des NaN de cette loss — était le plus
+marqué. La conclusion sur Hi-UCD précède cette découverte et resterait à revoir.
 
 Chronologie détaillée, décisions et diagnostics : `documentation/journal-de-bord.md`.
 
