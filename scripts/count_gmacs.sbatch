@@ -30,6 +30,10 @@ set -euo pipefail
 SIZE="${SIZE:-512}"
 ENCODERS="${ENCODERS:-vmamba_mini vmamba_tiny}"
 DECODER_REFINE="${DECODER_REFINE:-dw}"
+FUSION="${FUSION:-c2s2}"           # c2s2 | concat (retire tout le bloc)
+CGA="${CGA:-1}"                    # 0 = sans Change-Guided Attention
+MCASF="${MCASF:-1}"                # 0 = sans MCA-SF
+UPSAMPLE="${UPSAMPLE:-dysample}"   # dysample | bilinear
 
 echo "== démarrage $(date +%H:%M:%S) sur $(hostname)"
 module load python/3.11 cuda/12.2
@@ -40,8 +44,12 @@ nvidia-smi --query-gpu=name,memory.used --format=csv,noheader
 cd "$HOME/csf-mamba"
 
 for ENC in $ENCODERS; do
-    echo "########## $ENC / décodeur $DECODER_REFINE (taille $SIZE) — début $(date +%H:%M:%S)"
+    echo "########## $ENC / fusion=$FUSION / décodeur $DECODER_REFINE / up=$UPSAMPLE / cga=$CGA mcasf=$MCASF (taille $SIZE) — début $(date +%H:%M:%S)"
     python -u -m scripts.count_gmacs --encoder "$ENC" --size "$SIZE" --dataset second \
-        --decoder-refine "$DECODER_REFINE"
+        --decoder-refine "$DECODER_REFINE" \
+        --fusion "$FUSION" \
+        --upsample "$UPSAMPLE" \
+        ${CGA:+$([ "$CGA" = 0 ] && echo --no-cga)} \
+        ${MCASF:+$([ "$MCASF" = 0 ] && echo --no-mcasf)}
     echo "########## $ENC terminé $(date +%H:%M:%S)"
 done

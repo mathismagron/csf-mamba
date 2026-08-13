@@ -60,6 +60,13 @@ def parse_args():
                    choices=["conv", "vmamba_mini", "vmamba_tiny"])
     p.add_argument("--core", default="chess", choices=["chess", "l1"])
     p.add_argument("--decoder-refine", default="dw", choices=["dw", "full"])
+    # Mêmes ablations que train.py : sans elles, on mesurerait le modèle complet
+    # en croyant mesurer la variante — l'export d'une variable que le script
+    # ignore ne produit aucune erreur, juste un chiffre faux.
+    p.add_argument("--fusion", default="c2s2", choices=["c2s2", "concat"])
+    p.add_argument("--no-cga", dest="cga", action="store_false")
+    p.add_argument("--no-mcasf", dest="mcasf", action="store_false")
+    p.add_argument("--upsample", default="dysample", choices=["dysample", "bilinear"])
     p.add_argument("--size", type=int, default=512, help="Côté de l'image d'entrée.")
     return p.parse_args()
 
@@ -159,7 +166,13 @@ def main():
     log("traçage terminé")
     total = sum(gmacs.values())
 
-    print(f"\n===== {args.encoder} / {args.core} / décodeur {args.decoder_refine}"
+    variantes = [f"fusion={args.fusion}", f"décodeur {args.decoder_refine}",
+                 f"up={args.upsample}"]
+    if not args.cga:
+        variantes.append("SANS CGA")
+    if not args.mcasf:
+        variantes.append("SANS MCA-SF")
+    print(f"\n===== {args.encoder} / {args.core} / {' / '.join(variantes)}"
           f" / {args.dataset} — entrée {s}x{s} =====")
     print(f"  Paramètres : {params / 1e6:8.2f} M")
     print(f"  GMACs      : {total:8.2f}   (pour UNE paire d'images)")
