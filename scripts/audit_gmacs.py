@@ -83,7 +83,59 @@ def parse_args():
     p.add_argument("--encoder", default="vmamba_mini")
     p.add_argument("--fusion", default="c2s2", choices=["c2s2", "concat"])
     p.add_argument("--skip-changemamba", action="store_true")
+    p.add_argument("--params-only", action="store_true",
+                   help="Contrôle préalable SANS GPU ni traçage : vérifie que le "
+                        "dépôt tiers est là, que les trois configs se construisent, "
+                        "et que leurs comptes de paramètres correspondent aux "
+                        "valeurs publiées. Quelques secondes une fois torch chargé.")
     return p.parse_args()
+
+
+def controle_prealable():
+    """Vérifie tout ce qui peut l'être sans GPU, avant d'engager une heure de calcul.
+
+    Le compte de paramètres est déjà une validation forte : s'il correspond aux
+    valeurs publiées pour les trois variantes, c'est que le modèle construit est
+    bien le leur — et la comparaison de GMACs qui suivra portera sur le bon objet.
+    """
+    print("=" * 78)
+    print("CONTRÔLE PRÉALABLE — sans GPU")
+    print("=" * 78)
+    if not _CHANGEMAMBA.is_dir():
+        sys.exit(f"⛔ dépôt tiers absent : {_CHANGEMAMBA}\n"
+                 "   le récupérer avec scripts/setup_third_party.sh")
+    print(f"  ✅ dépôt tiers présent : {_CHANGEMAMBA}")
+
+    cfg_dir = _CHANGEMAMBA / "changedetection" / "configs"
+    for cfg in PUBLIE:
+        chemin = cfg_dir / cfg
+        etat = "✅" if chemin.is_file() else "⛔ ABSENT"
+        print(f"  {etat} {cfg}")
+
+    sys.path.insert(0, str(_CHANGEMAMBA))
+    from scripts.evaluate_changemamba import build_model
+
+    print(f"\n  {'modèle':<18} {'params publiés':>15} {'construits':>12} {'écart':>9}")
+    ok = True
+    for cfg, (nom, p_pub, _) in PUBLIE.items():
+        try:
+            m = build_model(cfg)          # construction seule : pas de CUDA requis
+            n = sum(x.numel() for x in m.parameters()) / 1e6
+            ecart = 100 * (n - p_pub) / p_pub
+            verdict = "✅" if abs(ecart) < 1 else "⛔"
+            ok &= abs(ecart) < 1
+            print(f"  {nom:<18} {p_pub:>15.2f} {n:>12.2f} {ecart:>8.2f}% {verdict}")
+            del m
+        except Exception as e:  # noqa: BLE001
+            ok = False
+            print(f"  {nom:<18} ⛔ ÉCHEC : {type(e).__name__}: {e}")
+
+    print("\n  " + ("✅ tout est en place — l'audit complet peut être lancé."
+                    if ok else
+                    "⛔ à corriger AVANT de lancer l'audit : les comptes de "
+                    "paramètres ne correspondent pas,\n     donc le modèle "
+                    "construit n'est pas celui dont les GMACs sont publiés."))
+    return ok
 
 
 def trace(model, size, titre):
@@ -134,6 +186,8 @@ def cout_fft(channels, size, stages):
 
 def main():
     args = parse_args()
+    if args.params_only:
+        sys.exit(0 if controle_prealable() else 1)
     if not torch.cuda.is_available():
         sys.exit("Un GPU est requis (kernel selective_scan).")
 
