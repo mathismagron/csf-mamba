@@ -1,0 +1,16 @@
+name: Mirror to git.couturier.prof
+on:
+  push:
+    branches: [main]
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Push mirror
+        run: |
+          git remote add mirror https://mmagron:${{ secrets.GITEA_TOKEN }}@git.couturier.prof/mmagron/csf-mamba.git
+          git push mirror --all
+          git push mirror --tags
