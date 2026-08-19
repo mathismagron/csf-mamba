@@ -77,14 +77,28 @@ def _binary_to_rgb(mask_hw: np.ndarray) -> Image.Image:
 
 
 def save_panel(sample, out, pred_change, pred_sem2, path):
-    """Panneau horizontal : T1 | T2 | changement (GT/pred) | sém T2 (GT/pred)."""
+    """Panneau horizontal : T1 | T2 | changement (GT/pred) | sém T2 (GT/pred).
+
+    ⚠️ La sémantique prédite est MASQUÉE par le changement prédit, et ce n'est pas
+    cosmétique. SECOND n'annote la sémantique que dans les zones changées
+    (`_map_semantic` envoie le reste vers `ignore_index`), donc le modèle ne
+    reçoit AUCUN gradient ailleurs : sa prédiction y est arbitraire. Afficher la
+    carte pleine scène invite à la comparer à une vérité terrain qui est noire à
+    95 %, et donne l'impression fausse que les couleurs ne correspondent pas.
+
+    Masquer par le changement PRÉDIT — et non par celui de la vérité — garde le
+    panneau entièrement issu du modèle, donc honnête : on y voit à la fois les
+    erreurs de localisation et les erreurs de classe.
+    """
     h = sample["img_t1"].shape[-2]
+    chg_pred = (pred_change == 1).cpu().numpy()
+    sem_pred_masque = pred_sem2.cpu().numpy() * chg_pred   # 0 = noir hors changement
     tiles = [
         _to_rgb_image(sample["img_t1"]), _to_rgb_image(sample["img_t2"]),
         _binary_to_rgb(sample["change"].cpu().numpy() == 1),
-        _binary_to_rgb(pred_change.cpu().numpy() == 1),
+        _binary_to_rgb(chg_pred),
         _label_to_rgb(sample["sem_t2"].cpu().numpy()),
-        _label_to_rgb(pred_sem2.cpu().numpy()),
+        _label_to_rgb(sem_pred_masque),
     ]
     panel = Image.new("RGB", (sum(t.width for t in tiles) + 5 * len(tiles), h), (255, 255, 255))
     x = 0
