@@ -14,8 +14,14 @@
 set -euo pipefail
 
 RUNS="$SCRATCH/csf-mamba-runs"
-DEST="$SLURM_TMPDIR/csf-archive"
-[ -d "${SLURM_TMPDIR:-}" ] || DEST="$HOME/csf-archive-tmp"
+# `set -u` fait échouer toute référence à une variable non définie, et
+# SLURM_TMPDIR n'existe QUE dans un job — pas sur un nœud de connexion, d'où ce
+# script est justement lancé. On teste donc sa valeur par défaut vide.
+if [ -n "${SLURM_TMPDIR:-}" ] && [ -d "${SLURM_TMPDIR}" ]; then
+    DEST="$SLURM_TMPDIR/csf-archive"
+else
+    DEST="$HOME/csf-archive-tmp"
+fi
 rm -rf "$DEST"; mkdir -p "$DEST"
 
 echo "== métriques de tous les runs (l'essentiel) =="
@@ -53,7 +59,7 @@ python -m scripts.aggregate_seeds --ref second_mini_chess_crop512-nosek --min-ep
 echo "== manifeste =="
 {
     echo "Archive CSF-Mamba — $(date -Iseconds)"
-    echo "Dépôt git : $(git -C "$HOME/csf-mamba" rev-parse HEAD)"
+    echo "Dépôt git : $(git -C "$HOME/csf-mamba" rev-parse HEAD 2>/dev/null || echo inconnu)"
     echo
     echo "Runs archivés :"
     ls -1 "$DEST/metrics"
