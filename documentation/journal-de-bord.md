@@ -2147,6 +2147,100 @@ publié, sans que cela mette en cause l'exactitude ni de l'un ni de l'autre.
 
 ---
 
+## Phase 11 — Clôture de la campagne (14 août 2026)
+
+### Hi-UCD : le résultat principal NE transfère PAS
+
+Dernière expérience de la campagne, et la seule qui pouvait élargir la portée du
+résultat : retirer la loss SeK sur Hi-UCD, le dataset où le kappa restait négatif
+— précisément la condition qui fait produire des NaN à cette loss. Trois graines
+de chaque côté, un seul facteur variant.
+
+| Configuration | n | SeK | σ | IoU chgt |
+|---|---|---|---|---|
+| `ov3` (témoin) | 3 | **0,0541 ± 0,0014** | — | 0,3990 |
+| `nosek-ov3` | 3 | 0,0503 ± 0,0056 | — | 0,4029 |
+
+**Δ = −0,0038, t = −1,14, non établi** (seuil 2,78 à df = 4). Retirer la loss SeK
+**n'aide pas sur Hi-UCD**, et la tendance est même légèrement négative.
+
+Plus révélateur que la moyenne : **l'écart-type**. Sur SECOND, le retrait divisait
+σ par cinq (0,0105 → 0,0019) et supprimait un mode de défaillance. Ici il le
+**multiplie par quatre** (0,0014 → 0,0056). L'effet est donc **spécifique à
+SECOND**, et le rapport doit l'énoncer ainsi.
+
+**Premier σ mesuré sur Hi-UCD : 0,0041.** Jusqu'ici, toutes les analyses de ce
+dataset appliquaient par hypothèse le σ de SECOND, faute de réplicat. La valeur
+mesurée est du même ordre — ce qui valide rétrospectivement les conclusions de
+juillet, dont la portée reposait sur cette hypothèse.
+
+**Conséquence pour la conclusion du 30 juillet.** Le plafond de Hi-UCD à ~0,054
+tient **après** avoir retiré le terme de loss suspect. La réserve ajoutée au
+README le 13 août — « le retrait n'a jamais été testé sur Hi-UCD, la conclusion
+précède cette découverte » — est donc **levée** : la conclusion résiste au test.
+Le plafond est bien une propriété du jeu de données, non un artefact de la loss.
+
+Et le témoin lui-même se consolide : `ov3`, cité depuis juillet à 0,0531 sur une
+seule graine, vaut **0,0541 ± 0,0014** sur trois. Un des rares chiffres du projet
+dont la valeur d'origine ne bougeait presque pas.
+
+### Diagnostic final du meilleur modèle
+
+Évaluation de `best` (graine 42) sur le split test, SeK 0,2282 — cohérent avec la
+moyenne du groupe (0,2264 ± 0,0020, à +0,9 σ).
+
+| | 5 août | **best** | Δ |
+|---|---|---|---|
+| rappel du changement | 0,6852 | **0,7031** | +0,018 |
+| précision | 0,7532 | **0,7635** | +0,010 |
+| **IoU du changement** | 0,5596 | **0,5774** | **+0,018** |
+| sémantique dans les zones détectées | 0,8594 | 0,8644 | +0,005 |
+| erreurs de localisation FN+FP | 96,1 M | **91,7 M** | **−4,4 M** |
+
+Le budget d'erreur, resté bloqué autour de 100 M sous toutes les interventions de
+juillet — pondérations, Dice, Lovász, résolution, capacité — **descend enfin à
+91,7 M**. Et rappel et précision progressent **ensemble**, ce qui n'était jamais
+arrivé : tous les leviers précédents ne faisaient que déplacer l'un au détriment
+de l'autre le long de la même courbe.
+
+### ⚠️ Les figures : la sémantique prédite hors changement n'a aucun sens
+
+Constat fait en relisant les panneaux d'illustration. SECOND n'annote la
+sémantique que dans les zones changées, `_map_semantic` envoyant tout le reste
+vers `ignore_index`. **Le modèle ne reçoit donc aucun gradient hors changement**,
+et sa prédiction y est arbitraire.
+
+Afficher la carte sémantique pleine scène à côté d'une vérité terrain noire à
+95 % invite à les comparer partout, et donne l'impression fausse que les palettes
+diffèrent — alors que les deux panneaux passent par la même fonction.
+
+Correctif : la sémantique prédite est désormais **masquée par le changement
+prédit** — et non par celui de la vérité, pour que le panneau reste entièrement
+issu du modèle et laisse voir à la fois les erreurs de localisation et les erreurs
+de classe.
+
+Pour toute figure du rapport, deux phrases de légende sont indispensables, aucune
+n'étant devinable :
+
+> Palette : bleu = végétation basse, vert = sol non végétalisé, rouge = arbre,
+> jaune = eau, gris = bâtiment, magenta = terrain de sport.
+>
+> SECOND n'annote la sémantique que dans les zones de changement ; les cartes
+> sémantiques sont noires ailleurs, et la prédiction est masquée de même.
+
+### Bilan de la campagne
+
+| | |
+|---|---|
+| Entraînements | ~80, tous à plusieurs graines depuis le 7 août |
+| Résultat principal | retirer la loss SeK : **+0,0125 de SeK**, σ divisé par 5 — **spécifique à SECOND** |
+| Meilleur modèle | 22,64 ± 0,20 (n = 7), 20,80 M, 41,30 GMACs |
+| Variante allégée | 22,30 ± 0,18 (n = 7), **16,48 M, 31,42 GMACs** — dépasse MambaSCD-Tiny |
+| Composants propres au modèle | aucun ne contribue de façon détectable, sauf DySample |
+| Comptage de GMACs | audité, exhaustif au sens des MACs à 0,3 % près |
+
+---
+
 ## Notes de méthode
 
 - Chaque changement de recette part dans un **dossier de sortie distinct** pour ne pas

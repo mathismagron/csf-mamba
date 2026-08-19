@@ -14,7 +14,7 @@ performance égale face au modèle de taille comparable.
   `documentation/journal-de-bord.md` — matière première du rapport
 - Lancer un entraînement / une évaluation : `RUN.md`
 
-## État actuel (13 août 2026)
+## État actuel (14 août 2026)
 
 Pipeline complet validé sur GPU (Narval, A100), **20,8 M paramètres**, deux datasets
 supportés et validés sur données réelles.
@@ -199,9 +199,11 @@ propriété du jeu de données** — 1 130 tuiles porteuses de signal sur 12 000
 du modèle. Hi-UCD est clos comme terrain d'optimisation, conservé comme dataset
 d'ablation et résultat de caractérisation.
 
-⚠️ Le retrait de la loss SeK n'a **jamais été testé sur Hi-UCD**. C'est pourtant
-le dataset où le kappa négatif — cause des NaN de cette loss — était le plus
-marqué. La conclusion sur Hi-UCD précède cette découverte et resterait à revoir.
+**Testé le 14 août, et la conclusion résiste.** Retirer la loss SeK sur Hi-UCD
+donne −0,0038 (t = −1,14, non établi) : l'effet **ne transfère pas**. Il y
+multiplie même l'écart-type par quatre, là où il le divisait par cinq sur SECOND.
+Le résultat principal est donc **spécifique à SECOND**, et le plafond de Hi-UCD
+reste une propriété du jeu de données. Premier σ mesuré sur Hi-UCD : 0,0041.
 
 Chronologie détaillée, décisions et diagnostics : `documentation/journal-de-bord.md`.
 
