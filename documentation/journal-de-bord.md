@@ -2241,6 +2241,158 @@ n'étant devinable :
 
 ---
 
+## Phase 12 — Reprise (7 septembre 2026)
+
+Trois semaines d'interruption. Le maître de stage juge le travail proche du
+publiable et demande de continuer ; l'accès à Narval est conservé. Cette phase
+rouvre la campagne, et commence par corriger deux choses que la relecture du
+code a révélées.
+
+### ⚠️ L'augmentation était quasi inexistante — et le crop le masquait
+
+`make_train_transform` valait `RandomCrop(crop_size) + RandomFlip`. Or la recette
+retenue tourne à **`--crop-size 512`, la taille exacte d'une tuile SECOND** :
+`RandomCrop` y tire toujours l'unique fenêtre possible. C'est un **no-op**.
+
+Il ne restait donc que les deux flips — **4 variantes** pour 2 968 paires
+d'entraînement — depuis le passage en crops 512 début août, c'est-à-dire pendant
+toute la campagne qui a produit les résultats publiables. Le défaut est resté
+invisible parce que le crop *ressemblait* à une augmentation : la chaîne en
+comptait deux, l'une ne faisait rien.
+
+À rapprocher du gain de +0,022 attribué au passage 256 → 512. Ce passage
+augmentait la résolution **et** supprimait la seule source de diversité spatiale.
+Le gain net est réel — il est mesuré — mais il agrège deux effets de signes
+opposés, dont l'un était ignoré. Rien à rétracter, une nuance à écrire.
+
+### ⚠️ L'échange temporel n'est pas la symétrie gratuite qu'il paraît
+
+Première idée en découvrant ce qui précède : échanger T1 et T2 double les données
+sans coût. Le masque de changement est bien invariant à l'ordre des dates.
+
+Mais les **transitions sémantiques de SECOND sont directionnelles** : les paires
+vont toujours du passé vers le futur, et « végétation → bâtiment » y est bien plus
+fréquent que l'inverse. Échanger fabrique des échantillons tirés d'une
+distribution qui n'apparaît jamais au test. Deux effets opposés — plus de données
+et un raisonnement bi-temporel forcé d'un côté, dilution d'un a priori que le test
+respecte de l'autre — et rien ne dit lequel domine. D'où son **ablation séparée**
+du reste de l'augmentation dans le lot A, plutôt que son inclusion dans un
+paquet « augmentation ».
+
+### ⚠️ La décision d'août sur le split de validation ne tient plus
+
+Le 9 août, la sélection de l'époque sur le test avait été conservée au motif que
+l'écart « meilleur − final » valait +0,0056, soit **0,63 σ** — « réel mais
+inférieur au bruit », pour un σ de 0,0089.
+
+Ce σ était celui de la recette défectueuse. Depuis le retrait de la loss SeK, le
+σ du régime retenu vaut **0,0018**. Le même biais de +0,0056 y pèse **3,1 σ**. Il
+n'est plus inférieur au bruit : il vaut trois fois l'incertitude que nous
+affichons (± 0,0020). Un relecteur jugera le biais à l'aune de la précision
+revendiquée, pas de celle d'août.
+
+Le raisonnement d'origine était correct au moment où il a été tenu ; ce sont ses
+prémisses qui ont changé. Vérification préalable sans aucun coût de calcul :
+recalculer l'écart « meilleur − final » sur les groupes `nosek`, `best` et `lean`
+depuis les 115 `metrics.csv` archivés (lot C3). Si le biais s'est réduit avec le
+mode de défaillance, la décision d'août survit ; sinon elle doit être rouverte.
+
+Note utile pour la comparaison : **ChangeMamba sélectionne aussi sur le test**.
+Vérifié dans leur code — `changedetection/tasks/metadata.py`, tâche `scd` :
+l'unique eval loader, pourtant nommé « Validation », est construit depuis
+`test_dataset_path` / `test_data_name_list`, et `engine/base.py:262` sauve
+`best_model.pth` sur ce score. La comparaison reste donc appariée. Le biais est
+un problème d'honnêteté d'écriture, pas de comparabilité.
+
+### Ce qui a été câblé (7 septembre)
+
+Rotations 90° (groupe diédral complet, 8 variantes), jitter photométrique tiré
+**indépendamment par date**, échange temporel, et **EMA des poids**. Tout est
+désactivé par défaut : les 7 graines déjà mesurées restent comparables aux runs à
+venir, ce qu'un test vérifie explicitement.
+
+L'EMA est motivée par deux traits de la recette retenue, pas par la mode : le
+**LR constant** n'a pas la décroissance qui, dans un cosine, moyenne implicitement
+les dernières époques — les courbes de fin sont bruitées, c'est au journal depuis
+août — et `best.pt` retient le **maximum** d'une courbe bruitée. Lisser les poids
+attaque ce bruit à sa source.
+
+Piège traité d'emblée : les runs à 200 époques prennent ~15 h 30 pour 12 h de
+walltime, donc **ils reprennent tous au moins une fois**. Un état EMA absent de
+`last.pt` serait réinitialisé à mi-parcours, sans message, avec pour seul symptôme
+un résultat un peu moins bon. C'est très exactement le mode de défaillance
+silencieux qui a coûté trois fois à ce projet. L'état est donc sauvegardé et
+repris, deux garde-fous refusent une reprise qui changerait de protocole dans un
+sens comme dans l'autre, et l'ensemble est **vérifié de bout en bout sur un faux
+jeu SECOND** — pas seulement en test unitaire.
+
+### Pré-enregistrement du lot de reprise
+
+Écrit avant tout lancement, selon la méthode adoptée en phase 7. **Témoin :
+les 7 graines de `lean`** (0,2230 ± 0,0018), qui ne coûtent aucun run.
+
+**Ce que 4 graines permettent maintenant.** Avec σ = 0,0018, une comparaison
+appariée 4 contre 7 donne SE = σ√(1/4 + 1/7) = 0,0012, et un seuil de 2,26 à
+df = 9 : **tout effet ≥ 0,0027 est détectable**. En août, avec σ = 0,0089, il
+fallait 0,015 à 3 graines. Le retrait de la loss SeK n'a pas seulement amélioré la
+performance : il a rendu décidables des expériences qui ne l'étaient pas.
+
+**Lot A — leviers d'entraînement** (par-dessus `lean`, 4 graines chacun, ~186 h GPU)
+
+| | Configuration | Question |
+|---|---|---|
+| A1 | `lean` + EMA (0,9998) | Le lissage des poids gagne-t-il ≥ 0,0027 ? |
+| A2 | `lean` + rot90 + photométrique 0,2 | L'augmentation géométrique et radiométrique compense-t-elle les 4 variantes ? |
+| A3 | A2 + échange temporel 0,5 | A3 − A2 tranche la directionnalité, seul facteur variant |
+
+Critères de lecture fixés d'avance : A1 et A2 se lisent contre le témoin `lean`,
+A3 **uniquement contre A2**. Un gain de A3 sur le témoin qui ne serait pas un gain
+sur A2 ne dirait rien de l'échange temporel. Si A2 gagne, décomposer
+rot90 / photométrique en un second lot pour l'attribution ; si A2 perd, décomposer
+aussi, pour savoir lequel des deux nuit.
+
+**Lot B — capacité dans le bon régime** (4 graines chacun, ~148 h GPU)
+
+Les verdicts « encodeur tiny −0,0012 » et « décodeur élargi −0,0014 » datent
+d'avant le 11 août : **une seule graine, loss SeK active**. La leçon n° 3 de la
+phase 9 les invalide — un balayage mené dans un régime défectueux mesure la
+défaillance, pas le facteur. Et le C²S² a libéré 4,31 M de budget.
+
+| | Configuration | Question |
+|---|---|---|
+| B1 | `lean` + encodeur `vmamba_tiny` | La capacité d'encodeur paie-t-elle une fois la loss retirée ? |
+| B2 | `lean` + `--decoder-refine full` | Idem pour la capacité de décodeur |
+
+Enjeu au-delà du SeK : ces deux runs donnent une **frontière de Pareto** (≈16 M /
+21 M / 31 M à recette identique) là où l'article n'a aujourd'hui **qu'un point**.
+Un énoncé d'efficience se défend avec une courbe.
+
+**Lot C — sans nouvel entraînement** (~5 h GPU)
+
+- **C1** — temps d'inférence et mémoire crête, jamais mesurés. Toute la thèse
+  repose sur paramètres et GMACs ; les noyaux Mamba ont un rapport GMACs → latence
+  médiocre et le `grid_sample` de DySample est *memory-bound*. Si la latence ne
+  suit pas les GMACs, il vaut mieux le savoir avant le relecteur. Face à
+  MambaSCD-Tiny, dont la **construction** depuis `third_party/` fonctionne — seul
+  le chargement des poids échoue.
+- **C2** — fermer la comparaison ChangeMamba : `git fetch --unshallow` puis
+  se placer sur le commit contemporain des poids publiés. Le clone `--depth 1`
+  était le seul blocage. Donne leur SeK sous notre code, leur compte exact de
+  paramètres, et leur latence sur le même GPU.
+- **C3** — biais de sélection recalculé depuis les `metrics.csv` archivés, **zéro
+  GPU**. Décide si la question du split de validation doit être rouverte.
+
+**Lot D — un troisième jeu de données.** Le point le plus lourd et le plus
+décisif. L'efficience n'est démontrée que sur SECOND, et le résultat principal ne
+transfère pas à Hi-UCD — un relecteur le verra. Candidat : **Landsat-SCD**, que
+ChangeMamba rapporte, donc comparaison directe. À décider avec le maître de stage
+avant d'engager le temps.
+
+**Ordre retenu** : C3 d'abord (gratuit, et peut changer le protocole de tous les
+lots suivants), puis A et B en parallèle, C1/C2 dans les trous, D sur décision.
+
+---
+
 ## Notes de méthode
 
 - Chaque changement de recette part dans un **dossier de sortie distinct** pour ne pas
@@ -2254,5 +2406,6 @@ n'étant devinable :
 - **Un script qui ne fixe pas explicitement ses paramètres ne fige rien** : il
   capte les défauts du jour, qui dérivent. D'où la ligne `== config :` au
   démarrage de chaque sbatch, qui rend le log auto-suffisant.
-- Cinq tests de non-régression (`tests/`) : formes et budget du modèle, portage SeK,
-  portage Lovász, portage des métriques, et validité du masque d'évaluation.
+- Six tests de non-régression (`tests/`) : formes et budget du modèle, portage SeK,
+  portage Lovász, portage des métriques, validité du masque d'évaluation, et
+  synchronisation des augmentations + reprise de l'état EMA.
