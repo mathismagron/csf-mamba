@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 from csf_mamba.datasets import DATASETS
 from csf_mamba.datasets.oversample import build_change_index, make_change_sampler
 from csf_mamba.datasets.transforms import train_transform
+from csf_mamba.ema import ModelEMA
 from csf_mamba.evaluation.metrics import SCDEvaluator, SCDMetrics
 from csf_mamba.losses.composite import CSFMambaLoss
 from csf_mamba.model import CSFMamba, count_parameters
@@ -78,6 +79,21 @@ def parse_args():
     p.add_argument("--lambda-sem-change", type=float, default=0.0,
                    help="Poids de la CE sémantique restreinte aux zones changées "
                         "(0 = désactivé, comme les runs 1-2).")
+    p.add_argument("--rot90", action="store_true",
+                   help="Ajoute les rotations 90° : groupe diédral complet (8 variantes).")
+    p.add_argument("--photometric", type=float, default=0.0,
+                   help="Amplitude du jitter luminosité/contraste/saturation, tiré "
+                        "INDÉPENDAMMENT par date (0 = désactivé, 0.2 raisonnable).")
+    p.add_argument("--temporal-swap", type=float, default=0.0,
+                   help="Probabilité d'échanger T1 et T2 (cibles sémantiques avec). "
+                        "0 = désactivé. Voir la réserve dans transforms.py : les "
+                        "transitions de SECOND sont directionnelles.")
+    p.add_argument("--ema-decay", type=float, default=0.0,
+                   help="Moyenne mobile exponentielle des poids (0 = désactivée, "
+                        "0.9998 raisonnable). La validation et best.pt portent alors "
+                        "sur les poids moyennés.")
+    p.add_argument("--ema-warmup", type=int, default=2000,
+                   help="Itérations de décote de l'EMA au démarrage.")
     p.add_argument("--amp", action="store_true", default=True, help="Precision mixte bf16 (défaut).")
     p.add_argument("--no-amp", dest="amp", action="store_false")
     p.add_argument("--seed", type=int, default=42)
@@ -90,7 +106,10 @@ def parse_args():
 def build_dataset(args, split):
     dataset_cls, _ = DATASETS[args.dataset]
     # Crop + augmentation à l'entraînement ; validation en pleine résolution.
-    transform = train_transform(args.crop_size) if split == "train" else None
+    transform = train_transform(
+        args.crop_size, rot90=args.rot90, photometric=args.photometric,
+        temporal_swap=args.temporal_swap,
+    ) if split == "train" else None
     return dataset_cls(args.data_root, split=split, transform=transform)
 
 
@@ -129,6 +148,9 @@ def main():
         lambda_lovasz=args.lambda_lovasz,
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+    ema = ModelEMA(model, args.ema_decay, args.ema_warmup) if args.ema_decay > 0 else None
+    if ema is not None:
+        print(f"EMA active : decay {args.ema_decay}, warmup {args.ema_warmup} itérations")
 
     train_set = build_dataset(args, "train")
     # Sur-échantillonnage des tuiles avec changement (cf. datasets/oversample.py).
@@ -174,6 +196,23 @@ def main():
         start_epoch = ckpt["epoch"] + 1
         best_sek = ckpt["best_sek"]
         global_step = ckpt["global_step"]
+        # Sans ceci, l'EMA repartirait des poids courants à chaque reprise — et
+        # tous les runs à 200 époques reprennent (15 h 30 pour 12 h de walltime).
+        if ema is not None:
+            if "ema" not in ckpt:
+                raise SystemExit(
+                    f"⛔ --ema-decay demandé mais {resume_path} ne contient pas d'état EMA : "
+                    "ce checkpoint vient d'un run SANS EMA. Reprendre dessus produirait "
+                    "une moyenne partant du milieu de l'entraînement. Utiliser un "
+                    "--output neuf."
+                )
+            ema.load_state_dict(ckpt["ema"])
+            print(f"  état EMA repris : {ema.updates} mises à jour")
+        elif "ema" in ckpt:
+            raise SystemExit(
+                f"⛔ {resume_path} vient d'un run AVEC EMA mais --ema-decay vaut 0 : "
+                "la reprise changerait de protocole en cours de run."
+            )
         print(f"Reprise depuis {resume_path} : époque {start_epoch}, step {global_step}, "
               f"best SeK {best_sek:.4f}")
 
@@ -204,13 +243,23 @@ def main():
                 scheduler.step()
                 optimizer.zero_grad()
                 global_step += 1
+                # Après optimizer.step(), et une fois par pas d'optimiseur — pas
+                # par micro-batch : sinon la fenêtre de moyennage dépendrait de
+                # --accum-steps, et deux runs à batch effectif égal ne seraient
+                # plus comparables.
+                if ema is not None:
+                    ema.update(model)
 
             if step % (50 * args.accum_steps) == 0:
                 flat = {k: round(v.item(), 4) for k, v in losses.items()}
                 lr = scheduler.get_last_lr()[0]
                 print(f"epoch {epoch} step {step} lr {lr:.2e} sek={'on' if apply_sek else 'off'} {flat}")
 
-        metrics = validate(model, val_loader, device, num_classes,
+        # Avec EMA, tout ce qui est rapporté et sauvé porte sur les poids moyennés :
+        # valider le modèle courant et sauver l'EMA (ou l'inverse) mesurerait un
+        # modèle et en livrerait un autre.
+        eval_model = ema.module if ema is not None else model
+        metrics = validate(eval_model, val_loader, device, num_classes,
                            limit=args.limit_batches, use_amp=use_amp)
         print(f"[val] epoch {epoch} | SeK {metrics.sek:.4f} Fscd {metrics.fscd:.4f} "
               f"mIoU {metrics.miou:.4f} OA {metrics.oa:.4f} kappa {metrics.kappa:.4f}")
@@ -229,10 +278,15 @@ def main():
             "scheduler": scheduler.state_dict(), "epoch": epoch,
             "best_sek": best_sek, "global_step": global_step,
         }
+        if ema is not None:
+            ckpt["ema"] = ema.state_dict()
         if metrics.sek > best_sek:
             best_sek = metrics.sek
             ckpt["best_sek"] = best_sek
-            torch.save(model.state_dict(), out_dir / "best.pt")
+            # best.pt reste un state_dict nu, directement chargeable par
+            # scripts.evaluate et scripts.count_gmacs sans qu'ils sachent si
+            # l'EMA était active.
+            torch.save(eval_model.state_dict(), out_dir / "best.pt")
             print(f"  -> nouveau meilleur SeK {best_sek:.4f}, sauvé dans best.pt")
         torch.save(ckpt, out_dir / "last.pt")
 

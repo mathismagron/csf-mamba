@@ -69,6 +69,10 @@ FFT_STAGES="${FFT_STAGES:-0,1}"    # stages de la branche fréquentielle ("" = r
 LR_SCHEDULE="${LR_SCHEDULE:-cosine}"  # cosine (défaut) ou constant
 DECODER_REFINE="${DECODER_REFINE:-dw}"  # dw = référence, full = décodeur élargi
 ENCODER="${ENCODER:-vmamba_mini}"  # vmamba_mini (13,8M) ou vmamba_tiny (28M)
+ROT90="${ROT90:-0}"          # 1 = ajoute les rotations 90° (groupe diédral complet)
+PHOTO="${PHOTO:-0}"          # amplitude du jitter photométrique par date (0 = off)
+TSWAP="${TSWAP:-0}"          # probabilité d'échanger T1/T2 (0 = off)
+EMA="${EMA:-0}"              # decay de la moyenne mobile des poids (0 = off)
 TAG="${TAG:-nobal}"          # suffixe du dossier de sortie
 
 module load python/3.11 cuda/12.2
@@ -81,7 +85,7 @@ DATA_ROOT="$SLURM_TMPDIR/SECOND"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/second_mini_chess_$TAG"
-echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ crop=$CROP batch=$BATCH x accum=$ACCUM enc=$ENCODER dec=$DECODER_REFINE fusion=$FUSION cga=$CGA mcasf=$MCASF up=$UPSAMPLE core=$CORE seed=$SEED deep=$LAMBDA_DEEP sek=$LAMBDA_SEK sc=$LAMBDA_SC fft=[$FFT_STAGES] lr=$LR_SCHEDULE epochs=$EPOCHS -> $OUT =="
+echo "== config : weight=$WEIGHT dice=$DICE lovasz=$LOVASZ crop=$CROP batch=$BATCH x accum=$ACCUM enc=$ENCODER dec=$DECODER_REFINE fusion=$FUSION cga=$CGA mcasf=$MCASF up=$UPSAMPLE core=$CORE seed=$SEED deep=$LAMBDA_DEEP sek=$LAMBDA_SEK sc=$LAMBDA_SC fft=[$FFT_STAGES] lr=$LR_SCHEDULE rot90=$ROT90 photo=$PHOTO tswap=$TSWAP ema=$EMA epochs=$EPOCHS -> $OUT =="
 
 python -m scripts.train \
     --data-root "$DATA_ROOT" \
@@ -103,6 +107,10 @@ python -m scripts.train \
     --lambda-dice "$DICE" \
     --lambda-lovasz "$LOVASZ" \
     --lambda-sem-change 0 \
+    ${ROT90:+$([ "$ROT90" = 1 ] && echo --rot90)} \
+    --photometric "$PHOTO" \
+    --temporal-swap "$TSWAP" \
+    --ema-decay "$EMA" \
     --sek-warmup-iters 0 \
     --epochs "$EPOCHS" \
     --seed "$SEED" \
