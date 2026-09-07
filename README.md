@@ -74,6 +74,27 @@ Mamba-FCS : **6,4× moins de calcul et 9,1× moins de paramètres** pour 87 % de
 SeK. Ni le retrait de la loss SeK ni la supervision profonde ne coûtent quoi que
 ce soit en inférence — paramètres et GMACs sont inchangés.
 
+⚠️ **Ces SeK sont des maxima sélectionnés sur le split de test**, faute de split
+de validation dans SECOND — et **ChangeMamba procède de même** (vérifié dans leur
+code : tâche `scd`, l'unique eval loader nommé « Validation » lit
+`test_data_name_list`, et `best_model.pth` est retenu sur ce score). La
+comparaison est donc **appariée et licite**.
+
+L'optimisme que cela introduit a été **mesuré** (7 septembre, zéro heure GPU) :
+`meilleur − final` vaut 0,0050 pour `best`, 0,0066 pour `lean`, 0,0084 pour
+`nosek`, soit 2,9 à 4,9 σ. Sur l'époque finale, `lean` vaut 0,2164 ± 0,0037,
+**sous** le 0,2208 de MambaSCD-Tiny. L'asymétrie à énoncer dans tout rapport :
+nous mesurons notre optimisme, nous ignorons le leur.
+
+Le biais suit **l'époque du pic**, non la dispersion entre graines : `nosek` est
+le groupe le moins dispersé (σ = 0,0011) et porte pourtant le plus gros biais,
+parce qu'il pique à l'époque 60 sur 200 puis erre à LR constant.
+
+**Rejouées sur l'époque finale, les conclusions tiennent** — aucun verdict
+renversé, la supervision profonde promue de « partiel » à établi (+0,0056,
+t = 3,49 / 4,23), le C²S² toujours non contributif. Voir `--on final` de
+`scripts/aggregate_seeds.py` et la phase 12 du journal.
+
 Répartition du coût (512²) : convolutions 63 %, `MambaInnerFn` (C²S²) 12 %,
 matmul 12 %, einsum 9 %, scan sélectif du backbone 3 %. Le modèle est dominé par
 ses parties convolutionnelles, non par la machinerie SSM.

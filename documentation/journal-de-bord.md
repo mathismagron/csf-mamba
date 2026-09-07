@@ -2412,6 +2412,170 @@ Ordre effectif : **soumettre A et B d'abord** — la file d'attente est le goulo
 réel, pas le temps de calcul — puis faire C3 sur le nœud de connexion pendant
 l'attente, C1/C2 dans les trous, D sur décision.
 
+### Lot de reprise soumis (7 septembre)
+
+20 jobs en file : 12 pour le lot A (EMA, augmentation, augmentation + échange
+temporel), 8 pour le lot B (encodeur `tiny`, décodeur élargi). Toute la recette
+`lean` est fixée explicitement dans la ligne de soumission — dix-neuf variables,
+y compris celles à zéro. `--export=ALL` propage l'environnement entier du shell :
+une variable oubliée d'une session précédente entrerait dans le job sans bruit,
+et c'est exactement ainsi que `lean` et `best` en sont venus à différer par deux
+facteurs au lieu d'un.
+
+Walltime `--time=20:00:00` et non 12 h : le 12 h de l'en-tête `#SBATCH` est le
+défaut pour 100 époques, l'en-tête indique deux lignes plus bas de le porter à
+20 h pour 200. Un run de 200 époques dure ~15 h 30 et tient donc en une
+soumission.
+
+### C3 — le biais de sélection a grossi, il n'a pas fondu
+
+Zéro heure GPU : tout est dans les `metrics.csv` déjà écrits. Il a fallu d'abord
+réparer l'outil — `read_run` renvoyait bien la valeur finale, `stats[…]["last"]`
+la calculait, et le tableau ne l'affichait pas. La donnée existait depuis le début
+et n'avait jamais été regardée.
+
+| configuration | n | meilleur | final | biais | en σ |
+|---|---|---|---|---|---|
+| `best` | 7 | 0,2264 ± 0,0020 | 0,2214 ± 0,0028 | **0,0050 ± 0,0020** | 2,9 |
+| `nosek-constlr200` | 7 | 0,2242 ± 0,0011 | 0,2158 ± 0,0021 | **0,0084 ± 0,0025** | 4,9 |
+| `lean` | 7 | 0,2230 ± 0,0018 | 0,2164 ± 0,0037 | **0,0066 ± 0,0039** | 3,9 |
+| `constlr200` | 3 | 0,2201 ± 0,0019 | 0,2125 ± 0,0018 | 0,0076 ± 0,0015 | 4,5 |
+| `cos200` | 3 | 0,2132 ± 0,0053 | 0,2035 ± 0,0041 | 0,0097 ± 0,0021 | 5,7 |
+
+*(« en σ » rapporté au σ du sous-ensemble comparable, **0,0017** — les quatre
+groupes du régime retenu, sans `cos200` dont le σ de 0,0053 relève d'un autre
+régime et gonflerait la mise en commun. Le script affiche 0,0023 parce qu'il met
+en commun les cinq ; les mêmes biais y valent alors 2,2 à 4,2 σ. La conclusion ne
+dépend pas du choix.)*
+
+Le 9 août, le biais valait +0,0056 pour un σ de 0,0089, soit **0,63 σ**, et fut
+conservé comme « inférieur au bruit ». Le même ordre de biais pèse aujourd'hui
+**2,9 à 4,9 σ**. Le raisonnement d'août était correct ; ses prémisses ont changé
+quand le retrait de la loss SeK a divisé le σ par cinq.
+
+### Le biais suit l'époque du pic, pas la dispersion entre graines
+
+Constat non anticipé, et le plus instructif de la journée.
+
+| configuration | σ entre graines | pic médian | biais |
+|---|---|---|---|
+| `best` | 0,0020 | 116/200 | 0,0050 |
+| `lean` | 0,0018 | 80/200 | 0,0066 |
+| `nosek-constlr200` | **0,0011** | **60/200** | **0,0084** |
+
+`nosek-constlr200` est le groupe le **moins** dispersé d'un run à l'autre et porte
+pourtant le deuxième plus gros biais : il atteint son maximum au tiers du parcours,
+puis erre 140 époques à LR constant. Le biais ne mesure pas l'instabilité entre
+graines, il mesure **la distance parcourue après le pic**. Les deux quantités sont
+indépendantes, et les confondre aurait conduit à chercher le biais au mauvais
+endroit.
+
+Conséquence directe, et c'est elle qui compte : **les biais diffèrent d'une
+configuration à l'autre de 0,0050 à 0,0084**, soit un écart de 0,0034 — du même
+ordre que les effets qu'on mesure. Un Δ pris sur le maximum est donc un Δ de
+performance **moins** un Δ de biais. L'identité `Δ_final = Δ_max − (biais_A −
+biais_B)` a été vérifiée numériquement sur deux comparaisons, exacte au
+dix-millième : elle garantit qu'aucune erreur de recopie ne traîne dans ces
+tableaux.
+
+### Rejouer tous les verdicts sur l'époque finale
+
+D'où `--on {best,final}` dans `aggregate_seeds` : Δ, écart-type mis en commun,
+les deux tests et les verdicts, rejoués sur l'époque choisie. Aucun run
+supplémentaire.
+
+| Comparaison | sur le maximum | sur l'époque finale | |
+|---|---|---|---|
+| `best` vs `lean` | +0,0034 ÉTABLI | +0,0050 ÉTABLI | renforcé |
+| supervision profonde | +0,0022 *partiel* | **+0,0056 ÉTABLI** | **promu** |
+| C²S² entier | +0,0012 non établi | −0,0006 non établi | inchangé |
+| `cos200` vs `lean` | −0,0098 *partiel* | −0,0129 ÉTABLI | renforcé |
+| `constlr200` vs `lean` | −0,0029 non établi | −0,0039 non établi | inchangé |
+
+**Aucun verdict n'est renversé.** Un seul bouge, et il monte.
+
+**La supervision profonde ne relève pas le pic, elle empêche la redescente.**
++0,0022 sur le maximum (t commun +1,79, sous le seuil de 2,04 ; Welch +2,55) mais
+**+0,0056 sur l'époque finale** (t commun +3,49, Welch +4,23). Cohérent avec le
+fait que `best` pique le plus tard et dérive le moins. Un effet de stabilisation
+de fin d'entraînement, que la métrique du maximum masquait précisément parce
+qu'elle prend le maximum.
+
+**La conclusion sur le C²S² tient sur les deux métriques**, et le point estimé
+change même de signe en faveur du retrait (−0,0006 sur l'époque finale). Quatrième
+mesure indépendante concordante pour ce bloc.
+
+Contrôle de cohérence : le C²S² sur le maximum redonne t = +0,98 / +1,51, soit
+exactement les −0,98 / −1,51 du 12 août en sens inverse. L'outil modifié reproduit
+l'historique.
+
+### ⚠️ La métrique finale n'est pas « la bonne », elle est l'autre
+
+σ vaut **0,0023 sur le maximum et 0,0030 sur l'époque finale** (cinq groupes).
+L'époque finale supprime le biais de sélection mais elle est **plus bruitée** :
+c'est une mesure isolée, là où le maximum est lissé par la prise du max sur
+200 époques. Aucune des deux n'est correcte en soi — on troque un biais contre de
+la variance. La règle retenue est celle déjà appliquée aux deux tests t : **une
+conclusion qui tient sur les deux métriques est solide, une qui change de camp
+signale un mécanisme différent de celui qu'on croyait mesurer.**
+
+Une troisième mesure les dominerait toutes deux — la moyenne des dix dernières
+époques, sans biais de sélection et moins bruitée. Non implémentée à ce jour.
+
+### Ce que C3 change pour l'énoncé principal
+
+Sur l'époque finale, `lean` vaut **0,2164 ± 0,0037**, nettement **sous** le 0,2208
+de MambaSCD-Tiny. La phrase « `lean` dépasse MambaSCD-Tiny » ne vaut que sur la
+métrique du maximum.
+
+Elle reste **licite** : leur 0,2208 est lui aussi un maximum sélectionné sur le
+test, vérifié dans leur code (`changedetection/tasks/metadata.py`, tâche `scd` :
+l'unique eval loader, nommé « Validation », lit `test_data_name_list` ;
+`engine/base.py:262` sauve `best_model.pth` sur ce score). La comparaison est
+appariée.
+
+Mais l'asymétrie est à écrire, pas à taire : nous mesurons notre optimisme
+(0,005 à 0,008) et nous ignorons le leur. Le lot C2 donnera leur maximum sous
+notre code, jamais leur époque finale — cette asymétrie-là subsistera quoi qu'il
+arrive. Formulation retenue pour le rapport : *comparaison appariée sur une
+métrique que les deux camps calculent de la même façon, dont l'optimisme est
+mesuré chez nous et inconnu chez eux.*
+
+Deux corollaires mineurs. Le plafond d'IoU du changement porte le même biais :
+0,5743 au maximum contre 0,5680 à l'époque finale pour `best`. Et la
+détectabilité des lots A et B, recalculée avec σ = 0,0017 : SE = 0,0011, seuil
+2,09 à df 20, soit **tout effet ≥ 0,0022 détectable** à 4 graines contre 7.
+
+### ⚠️ Quatre erreurs de ma part dans la journée
+
+Consignées parce que trois d'entre elles auraient coûté du temps de calcul.
+
+1. **Walltime.** Annoncé 12 h en croyant que les runs à 200 époques reprennent
+   tous. Faux — voir plus haut. À 12 h, les 20 jobs auraient été tués vers
+   l'époque 155 et auraient tous demandé une resoumission.
+2. **Ordre des lots.** Le pré-enregistrement plaçait C3 en tête « parce qu'il peut
+   changer le protocole des lots suivants ». Faux : le témoin de A et B, ce sont
+   les 7 graines de `lean` déjà mesurées, donc ces lots ne *peuvent pas* changer
+   de protocole sans rendre ce témoin inutilisable — 105 h GPU pour le refaire.
+3. **`--ref crop512-nosek`.** N'est pas un nom exact : le script est passé en
+   recherche par sous-chaîne, a trouvé neuf configurations et a **refusé** plutôt
+   que d'en choisir une. Le garde-fou a fonctionné.
+4. **Glob `*nosek*`.** Il mêlait `nosek-constlr200` (200 époques, LR constant) aux
+   ablations d'architecture (100 époques, cosine) — deux régimes dans le même
+   écart-type mis en commun.
+
+Le trait commun aux quatre : une affirmation avancée sans être vérifiée, alors que
+la vérification coûtait quelques secondes. Les deux dernières ont été arrêtées par
+des garde-fous du code, les deux premières par une relecture.
+
+### En attente
+
+Les quatre ablations d'architecture — CGA, MCA-SF, C²S² entier, DySample — rejouées
+sur l'époque finale (`--on final`, témoin `nosek`, 100 époques, 5 groupes isolés
+du reste). DySample tenait à t = −8,5, il ne peut pas bouger ; l'intérêt est de
+voir si les bornes des trois autres se resserrent ou s'élargissent une fois le
+biais de sélection retiré. Commande lancée, sortie non encore consignée.
+
 ---
 
 ## Notes de méthode
