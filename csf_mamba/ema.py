@@ -12,12 +12,14 @@ c'est noté au journal depuis août. Et `best.pt` retient le **maximum** d'une
 courbe bruitée, ce qui gonfle mécaniquement le chiffre rapporté : lisser les
 poids attaque le bruit à sa source plutôt qu'après coup.
 
-⚠️ **L'état EMA doit être sauvegardé dans `last.pt`.** Les runs à 200 époques
-prennent ~15 h 30 pour 12 h de walltime : ils reprennent tous au moins une fois.
-Un EMA non repris repartirait des poids courants au redémarrage, effaçant sa
-moyenne — sans aucun message d'erreur, et avec un résultat simplement un peu
-moins bon qu'il n'aurait dû. Exactement le mode de défaillance silencieux qui a
-déjà coûté trois fois à ce projet (paramètre accepté mais non propagé).
+⚠️ **L'état EMA doit être sauvegardé dans `last.pt`.** Un run à 200 époques dure
+~15 h 30 et se soumet à `--time=20:00:00` : il tient normalement en une fois. Mais
+« normalement » ne suffit pas — préemption, dépassement, nœud qui tombe, ou
+simple relance à 300 époques : dès qu'une reprise a lieu, un EMA non sauvegardé
+repartirait des poids courants, effaçant sa moyenne. Sans message d'erreur, et
+avec pour seul symptôme un résultat un peu moins bon qu'il n'aurait dû être.
+Exactement le mode de défaillance silencieux qui a déjà coûté trois fois à ce
+projet (paramètre accepté mais non propagé).
 """
 
 from copy import deepcopy

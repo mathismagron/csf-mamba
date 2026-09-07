@@ -2317,14 +2317,21 @@ les dernières époques — les courbes de fin sont bruitées, c'est au journal 
 août — et `best.pt` retient le **maximum** d'une courbe bruitée. Lisser les poids
 attaque ce bruit à sa source.
 
-Piège traité d'emblée : les runs à 200 époques prennent ~15 h 30 pour 12 h de
-walltime, donc **ils reprennent tous au moins une fois**. Un état EMA absent de
-`last.pt` serait réinitialisé à mi-parcours, sans message, avec pour seul symptôme
-un résultat un peu moins bon. C'est très exactement le mode de défaillance
-silencieux qui a coûté trois fois à ce projet. L'état est donc sauvegardé et
-repris, deux garde-fous refusent une reprise qui changerait de protocole dans un
-sens comme dans l'autre, et l'ensemble est **vérifié de bout en bout sur un faux
-jeu SECOND** — pas seulement en test unitaire.
+Piège traité d'emblée : un état EMA absent de `last.pt` serait réinitialisé à la
+reprise, sans message, avec pour seul symptôme un résultat un peu moins bon —
+très exactement le mode de défaillance silencieux qui a coûté trois fois à ce
+projet. L'état est donc sauvegardé et repris, deux garde-fous refusent une reprise
+qui changerait de protocole dans un sens comme dans l'autre, et l'ensemble est
+**vérifié de bout en bout sur un faux jeu SECOND** — pas seulement en test
+unitaire.
+
+*(Rectification du même jour : j'avais d'abord justifié ce soin par « les runs à
+200 époques prennent 15 h 30 pour 12 h de walltime, donc ils reprennent tous ».
+C'est faux — le 12 h de l'en-tête `#SBATCH` est le défaut pour 100 époques, et
+l'en-tête indique deux lignes plus bas de passer `--time=20:00:00` pour 200. Les
+runs de la campagne d'août tenaient en une soumission. Le garde-fou reste
+justifié par la préemption et par toute relance ultérieure, pas par une reprise
+systématique.)*
 
 ### Pré-enregistrement du lot de reprise
 
