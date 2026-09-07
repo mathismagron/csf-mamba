@@ -46,6 +46,14 @@ def parse_args():
                    help="Fragment identifiant la configuration témoin, pour la "
                         "colonne d'écart. Par défaut : le meilleur SeK moyen.")
     p.add_argument("--metric", default="sek", choices=["sek", "fscd", "miou", "oa", "kappa"])
+    p.add_argument("--on", default="best", choices=["best", "final"],
+                   help="Époque sur laquelle porte TOUTE l'analyse — Δ, tests et "
+                        "verdicts. 'best' = le maximum de la courbe, ce que retient "
+                        "best.pt et ce que rapporte la littérature, mais sélectionné "
+                        "sur le test faute de split de validation. 'final' = la "
+                        "dernière époque, insensible à ce biais. Une conclusion qui "
+                        "tient sur les deux est solide ; une qui change de camp "
+                        "signale un effet de stabilisation plutôt que de performance.")
     p.add_argument("--min-epochs", type=int, default=0,
                    help="Ignore les runs ayant écrit moins de N époques. Un run "
                         "encore en cours a un `metrics.csv` partiel : son maximum "
@@ -57,8 +65,14 @@ def config_name(run_dir: Path) -> str:
     return SEED_SUFFIX.sub("", run_dir.name)
 
 
+def _iou(row) -> float:
+    """IoU du changement reconstruit : SeK = kappa · exp(IoU) / e."""
+    sek, kappa = float(row["sek"]), float(row["kappa"])
+    return 1 + math.log(sek / kappa) if sek > 0 and kappa > 0 else float("nan")
+
+
 def read_run(run_dir: Path, metric: str):
-    """-> (meilleure valeur, époque du pic, valeur finale, IoU du changement) ou None."""
+    """-> (meilleur, époque du pic, final, IoU au pic, IoU final, n époques) ou None."""
     csv_path = run_dir / "metrics.csv"
     if not csv_path.is_file():
         return None
@@ -67,10 +81,8 @@ def read_run(run_dir: Path, metric: str):
         return None
     best = max(rows, key=lambda r: float(r[metric]))
     last = rows[-1]
-    # IoU du changement reconstruit : SeK = kappa * exp(IoU) / e.
-    sek, kappa = float(best["sek"]), float(best["kappa"])
-    iou = 1 + math.log(sek / kappa) if sek > 0 and kappa > 0 else float("nan")
-    return float(best[metric]), int(best["epoch"]), float(last[metric]), iou, len(rows)
+    return (float(best[metric]), int(best["epoch"]), float(last[metric]),
+            _iou(best), _iou(last), len(rows))
 
 
 # Seuils bilatéraux à 95 % de la loi de Student, par degré de liberté.
@@ -89,15 +101,15 @@ def t_threshold(df: float) -> float:
     return 1.96
 
 
-def welch(a: dict, b: dict):
+def welch(a: dict, b: dict, key: str = "best"):
     """t de Welch entre deux groupes, et s'il franchit le seuil.
 
     Ne suppose PAS des variances égales : SE = √(s₁²/n₁ + s₂²/n₂), avec le degré
     de liberté de Welch-Satterthwaite. C'est le test conservateur, et le seul
     valide quand un groupe est nettement plus dispersé que l'autre.
     """
-    (ma, sa), na = a["best"], a["n"]
-    (mb, sb), nb = b["best"], b["n"]
+    (ma, sa), na = a[key], a["n"]
+    (mb, sb), nb = b[key], b["n"]
     if na < 2 or nb < 2:
         return None, False
     va, vb = sa ** 2 / na, sb ** 2 / nb
@@ -136,6 +148,8 @@ def fmt(m, sd):
 
 def main():
     args = parse_args()
+    # 'last' est le nom de la clé interne pour la dernière époque.
+    KEY = "best" if args.on == "best" else "last"
     groups: dict[str, list] = {}
     for path in args.runs:
         d = Path(path)
@@ -145,8 +159,8 @@ def main():
         if r is None:
             print(f"  (ignoré, pas de metrics.csv exploitable : {d.name})")
             continue
-        if r[4] < args.min_epochs:
-            print(f"  (ignoré, {r[4]} époques < --min-epochs {args.min_epochs} : {d.name})")
+        if r[5] < args.min_epochs:
+            print(f"  (ignoré, {r[5]} époques < --min-epochs {args.min_epochs} : {d.name})")
             continue
         groups.setdefault(config_name(d), []).append((r, d.name))
 
@@ -158,7 +172,9 @@ def main():
         runs = [r for r, _ in entries]
         best_m, best_sd = mean_sd([r[0] for r in runs])
         last_m, last_sd = mean_sd([r[2] for r in runs])
-        iou_m, _ = mean_sd([r[3] for r in runs])
+        # L'IoU suit l'époque analysée : l'afficher au pic à côté d'un SeK final
+        # ferait lire deux époques différentes sur la même ligne.
+        iou_m, _ = mean_sd([r[3 if args.on == "best" else 4] for r in runs])
         # Biais de sélection, run par run : le maximum sur la courbe moins la
         # dernière époque. C'est une quantité INTRA-run, donc on moyenne les
         # différences plutôt que de différencier les moyennes — même moyenne,
@@ -167,7 +183,7 @@ def main():
         stats[name] = dict(n=len(runs), best=(best_m, best_sd), last=(last_m, last_sd),
                            bias=(bias_m, bias_sd), iou=iou_m,
                            epochs=[r[1] for r in runs],
-                           lengths=[(r[4], nom) for r, nom in entries])
+                           lengths=[(r[5], nom) for r, nom in entries])
 
     # Témoin : celui demandé, sinon le meilleur en moyenne.
     if args.ref:
@@ -179,7 +195,7 @@ def main():
                              "il faut qu'il désigne exactement une configuration")
         ref = matches[0]
     else:
-        ref = max(stats, key=lambda k: stats[k]["best"][0])
+        ref = max(stats, key=lambda k: stats[k][KEY][0])
 
     # Écart-type intra-configuration, mis en commun sur tous les groupes d'au
     # moins 2 graines. Un groupe seul en donne une estimation très instable ; les
@@ -194,11 +210,18 @@ def main():
     # même taille — ce qui cesse d'être vrai dès qu'on mêle des groupes de 3 et de
     # 4 graines. Et ce sont bien les variances qui s'additionnent, jamais les
     # écarts-types.
-    pooled = [(s_["best"][1], s_["n"]) for s_ in stats.values()
-              if not math.isnan(s_["best"][1])]
-    num = sum((n - 1) * sd ** 2 for sd, n in pooled)
-    den = sum(n - 1 for _, n in pooled)
-    sigma = math.sqrt(num / den) if den else float("nan")
+    def pooled_sigma(key: str):
+        p_ = [(s_[key][1], s_["n"]) for s_ in stats.values() if not math.isnan(s_[key][1])]
+        num_ = sum((n - 1) * sd ** 2 for sd, n in p_)
+        den_ = sum(n - 1 for _, n in p_)
+        return (math.sqrt(num_ / den_) if den_ else float("nan")), den_, len(p_)
+
+    sigma, den, n_pooled = pooled_sigma(KEY)
+    # Le biais de sélection n'affecte QUE la métrique du maximum : on le rapporte
+    # toujours à l'écart-type de celle-ci, pour que la section soit identique quel
+    # que soit --on. Sinon le même biais s'exprimerait en deux nombres différents
+    # selon le mode, ce qui n'aurait aucun sens.
+    sigma_best = pooled_sigma("best")[0]
 
     # Comparer deux MOYENNES demande l'erreur-type de la différence,
     # SE = σ·√(1/n₁ + 1/n₂), et non σ seul. Diviser par σ surestime la certitude :
@@ -208,22 +231,25 @@ def main():
     df = den
     t_crit = t_threshold(df)
 
-    print(f"\nMétrique : {args.metric}   |   témoin : {ref}")
+    quoi = ("meilleure époque (max sur la courbe, sélectionné sur le test)"
+            if args.on == "best" else "DERNIÈRE époque (insensible au biais de sélection)")
+    print(f"\nMétrique : {args.metric} à la {quoi}   |   témoin : {ref}")
     if not math.isnan(sigma):
-        print(f"Écart-type mis en commun sur {len(pooled)} configuration(s) : "
+        print(f"Écart-type mis en commun sur {n_pooled} configuration(s) : "
               f"σ = {sigma:.4f}   (l'ancien plancher supposé était 0,0040)")
         print(f"Seuil de significativité à 95 % : |t| > {t_crit:.2f}  (df = {df})")
     print()
-    print(f"| {'configuration':<34} | n | {'meilleur':^18} | IoU chgt | {'Δ':^9} | "
+    entete = "meilleur" if args.on == "best" else "final"
+    print(f"| {'configuration':<34} | n | {entete:^18} | IoU chgt | {'Δ':^9} | "
           f"{'t comm.':^8} | {'t Welch':^8} | {'verdict':^12} |")
     print("|" + "-" * 36 + "|---|" + "-" * 20 + "|----------|" + "-" * 11 + "|"
           + "-" * 10 + "|" + "-" * 10 + "|" + "-" * 14 + "|")
 
-    for name in sorted(stats, key=lambda k: -stats[k]["best"][0]):
+    for name in sorted(stats, key=lambda k: -stats[k][KEY][0]):
         s = stats[name]
-        delta = s["best"][0] - stats[ref]["best"][0]
+        delta = s[KEY][0] - stats[ref][KEY][0]
         if name == ref:
-            print(f"| {name:<34} | {s['n']} | {fmt(*s['best']):^18} | {iou_txt(s['iou']):>8} | "
+            print(f"| {name:<34} | {s['n']} | {fmt(*s[KEY]):^18} | {iou_txt(s['iou']):>8} | "
                   f"{'—':^9} | {'—':^8} | {'—':^8} | {'témoin':^12} |")
             continue
         se_p = sigma * math.sqrt(1 / s["n"] + 1 / stats[ref]["n"])
@@ -234,15 +260,24 @@ def main():
         # variances égales. Indispensable ici — le témoin a été jusqu'à cinq fois
         # plus dispersé que les autres groupes, et la mise en commun le diluait.
         # Non calculable à une seule graine, faute d'écart-type.
-        t_w, ok_w = welch(s, stats[ref])
+        t_w, ok_w = welch(s, stats[ref], KEY)
         if t_w is None:
             verdict, tw_txt = ("appuyé" if ok_p else "non établi"), "  n=1"
         else:
             tw_txt = f"{t_w:+.2f}"
             verdict = ("ÉTABLI" if ok_p and ok_w else
                        "partiel" if ok_p or ok_w else "non établi")
-        print(f"| {name:<34} | {s['n']} | {fmt(*s['best']):^18} | {iou_txt(s['iou']):>8} | "
+        print(f"| {name:<34} | {s['n']} | {fmt(*s[KEY]):^18} | {iou_txt(s['iou']):>8} | "
               f"{delta:+9.4f} | {t_p:^+8.2f} | {tw_txt:^8} | {verdict:^12} |")
+
+    if args.on == "best":
+        print("\n⚠️ Analyse sur le MAXIMUM de la courbe, sélectionné sur le split de")
+        print("   test faute de split de validation. Rejouer avec --on final pour")
+        print("   savoir si chaque verdict tient sur une métrique sans ce biais.")
+    else:
+        print("\n⚠️ Analyse sur la DERNIÈRE époque. Aucun biais de sélection, mais ce")
+        print("   n'est PAS ce que rapporte la littérature : ne pas comparer ces")
+        print("   valeurs aux chiffres publiés, qui sont eux aussi des maxima.")
 
     print("\nÉpoques des pics par configuration :")
     for name in sorted(stats):
@@ -258,12 +293,15 @@ def main():
     print("\nBiais de sélection de l'époque (meilleur − final) :")
     print(f"| {'configuration':<34} | n | {'meilleur':^18} | {'final':^18} | "
           f"{'biais':^18} | {'en σ':^6} |")
+    print(f"(σ de référence : {sigma_best:.4f}, celui du maximum — le biais ne "
+          "concerne que cette métrique)")
     print("|" + "-" * 36 + "|---|" + "-" * 20 + "|" + "-" * 20 + "|"
           + "-" * 20 + "|" + "-" * 8 + "|")
     for name in sorted(stats, key=lambda k: -stats[k]["best"][0]):
         s_ = stats[name]
         b_m, b_sd = s_["bias"]
-        en_sigma = "—" if math.isnan(sigma) or sigma == 0 else f"{b_m / sigma:.1f}"
+        en_sigma = ("—" if math.isnan(sigma_best) or sigma_best == 0
+                    else f"{b_m / sigma_best:.1f}")
         print(f"| {name:<34} | {s_['n']} | {fmt(*s_['best']):^18} | "
               f"{fmt(*s_['last']):^18} | {fmt(b_m, b_sd):^18} | {en_sigma:^6} |")
     print("Un biais qui dépasse ~1 σ n'est plus couvert par l'incertitude affichée :")
