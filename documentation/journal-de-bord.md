@@ -2388,8 +2388,22 @@ transfère pas à Hi-UCD — un relecteur le verra. Candidat : **Landsat-SCD**, 
 ChangeMamba rapporte, donc comparaison directe. À décider avec le maître de stage
 avant d'engager le temps.
 
-**Ordre retenu** : C3 d'abord (gratuit, et peut changer le protocole de tous les
-lots suivants), puis A et B en parallèle, C1/C2 dans les trous, D sur décision.
+**Ordre retenu — corrigé le 7 septembre au moment de lancer.** La première
+rédaction plaçait C3 en tête au motif qu'il « peut changer le protocole de tous
+les lots suivants ». C'est faux, et l'erreur méritait d'être vue avant de
+soumettre : **les lots A et B ne peuvent pas changer de protocole**, puisque leur
+témoin est constitué des 7 graines de `lean` déjà mesurées. Basculer sur un split
+de validation rendrait ce témoin inutilisable et coûterait 105 h GPU pour le
+refaire — soit exactement ce que le plan cherche à économiser.
+
+La question du split de validation est donc une question de **restitution**, pas
+d'entraînement : elle se traite en fin de campagne, sur la seule configuration
+finale, en rapportant un chiffre conservateur à côté du chiffre apparié. C3
+l'éclaire mais ne la conditionne pas.
+
+Ordre effectif : **soumettre A et B d'abord** — la file d'attente est le goulot
+réel, pas le temps de calcul — puis faire C3 sur le nœud de connexion pendant
+l'attente, C1/C2 dans les trous, D sur décision.
 
 ---
 
