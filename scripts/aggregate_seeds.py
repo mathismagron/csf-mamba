@@ -159,8 +159,14 @@ def main():
         best_m, best_sd = mean_sd([r[0] for r in runs])
         last_m, last_sd = mean_sd([r[2] for r in runs])
         iou_m, _ = mean_sd([r[3] for r in runs])
+        # Biais de sélection, run par run : le maximum sur la courbe moins la
+        # dernière époque. C'est une quantité INTRA-run, donc on moyenne les
+        # différences plutôt que de différencier les moyennes — même moyenne,
+        # mais un écart-type qui a un sens (celui du biais lui-même).
+        bias_m, bias_sd = mean_sd([r[0] - r[2] for r in runs])
         stats[name] = dict(n=len(runs), best=(best_m, best_sd), last=(last_m, last_sd),
-                           iou=iou_m, epochs=[r[1] for r in runs],
+                           bias=(bias_m, bias_sd), iou=iou_m,
+                           epochs=[r[1] for r in runs],
                            lengths=[(r[4], nom) for r, nom in entries])
 
     # Témoin : celui demandé, sinon le meilleur en moyenne.
@@ -242,6 +248,28 @@ def main():
     for name in sorted(stats):
         print(f"  {name:<40} {sorted(stats[name]['epochs'])}")
 
+    # Biais de sélection. SECOND n'a pas de split de validation : l'époque est
+    # choisie sur le test, donc `meilleur` est optimiste. Ce qui compte n'est pas
+    # sa valeur absolue mais son rapport au σ du régime — c'est-à-dire à la
+    # précision qu'on affiche. Le 9 août il valait 0,63 σ pour un σ de 0,0089,
+    # jugé « inférieur au bruit » ; le même biais pèse trois fois plus dans un
+    # régime cinq fois moins dispersé. La décision doit donc être réexaminée avec
+    # le σ courant, pas avec celui d'août.
+    print("\nBiais de sélection de l'époque (meilleur − final) :")
+    print(f"| {'configuration':<34} | n | {'meilleur':^18} | {'final':^18} | "
+          f"{'biais':^18} | {'en σ':^6} |")
+    print("|" + "-" * 36 + "|---|" + "-" * 20 + "|" + "-" * 20 + "|"
+          + "-" * 20 + "|" + "-" * 8 + "|")
+    for name in sorted(stats, key=lambda k: -stats[k]["best"][0]):
+        s_ = stats[name]
+        b_m, b_sd = s_["bias"]
+        en_sigma = "—" if math.isnan(sigma) or sigma == 0 else f"{b_m / sigma:.1f}"
+        print(f"| {name:<34} | {s_['n']} | {fmt(*s_['best']):^18} | "
+              f"{fmt(*s_['last']):^18} | {fmt(b_m, b_sd):^18} | {en_sigma:^6} |")
+    print("Un biais qui dépasse ~1 σ n'est plus couvert par l'incertitude affichée :")
+    print("il doit alors être rapporté explicitement, ou retiré en sélectionnant")
+    print("l'époque sur un split de validation découpé dans le train.")
+
     singles = [n for n, s in stats.items() if s["n"] == 1]
     if singles:
         print("\n⚠️ une seule graine, donc aucun écart-type — l'écart au témoin "
@@ -276,7 +304,12 @@ def main():
     print("de chaque côté :")
     if not math.isnan(sigma):
         for d in (0.005, 0.010, 0.015, 0.020):
-            print(f"    Δ = {d:.3f}  ->  {math.ceil(8 * sigma ** 2 / d ** 2):3d} graines par configuration")
+            # Plancher à 2 : la formule 8σ²/Δ² peut descendre sous 1, mais une
+            # graine unique ne fournit aucun écart-type — donc aucun test.
+            n_req = max(2, math.ceil(8 * sigma ** 2 / d ** 2))
+            print(f"    Δ = {d:.3f}  ->  {n_req:3d} graines par configuration"
+                  + ("   (plancher : 2, sans quoi pas d'écart-type)" if n_req == 2
+                     and 8 * sigma ** 2 / d ** 2 < 2 else ""))
 
 
 if __name__ == "__main__":
