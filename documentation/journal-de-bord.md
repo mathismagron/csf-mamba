@@ -1780,16 +1780,39 @@ Quatre ablations, 4 graines chacune, toutes **par-dessus `nosek`** dont les
 **Ce ne sont pas des « on ne sait pas », ce sont des bornes.** Intervalles de
 confiance à 95 % sur la contribution de chaque composant :
 
-| Composant | Δ | IC 95 % |
-|---|---|---|
-| C²S² entier | −0,0016 | [−0,0036 ; **+0,0004**] |
-| CGA | +0,0012 | [−0,0006 ; +0,0030] |
-| MCA-SF | −0,0014 | [−0,0052 ; +0,0024] |
-| DySample | −0,0074 | [−0,0093 ; −0,0055] |
+| Composant | Δ (effet du RETRAIT) | IC 95 % sur Δ | IC sur la CONTRIBUTION (−Δ) |
+|---|---|---|---|
+| C²S² entier | −0,0016 | [−0,0036 ; +0,0004] | [−0,0004 ; **+0,0036**] |
+| CGA | +0,0012 | [−0,0006 ; +0,0030] | [−0,0030 ; +0,0006] |
+| MCA-SF | −0,0014 | [−0,0052 ; +0,0024] | [−0,0024 ; +0,0052] |
+| DySample | −0,0074 | [−0,0093 ; −0,0055] | [**+0,0055** ; +0,0093] |
 
-L'IC du C²S² plafonne à **+0,0004** : ce bloc ne *peut pas* contribuer plus que
-quatre dix-millièmes de SeK. C'est une affirmation bien plus forte qu'une absence
-de conclusion.
+⚠️ **Correction du 7 septembre — une erreur de signe dans la lecture de ces
+bornes.** Ce paragraphe affirmait : « l'IC du C²S² plafonne à +0,0004, ce bloc ne
+peut pas contribuer plus que quatre dix-millièmes ». **C'est faux.** Δ est l'effet
+du *retrait* ; la contribution du bloc vaut **−Δ**, dont l'intervalle est celui de
+Δ **retourné**. Le +0,0004 est le maximum dont *retirer* le bloc pourrait aider —
+pas le maximum de ce qu'il apporte.
+
+**Énoncé correct : le C²S² contribue au plus +0,0036, et zéro n'est pas exclu.**
+Un facteur dix par rapport à ce qui était écrit. Trois mesures indépendantes le
+confirment : +0,0038 avec le σ de 0,0017 mis en commun sur 8 groupes, +0,0041 sur
+le maximum et +0,0042 sur l'époque finale avec le σ de 0,0018 des cinq groupes
+isolés (7 septembre).
+
+**Ce que la correction change, et ce qu'elle ne change pas.** Elle ne change pas
+la décision : `lean`, sans le bloc, reste statistiquement indiscernable du modèle
+complet pour 4,31 M de paramètres et 9,88 GMACs en moins, et l'argument
+d'efficience tient tel quel. Elle change la **force de l'énoncé**. « Ce bloc ne
+peut rien apporter » devient « ce bloc apporte au plus 0,0036, sans qu'on puisse
+le distinguer de zéro » — et 0,0036, c'est la moitié de l'effet de DySample
+(0,0074) et davantage que la marge de `lean` sur MambaSCD-Tiny (0,0022). Ce n'est
+pas rien. Le résultat reste un argument d'efficience solide ; il cesse d'être la
+réfutation catégorique qui était écrite ici.
+
+La même relecture vaut pour DySample, dans le bon sens cette fois : sa
+contribution est **au moins +0,0055**, borne basse d'un intervalle qui n'inclut
+pas zéro.
 
 Et les quatre graines de `noc2s2` sont serrées — 0,2224 / 0,2211 / 0,2197 /
 0,2215, écart-type 0,0011, aucun effondrement. **Le modèle sans C²S² s'entraîne
@@ -2568,13 +2591,72 @@ Le trait commun aux quatre : une affirmation avancée sans être vérifiée, alo
 la vérification coûtait quelques secondes. Les deux dernières ont été arrêtées par
 des garde-fous du code, les deux premières par une relecture.
 
-### En attente
+### Les ablations d'architecture rejouées sur l'époque finale
 
-Les quatre ablations d'architecture — CGA, MCA-SF, C²S² entier, DySample — rejouées
-sur l'époque finale (`--on final`, témoin `nosek`, 100 époques, 5 groupes isolés
-du reste). DySample tenait à t = −8,5, il ne peut pas bouger ; l'intérêt est de
-voir si les bornes des trois autres se resserrent ou s'élargissent une fois le
-biais de sélection retiré. Commande lancée, sortie non encore consignée.
+Cinq groupes isolés du reste (témoin `nosek` à 7 graines, quatre ablations à 4,
+toutes à 100 époques en cosine), σ mis en commun 0,0018, df 18, seuil 2,09.
+
+| Composant retiré | Δ maximum | Δ finale | Welch max | Welch finale | verdict |
+|---|---|---|---|---|---|
+| CGA | +0,0011 | **+0,0001** | +1,42 | +0,08 | non établi (les deux) |
+| MCA-SF | −0,0015 | −0,0015 | −0,82 | −0,81 | non établi (les deux) |
+| C²S² entier | −0,0017 | −0,0018 | −1,83 | −2,05 | non établi (les deux) |
+| **DySample → bilinéaire** | −0,0074 | **−0,0075** | −8,58 | **−13,05** | ✅ **ÉTABLI (les deux)** |
+
+**Aucun verdict ne bouge**, et DySample se renforce nettement : Welch passe de
+−8,58 à −13,05, l'écart-type de `bilin` sur l'époque finale n'étant que de 0,0006.
+Sa contribution est **au moins +0,0055**.
+
+**Contrôle de reproduction.** Les t de Welch sur le maximum — +1,42, −0,82,
+−1,83, −8,58 — sont *identiques au centième* à ceux du 12 août. C'est attendu et
+rassurant : Welch n'utilise que les écarts-types des deux groupes comparés, jamais
+le σ mis en commun. Les t de la variance commune diffèrent un peu (+0,99 contre
++1,09, etc.) précisément parce que le σ mis en commun change avec le nombre de
+groupes retenus — 0,0018 sur ces cinq contre 0,0017 sur les huit d'août.
+
+**Pourquoi les verdicts ne bougent pas ici, alors qu'ils bougeaient sur le régime
+à 200 époques.** Le biais est **quasi constant** d'une ablation à l'autre :
+0,0059, 0,0059, 0,0059, 0,0060 — et 0,0070 pour `nocga`. Dans une comparaison
+appariée, un biais commun **se soustrait**. Là où le régime à 200 époques
+présentait des biais de 0,0050 à 0,0084, soit un écart de 0,0034 du même ordre que
+les effets mesurés, ici l'écart maximal est de 0,0011.
+
+D'où le seul mouvement notable : **l'effet apparent de la CGA était entièrement du
+biais de sélection**. `nocga` porte le biais le plus élevé du lot (0,0070 contre
+0,0059) ; retirée, cette différence ramène le Δ de +0,0011 à **+0,0001**. Le
+« retirer la CGA aide légèrement » n'était pas un effet, c'était un artefact de
+mesure. L'identité `Δ_final = Δ_max − (biais_A − biais_B)` le donne exactement :
++0,0011 − (0,0070 − 0,0059) = 0,0000.
+
+**Bilan de C3.** Sur les neuf comparaisons rejouées — cinq dans le régime à
+200 époques, quatre ici — **aucune n'est renversée**, une est promue (supervision
+profonde), une est ramenée à zéro (CGA, qui n'était de toute façon pas établie).
+Les conclusions de la campagne d'août tiennent sur les deux métriques. Le biais de
+sélection doit être **rapporté**, il n'oblige à rien réécrire.
+
+### ⚠️ Une erreur de signe dans la lecture des intervalles de confiance
+
+Trouvée en recalculant les bornes du C²S² avec les chiffres du jour. Elle affectait
+le résultat négatif le plus cité du projet, dans le journal **et** dans le README —
+voir la correction insérée en phase 9. En deux lignes :
+
+Δ est défini comme `SeK(ablaté) − SeK(témoin)`, donc **l'effet du retrait**. La
+contribution du composant vaut **−Δ**, et son intervalle est celui de Δ
+**retourné**. Écrire « l'IC plafonne à +0,0004, donc le bloc ne peut pas apporter
+plus de quatre dix-millièmes » confond les deux : +0,0004 est le maximum dont
+*retirer* le bloc pourrait aider. Le bloc, lui, peut apporter jusqu'à **+0,0036**.
+
+Un facteur dix, et dans le sens qui affaiblit l'énoncé. La décision d'expédier
+`lean` ne change pas — le modèle sans le bloc reste indiscernable du modèle
+complet, pour 4,31 M de paramètres en moins. Mais « ce bloc ne peut rien
+apporter » devient « au plus 0,0036, sans qu'on puisse le distinguer de zéro », et
+0,0036 vaut la moitié de l'effet de DySample.
+
+Leçon de méthode : **une borne d'intervalle ne s'interprète jamais sans avoir
+réécrit la quantité qu'elle borne.** Ici la quantité affichée (l'effet du retrait)
+et la quantité commentée (la contribution du composant) étaient opposées, et la
+phrase a survécu trois semaines à plusieurs relectures — y compris à celles qui
+ont produit le résumé hebdomadaire remis au maître de stage.
 
 ---
 

@@ -57,10 +57,19 @@ un seuil de 4,21).
 comparable : **−3 % de paramètres, −44 % de calcul, et +0,9 % de SeK** pour la
 configuration au changement unique, **+2,5 %** pour la meilleure.
 
-⚠️ **Et le C²S² ne contribue pas.** Le retirer entièrement — damier, MCA-SF et
-scan S6 — coûte −0,0016 de SeK, avec un intervalle de confiance à 95 %
-[−0,0036 ; **+0,0004**] : ce bloc ne *peut pas* apporter plus de quatre
-dix-millièmes. Il pèse pourtant **4,31 M de paramètres et 9,88 GMACs**.
+⚠️ **Et la contribution du C²S² n'est pas détectable.** Le retirer entièrement —
+damier, MCA-SF et scan S6 — coûte −0,0016 de SeK, non établi. Sa contribution
+réelle tient dans l'intervalle de confiance à 95 % **[−0,0004 ; +0,0036]** :
+compatible avec zéro, et bornée à trois millièmes et demi. Il pèse pourtant
+**4,31 M de paramètres et 9,88 GMACs**, ce qui justifie de le retirer sans
+attendre d'en savoir plus.
+
+*(Corrigé le 7 septembre : ce paragraphe lisait la borne à l'envers et annonçait
+« pas plus de quatre dix-millièmes ». Δ mesure l'effet du RETRAIT ; la
+contribution du bloc vaut −Δ, donc son intervalle est celui de Δ retourné. Un
+facteur dix. La décision d'expédier `lean` est inchangée, la force de l'énoncé
+non : « ce bloc ne peut rien apporter » devient « au plus 0,0036, indiscernable de
+zéro ».)*
 
 | | vs MambaSCD-Tiny | vs Mamba-FCS |
 |---|---|---|
@@ -122,12 +131,23 @@ dispersée que les autres.
 **Ablations d'architecture, menées par-dessus `nosek`** (4 graines chacune,
 témoin à 7 graines, σ = 0,0017) :
 
-| Composant retiré | Δ SeK | IC 95 % | Statut |
-|---|---|---|---|
-| CGA (« Change-aware ») | +0,0011 | [−0,0006 ; +0,0030] | ? |
-| MCA-SF | −0,0015 | [−0,0052 ; +0,0024] | ? |
-| **C²S² entier** (−4,31 M params) | −0,0017 | [−0,0036 ; +0,0004] | ? |
-| **DySample → bilinéaire** | **−0,0074** | [−0,0093 ; −0,0055] | ✅ **établi** |
+| Composant retiré | Δ SeK du RETRAIT | IC 95 % sur Δ | IC sur la CONTRIBUTION (−Δ) | Statut |
+|---|---|---|---|---|
+| CGA (« Change-aware ») | +0,0011 | [−0,0006 ; +0,0030] | [−0,0030 ; +0,0006] | ? |
+| MCA-SF | −0,0015 | [−0,0052 ; +0,0024] | [−0,0024 ; +0,0052] | ? |
+| **C²S² entier** (−4,31 M params) | −0,0017 | [−0,0036 ; +0,0004] | [−0,0004 ; **+0,0036**] | ? |
+| **DySample → bilinéaire** | **−0,0074** | [−0,0093 ; −0,0055] | [**+0,0055** ; +0,0093] | ✅ **établi** |
+
+*(Les deux dernières colonnes sont la même information retournée, et les
+distinguer n'est pas cosmétique : Δ mesure l'effet du **retrait**, la contribution
+du composant vaut **−Δ**. Confondre les deux a produit une erreur d'un facteur dix
+dans ce README, corrigée le 7 septembre.)*
+
+**Rejouées sur l'époque finale** (7 septembre, sans biais de sélection) : aucun
+verdict ne bouge, DySample se renforce (Welch −8,58 → **−13,05**), et l'effet
+apparent de la CGA tombe de +0,0011 à **+0,0001** — il était **entièrement** du
+biais de sélection, `nocga` portant le plus gros biais du lot (0,0070 contre
+0,0059).
 
 **Un seul composant architectural gagne sa place : DySample** — et c'est une
 brique reprise de ChessMamba, pas une contribution de ce travail. Ni le C²S²
