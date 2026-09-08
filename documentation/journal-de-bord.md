@@ -2660,6 +2660,135 @@ ont produit le résumé hebdomadaire remis au maître de stage.
 
 ---
 
+## Phase 13 — Le lot de reprise (8 septembre 2026)
+
+Les 20 jobs terminés. Contrôle d'intégrité d'abord : **200 époques sur les
+27 runs** (7 du témoin, 20 nouveaux), et **cinq lignes de configuration, quatre
+occurrences chacune**, chacune ne différant du témoin `lean` que par un seul
+facteur. Rien à écarter, aucun paramètre non propagé.
+
+### Résultats, sur les deux métriques
+
+Témoin `lean` (7 graines). σ mis en commun 0,0015 sur le maximum, 0,0039 sur
+l'époque finale ; df 21, seuil 2,04.
+
+| Config | SeK max | SeK final | Δ max | Δ final | verdict |
+|---|---|---|---|---|---|
+| **`enctiny`** | 0,2367 ± 0,0016 | 0,2258 ± 0,0028 | +0,0137 | **+0,0094** | ✅ ÉTABLI (les deux) |
+| **`augswap`** | 0,2332 ± 0,0002 | 0,2250 ± 0,0051 | +0,0102 | **+0,0086** | ✅ ÉTABLI (les deux) |
+| **`ema`** | 0,2275 ± 0,0009 | 0,2238 ± 0,0011 | +0,0045 | **+0,0074** | ✅ ÉTABLI (les deux) |
+| `aug` | 0,2264 ± 0,0014 | 0,2154 ± 0,0057 | +0,0034 | **−0,0010** | ⚠️ **se retourne** |
+| `decfull` | 0,2235 ± 0,0019 | 0,2157 ± 0,0032 | +0,0005 | −0,0007 | non établi (les deux) |
+| `lean` (témoin) | 0,2230 ± 0,0018 | 0,2164 ± 0,0037 | — | — | témoin |
+
+### ⚠️ `aug` était un faux positif, et C3 l'a attrapé
+
+Rotations 90° + jitter photométrique : **+0,0034 ÉTABLI sur le maximum,
+−0,0010 non établi sur l'époque finale.** Le groupe porte le plus gros biais de
+sélection du lot — **0,0110** contre 0,0066 pour le témoin — et le retirer efface
+le gain en entier : +0,0034 − (0,0110 − 0,0066) = −0,0010, la valeur mesurée au
+dix-millième.
+
+Sans le travail de la veille, la conclusion écrite aurait été « l'augmentation
+géométrique et photométrique rapporte +0,0034, établi par les deux tests ». Elle
+aurait été fausse, et elle aurait été **publiée** : c'est exactement le scénario
+que C3 cherchait, et il s'est produit dès le premier lot suivant.
+
+L'identité `Δ_final = Δ_max − (biais_config − biais_témoin)` a été vérifiée sur
+**les cinq** configurations, exacte au dix-millième partout. Les biais s'étalent
+ici de 0,0037 à 0,0110 — un écart de 0,0073, soit **cinq fois** le σ du maximum.
+Sur ce lot, la métrique du maximum est inutilisable pour comparer.
+
+### ⚠️ Je m'étais trompé sur l'échange temporel
+
+La réserve inscrite le 7 septembre — « les transitions de SECOND sont
+directionnelles, l'échange fabrique des échantillons absents du test, l'effet peut
+être négatif » — était juste dans son raisonnement et **fausse dans sa
+conclusion**. C'est le seul composant d'augmentation qui fonctionne, et de loin le
+plus fort.
+
+Décomposition sur l'époque finale, comparaisons appariées (A3 se lit contre A2,
+comme pré-enregistré) :
+
+| Composant | Δ | verdict |
+|---|---|---|
+| rot90 + photométrique | −0,0010 | non établi |
+| **échange temporel** | **+0,0096** | ✅ ÉTABLI sur les deux métriques (t 2,93 / 2,52) |
+| somme | +0,0086 | ✅ ÉTABLI, égale la mesure directe |
+
+Ce que ça suggère sur le mécanisme : la directionnalité des transitions est bien
+réelle, mais l'apprentissage bi-temporel forcé pèse plus lourd que l'a priori
+directionnel dilué. À 2 968 paires d'entraînement, doubler les données prime.
+
+**Conséquence méthodologique** : la réserve avait conduit à isoler l'échange dans
+une ablation séparée plutôt qu'à le noyer dans un paquet « augmentation ». Sans
+cette séparation, `aug` et l'échange auraient été mesurés ensemble à +0,0086, et
+on aurait attribué une part du gain à des rotations qui n'apportent rien. **Une
+hypothèse fausse a produit le bon plan d'expérience** — ce qui compte est qu'elle
+ait été écrite avant, pas qu'elle ait eu raison.
+
+### L'EMA fait exactement ce qui était prédit
+
++0,0074 sur l'époque finale, établi. Mais l'essentiel est ailleurs : elle **divise
+le biais de sélection par deux** (0,0037 contre 0,0066) et **l'écart-type entre
+graines par trois** (0,0011 contre 0,0037 sur l'époque finale). Ses époques de pic
+sont serrées et précoces — [38, 42, 46, 51] contre [33 … 142] pour le témoin.
+
+C'était la prédiction inscrite le 7 septembre : le LR constant n'a pas la
+décroissance qui moyenne implicitement les dernières époques d'un cosine, et
+`best.pt` retient le maximum d'une promenade bruitée ; lisser les poids attaque ce
+bruit à sa source. Vérifié sur les trois symptômes à la fois.
+
+### Le lot B : la capacité paie, une fois la loss retirée
+
+**`enctiny` : +0,0094, établi sur les deux métriques.** Le verdict d'août —
+« encodeur mini → tiny : −0,0012 » — était bien une mesure du régime défectueux,
+à une seule graine et avec la loss SeK active. La leçon n° 3 de la phase 9 est
+confirmée une seconde fois, sur un facteur qu'on croyait tranché.
+
+**`decfull` ne donne rien**, sur les deux métriques, à 4 graines de chaque côté.
+Cela confirme la phase 6 — le décodeur n'est pas le goulot — cette fois dans le
+bon régime et avec la puissance statistique nécessaire.
+
+### Nouveau chiffre de tête
+
+`lean` + échange temporel : **SeK 0,2332**, à **paramètres et GMACs inchangés**
+(16,48 M / 31,42) — une augmentation ne coûte rien en inférence.
+
+| | SeK | params | calcul |
+|---|---|---|---|
+| vs MambaSCD-Tiny | **105,6 %** | **76,6 %** | **42,8 %** |
+| vs Mamba-FCS | 91,5 % | 8,7 % | 11,9 % |
+
+IC 95 % prudent **[0,2317 ; 0,2347]**, entièrement au-dessus du 0,2208 de
+MambaSCD-Tiny. L'énoncé passe de « dépasse de 1 % » à « **dépasse de 5,6 % pour
+43 % de son calcul** ».
+
+⚠️ **Le σ de 0,0002 affiché pour `augswap` ne doit pas être cité.** Un écart-type
+estimé sur 3 degrés de liberté est lui-même très incertain ; cette valeur est
+probablement un coup de chance de tirage. Tous les intervalles ci-dessus utilisent
+le σ **mis en commun** (0,0015), plus prudent. La conclusion ne change pas.
+
+⚠️ **Les effets ne s'additionnent pas** — leçon de la phase 8, rappelée ici parce
+que la tentation est forte : `augswap` + EMA + `enctiny` ne vaut pas +0,026. Il
+faudra le mesurer.
+
+### Ce que ce lot ouvre
+
+1. **L'échange temporel seul**, sans rot90 ni photométrique. A3 − A2 isole
+   l'échange *en présence* des deux autres ; l'échange seul n'a jamais été testé,
+   et pourrait faire mieux puisque rot90 et le jitter n'apportent rien tout en
+   agitant la fin d'entraînement (σ final 0,0057 pour `aug`).
+2. **`augswap` + EMA.** `augswap` est bruité en fin d'entraînement (σ final
+   0,0051) et l'EMA est précisément l'outil qui corrige ça. Combinaison la plus
+   prometteuse du lot.
+3. **Paramètres et GMACs de `enctiny`**, sans quoi son +0,0094 n'est pas
+   plaçable sur la frontière de Pareto.
+4. Le lot C (latence, fermeture ChangeMamba) et le lot D (troisième jeu de
+   données) restent inchangés.
+
+---
+
 ## Notes de méthode
 
 - Chaque changement de recette part dans un **dossier de sortie distinct** pour ne pas

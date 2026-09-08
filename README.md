@@ -3,11 +3,17 @@
 *Change-aware Spatio-Frequency Mamba* — architecture Mamba **efficiente** (20,8 M
 paramètres) pour la **détection sémantique de changements** (SCD).
 
-**Résultat principal, SECOND :** SeK **0,2228 ± 0,0019** sur 7 graines, soit
-**100,9 % du SeK de MambaSCD-Tiny pour 56 % de son calcul** et 97 % de ses
-paramètres. L'objectif initial — battre Mamba-FCS (189 M) — n'était pas
-atteignable à ce budget ; l'énoncé soutenu est celui de l'efficience à
-performance égale face au modèle de taille comparable.
+**Résultat principal, SECOND (8 septembre) :** SeK **0,2332** — variante `lean`
+plus **échange temporel T1↔T2** à l'entraînement, 4 graines — soit **105,6 % du
+SeK de MambaSCD-Tiny pour 42,8 % de son calcul** et 76,6 % de ses paramètres.
+L'augmentation ne coûte rien en inférence : **16,48 M et 31,42 GMACs**, inchangés.
+IC 95 % prudent [0,2317 ; 0,2347], entièrement au-dessus de 0,2208, et **établi
+sur les deux métriques** (maximum et époque finale).
+
+L'objectif initial — battre Mamba-FCS (189 M) — n'est toujours pas atteint à ce
+budget (91,5 % de son SeK pour 11,9 % de son calcul) ; l'énoncé soutenu reste
+celui de l'efficience face au modèle de taille comparable, désormais avec une
+marge de 5,6 % au lieu de 0,9 %.
 
 - Conception et raisonnement d'architecture : `documentation/plan_recap_CSF-Mamba2.md`
 - **Journal de bord** (chronologie, décisions, résultats des runs) :
@@ -37,12 +43,21 @@ la phase 10 du journal.
 | **CSF-Mamba, sans loss SeK** | **20,80 M** | **41,30** | — | — | — | **22,28 ± 0,19** |
 | **CSF-Mamba, meilleure config ‡** | **20,80 M** | **41,30** | — | — | — | **22,64 ± 0,20** |
 | **CSF-Mamba `lean`** (sans C²S²) | **16,48 M** | **31,42** | — | — | — | **22,30 ± 0,18** |
+| **CSF-Mamba `lean` + échange temporel §** | **16,48 M** | **31,42** | — | — | — | **23,32** |
+| CSF-Mamba `lean` + EMA § | 16,48 M | 31,42 | — | — | — | 22,75 ± 0,09 |
+| CSF-Mamba `lean` + encodeur tiny § | ~30,6 M ¶ | ¶ | — | — | — | 23,67 ± 0,16 |
 | CSF-Mamba, décodeur élargi | 24,27 M | 53,45 | 87,24 | 61,67 | 71,70 | 20,89 † |
 
 *(SeK en italique = checkpoints publiés par ChangeMamba, évalués par eux, sans
 écart-type connu. † une seule graine. ‡ `nosek` + supervision profonde + LR
 constant sur 200 époques, **7 graines**. IC 95 % de la moyenne :
-**[0,2245 ; 0,2283]**, entièrement au-dessus du 0,2208 de MambaSCD-Tiny.)*
+**[0,2245 ; 0,2283]**, entièrement au-dessus du 0,2208 de MambaSCD-Tiny.
+§ lot du 8 septembre, **4 graines**, à consolider à 7 comme les lignes ci-dessus.
+Le σ affiché pour `+ échange temporel` (0,0002) n'est pas cité : un écart-type
+estimé sur 3 degrés de liberté est lui-même très incertain — tous les intervalles
+de ce README utilisent le σ mis en commun. ¶ paramètres estimés, GMACs non encore
+mesurés : cette ligne n'est pas plaçable sur la frontière de Pareto tant que ce
+n'est pas fait.)*
 
 **Tous nos SeK sont des moyennes sur plusieurs graines**, jamais un run isolé.
 L'écart-type run-à-run mis en commun vaut **0,0059**, mesuré sur 40 entraînements.
@@ -207,11 +222,25 @@ son application à Hi-UCD est une **hypothèse**, faute de réplicat sur ce data
 | Effet | Δ SeK | Nature |
 |---|---|---|
 | Retirer la loss SeK | **+0,0125** | loss |
+| **Échange temporel T1↔T2** (8 sept.) | **+0,0096** | données, gratuit en inférence |
+| **Encodeur mini → tiny, hors régime défectueux** (8 sept.) | **+0,0094** | capacité |
+| **EMA des poids** (8 sept.) | **+0,0074** | optimisation, gratuit en inférence |
 | Retirer la compensation de déséquilibre (SECOND) | **+0,032** | loss, calibrée sur les données |
 | Sur-échantillonner les tuiles changées (Hi-UCD) | **+0,037** | données |
 | DySample plutôt que bilinéaire | **+0,0074** | architecture |
 | LR constant sur 200 époques | +0,0098 | optimisation |
 | Crops 512 plutôt que 256 | +0,022 | résolution |
+
+*(Les trois lignes du 8 septembre sont mesurées sur l'**époque finale**, donc sans
+biais de sélection, et établies aussi sur le maximum. Les autres datent d'avant
+que ce biais soit mesuré.)*
+
+⚠️ **Un effet a été retiré de cette liste avant d'y entrer.** Les rotations 90° et
+le jitter photométrique donnaient **+0,0034 « établi »** sur la métrique du
+maximum — et **−0,0010, non établi**, sur l'époque finale. Ce groupe portait le
+plus gros biais de sélection du lot (0,0110 contre 0,0066 pour le témoin) ; le
+retirer efface le gain en entier. Sans la mesure du biais faite la veille, ce
+faux positif figurerait ici comme un résultat acquis.
 
 **La compensation de déséquilibre doit être calibrée sur le taux de changement du
 dataset.** Elle est indispensable sur Hi-UCD (1,36 % de pixels changés — sans elle
