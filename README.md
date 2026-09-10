@@ -373,7 +373,20 @@ alors qu'il s'agit de MACs — attention en comparant à la littérature.
 
 ---
 
-## 9. Utilisation
+## 9. Piste annexe : hybride Mamba / Transformer
+
+⚗️ **Hors du cadre initial**, tenue à l'écart et sans effet sur ce qui précède :
+une attention bi-temporelle jointe aux stages profonds, pour attaquer la
+localisation du changement — le goulot identifié au §6.
+
+Le code vit dans `csf_mamba/experimental/`, se lance par
+`scripts/train_hybrid.sbatch`, tague ses runs `hyb-*` et se documente dans
+**`documentation/hybride.md`**. Sans `--attn-stages`, le modèle de référence est
+inchangé à l'octet près — `tests/test_hybride.py` le vérifie.
+
+---
+
+## 10. Utilisation
 
 **Marche à suivre complète — installation, entraînement, évaluation, pièges :
 `RUN.md`.**

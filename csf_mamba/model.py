@@ -40,6 +40,13 @@ class CSFMamba(nn.Module):
         cga: bool = True,
         mcasf: bool = True,
         encoder_kwargs: dict | None = None,
+        # --- piste expérimentale, hors cadre initial (cf. documentation/hybride.md).
+        # Vide = rien n'est construit et le modèle est identique au modèle de
+        # référence, à l'octet près. Un test le vérifie.
+        attn_stages: tuple[int, ...] = (),
+        attn_depth: int = 2,
+        attn_heads: int = 8,
+        attn_mlp_ratio: float = 2.0,
     ):
         super().__init__()
         self.channels = channels
@@ -64,9 +71,39 @@ class CSFMamba(nn.Module):
             refine=decoder_refine, upsample=upsample, cga=cga,
         )
 
+        # Hybride Mamba/Transformer : attention bi-temporelle jointe aux stages
+        # demandés, appliquée AVANT la fusion pour enrichir les traits de chaque
+        # date du contexte global et de ceux de l'autre date.
+        #
+        # ⚠️ Construite EN DERNIER, et ce n'est pas un détail de style. Chaque
+        # module consomme le générateur aléatoire à sa création : la placer plus
+        # haut décalerait l'initialisation de tous les modules suivants, et un run
+        # hybride ne différerait plus d'un run de référence à graine égale par la
+        # seule attention, mais aussi par des décodeurs initialisés autrement. En
+        # dernier, l'encodeur, la fusion, la FFT et les deux décodeurs reçoivent
+        # exactement les mêmes poids qu'en référence : la comparaison est appariée
+        # jusque dans l'initialisation.
+        self.attn_stages = tuple(sorted(set(attn_stages)))
+        self.attn = nn.ModuleDict()
+        if self.attn_stages:
+            from .experimental import BiTemporalAttention
+            for i in self.attn_stages:
+                if not 0 <= i < len(channels):
+                    raise ValueError(f"stage d'attention {i} hors de [0, {len(channels)})")
+                self.attn[str(i)] = BiTemporalAttention(
+                    channels[i], depth=attn_depth, num_heads=attn_heads,
+                    mlp_ratio=attn_mlp_ratio,
+                )
+
     def forward(self, img_t1: torch.Tensor, img_t2: torch.Tensor) -> dict:
         feats_t1 = self.encoder(img_t1)
         feats_t2 = self.encoder(img_t2)
+
+        # Attention bi-temporelle avant la fusion (liste vide par défaut).
+        if self.attn_stages:
+            feats_t1, feats_t2 = list(feats_t1), list(feats_t2)
+            for i in self.attn_stages:
+                feats_t1[i], feats_t2[i] = self.attn[str(i)](feats_t1[i], feats_t2[i])
 
         fused = []
         for i, (block, f1, f2) in enumerate(zip(self.c2s2, feats_t1, feats_t2)):

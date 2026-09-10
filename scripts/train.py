@@ -79,6 +79,16 @@ def parse_args():
     p.add_argument("--lambda-sem-change", type=float, default=0.0,
                    help="Poids de la CE sémantique restreinte aux zones changées "
                         "(0 = désactivé, comme les runs 1-2).")
+    # --- piste expérimentale hybride Mamba/Transformer, hors cadre initial.
+    # Défauts inertes : sans --attn-stages, le modèle est celui de référence.
+    # Voir documentation/hybride.md et scripts/train_hybrid.sbatch.
+    p.add_argument("--attn-stages", default="",
+                   help="Stages portant l'attention bi-temporelle, séparés par des "
+                        "virgules (ex. '3'). Vide = modèle de référence, inchangé.")
+    p.add_argument("--attn-depth", type=int, default=2,
+                   help="Nombre de blocs Transformer par stage attentionné.")
+    p.add_argument("--attn-heads", type=int, default=8)
+    p.add_argument("--attn-mlp-ratio", type=float, default=2.0)
     p.add_argument("--rot90", action="store_true",
                    help="Ajoute les rotations 90° : groupe diédral complet (8 variantes).")
     p.add_argument("--photometric", type=float, default=0.0,
@@ -126,14 +136,20 @@ def main():
         encoder_kwargs["pretrained_path"] = args.encoder_pretrained
 
     fft_stages = tuple(int(x) for x in args.fft_stages.split(",") if x.strip())
+    attn_stages = tuple(int(x) for x in args.attn_stages.split(",") if x.strip())
     model = CSFMamba(
         num_semantic_classes=num_classes,
         encoder=args.encoder, core=args.core, backend=args.backend,
         decoder_refine=args.decoder_refine, fft_stages=fft_stages,
         fusion=args.fusion, cga=args.cga, mcasf=args.mcasf,
         upsample=args.upsample,
+        attn_stages=attn_stages, attn_depth=args.attn_depth,
+        attn_heads=args.attn_heads, attn_mlp_ratio=args.attn_mlp_ratio,
         encoder_kwargs=encoder_kwargs,
     ).to(device)
+    if attn_stages:
+        print(f"⚗️  HYBRIDE — attention bi-temporelle aux stages {attn_stages}, "
+              f"profondeur {args.attn_depth}, {args.attn_heads} têtes")
     print("Stages FFT :", fft_stages if fft_stages else "aucun (branche retirée)")
     print("Paramètres :", count_parameters(model))
 
