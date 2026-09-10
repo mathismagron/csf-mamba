@@ -67,46 +67,109 @@ def parse_args():
     return p.parse_args()
 
 
+class _LenientArgs(argparse.Namespace):
+    """Namespace qui rend None pour tout attribut absent.
+
+    `get_config` lit une vingtaine d'attributs dont la liste a changé entre les
+    versions, chacun sous un `if args.X:` qui signifie « surcharge fournie ? ».
+    Rendre None, c'est répondre « non » — exactement le comportement voulu, et
+    plus robuste que de deviner la liste exacte du commit visé.
+    """
+
+    def __getattr__(self, name):
+        return None
+
+
+def _vssm_kwargs_verbatim(config):
+    """Kwargs VSSM, transcrits de LEUR `train_MambaSCD.py` au commit b834b2a.
+
+    Ce que `get_vssm_kwargs` a plus tard factorisé. Recopié à l'identique, y
+    compris le `"auto"` conditionnel de `ssm_dt_rank` : une valeur qui diffère
+    donnerait un modèle dont le `state_dict` ne correspond plus, et le garde-fou
+    de `load_weights` refuserait alors de produire un chiffre — panne bruyante,
+    pas résultat faux.
+    """
+    V = config.MODEL.VSSM
+    return dict(
+        patch_size=V.PATCH_SIZE, in_chans=V.IN_CHANS,
+        num_classes=config.MODEL.NUM_CLASSES,
+        depths=V.DEPTHS, dims=V.EMBED_DIM,
+        ssm_d_state=V.SSM_D_STATE, ssm_ratio=V.SSM_RATIO,
+        ssm_rank_ratio=V.SSM_RANK_RATIO,
+        ssm_dt_rank=("auto" if V.SSM_DT_RANK == "auto" else int(V.SSM_DT_RANK)),
+        ssm_act_layer=V.SSM_ACT_LAYER, ssm_conv=V.SSM_CONV,
+        ssm_conv_bias=V.SSM_CONV_BIAS, ssm_drop_rate=V.SSM_DROP_RATE,
+        ssm_init=V.SSM_INIT, forward_type=V.SSM_FORWARDTYPE,
+        mlp_ratio=V.MLP_RATIO, mlp_act_layer=V.MLP_ACT_LAYER,
+        mlp_drop_rate=V.MLP_DROP_RATE,
+        drop_path_rate=config.MODEL.DROP_PATH_RATE,
+        patch_norm=V.PATCH_NORM, norm_layer=V.NORM_LAYER,
+        downsample_version=V.DOWNSAMPLE, patchembed_version=V.PATCHEMBED,
+        gmlp=V.GMLP, use_checkpoint=config.TRAIN.USE_CHECKPOINT,
+    )
+
+
+def _resolve_config(cfg_dir, cfg_name):
+    cfg_path = cfg_dir / cfg_name
+    if cfg_path.is_file():
+        return cfg_path
+    dispo = sorted(str(p.relative_to(cfg_dir)) for p in cfg_dir.rglob("*.yaml"))
+    raise SystemExit(f"⛔ config introuvable : {cfg_path}\n  disponibles :\n    "
+                     + "\n    ".join(dispo[:20]))
+
+
 def build_model(cfg_name: str, repo: str | None = None):
-    """Instancie MambaSCD exactement comme leur SCDTrainer.build_model."""
+    """Instancie MambaSCD comme LEUR trainer, quelle que soit la version du dépôt.
+
+    Deux conventions d'import, selon l'âge du dépôt visé :
+
+    * **version actuelle** — paquet `changedetection`, racine du dépôt sur
+      `sys.path`, kwargs VSSM fournis par `get_vssm_kwargs` ;
+    * **version contemporaine des poids publiés** (b834b2a, 5 mars 2026) —
+      paquet `MambaCD.changedetection`, donc le dossier doit s'appeler
+      **`MambaCD`** et c'est son PARENT qui va sur `sys.path`, et les kwargs VSSM
+      sont énumérés à la main dans leur trainer.
+
+    On détecte laquelle plutôt que de la demander : se tromper produirait une
+    ImportError obscure au bout d'une heure d'ouverture du venv.
+    """
     root = Path(repo).resolve() if repo else _CHANGEMAMBA
     if not (root / "changedetection").is_dir():
         raise SystemExit(f"⛔ pas un dépôt ChangeMamba : {root}")
+
+    script_utils = root / "changedetection" / "script" / "script_utils.py"
+    moderne = script_utils.is_file() and "get_vssm_kwargs" in script_utils.read_text()
     print(f"  dépôt ChangeMamba : {root}")
-    if str(root) not in sys.path:
-        sys.path.insert(0, str(root))
-    from changedetection.configs.config import get_config
-    from changedetection.models.ChangeMambaSCD import ChangeMambaSCD
-    # `get_vssm_kwargs` appartient à la version REFACTORISÉE. Sur un commit
-    # antérieur il n'existe pas, et l'import échoue — message explicite plutôt
-    # qu'une ImportError nue, parce que c'est précisément le commit qu'on vise.
-    try:
+    print(f"  convention détectée : {'actuelle (changedetection)' if moderne else 'époque (MambaCD.changedetection)'}")
+
+    if moderne:
+        if str(root) not in sys.path:
+            sys.path.insert(0, str(root))
+        from changedetection.configs.config import get_config
+        from changedetection.models.ChangeMambaSCD import ChangeMambaSCD
         from changedetection.script.script_utils import get_vssm_kwargs
-    except ImportError as e:
+        cfg_path = _resolve_config(root / "changedetection" / "configs", cfg_name)
+        cfg = get_config(_LenientArgs(cfg=str(cfg_path), opts=None))
+        return ChangeMambaSCD(output_cd=2, output_clf=7, pretrained=None,
+                              **get_vssm_kwargs(cfg))
+
+    if root.name != "MambaCD":
         raise SystemExit(
-            f"⛔ `get_vssm_kwargs` absent de {root} ({e}).\n"
-            "   Ce helper vient de la refactorisation ; sur le commit contemporain "
-            "des poids, le modèle se construit avec les kwargs VSSM explicites.\n"
-            "   Lire leur `train_MambaSCD.py` à ce commit et transcrire l'appel."
-        ) from None
+            f"⛔ ce commit importe sous le préfixe `MambaCD.`, donc le dossier doit "
+            f"s'appeler MambaCD — il s'appelle {root.name!r}.\n"
+            f"   git -C third_party/ChangeMamba worktree add ../MambaCD <sha>"
+        )
+    if str(root.parent) not in sys.path:
+        sys.path.insert(0, str(root.parent))
+    from MambaCD.changedetection.configs.config import get_config
+    from MambaCD.changedetection.models.ChangeMambaSCD import ChangeMambaSCD
 
-    cfg_path = root / "changedetection" / "configs" / cfg_name
-    if not cfg_path.is_file():
-        raise SystemExit(f"config introuvable : {cfg_path}")
-
-    ns = argparse.Namespace(cfg=str(cfg_path), opts=None, batch_size=None, data_path=None,
-                            zip=None, cache_mode=None, pretrained=None,
-                            encoder_pretrained_path=None, model_checkpoint_path=None,
-                            resume=None, resume_training_path=None, accumulation_steps=None,
-                            use_checkpoint=None, disable_amp=None, output=None, tag=None,
-                            enable_amp=None, optim=None, memory_limit_rate=None,
-                            fused_layernorm=None, fused_window_process=None, amp_opt_level=None,
-                            throughput=None, traincost=None)
-    cfg = get_config(ns)
-    # output_clf=7 : 6 classes réelles + l'index 0 réservé — notre convention A,
-    # native chez eux aussi. Aucun décalage d'indices, les prédictions sont
-    # directement comparables à nos labels.
-    return ChangeMambaSCD(output_cd=2, output_clf=7, pretrained=None, **get_vssm_kwargs(cfg))
+    cfg_path = _resolve_config(root / "changedetection" / "configs", cfg_name)
+    cfg = get_config(_LenientArgs(cfg=str(cfg_path), opts=None))
+    # `pretrained=None` : on ne veut PAS le backbone ImageNet, le checkpoint SCD
+    # complet est chargé juste après par load_weights.
+    return ChangeMambaSCD(output_cd=2, output_clf=7, pretrained=None,
+                          **_vssm_kwargs_verbatim(cfg))
 
 
 def load_weights(model, path: str):
