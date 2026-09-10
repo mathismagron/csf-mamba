@@ -62,11 +62,25 @@ def parse_args():
     p.add_argument("--changemamba", action="store_true",
                    help="Mesure AUSSI MambaSCD-Tiny depuis third_party/, même protocole.")
     p.add_argument("--cm-config", default="vssm1/vssm_tiny_224_0229flex.yaml")
+    p.add_argument("--cm-opts", default=None,
+                   help="Surcharges de leur config, façon 'CLÉ VALEUR' séparées par "
+                        "des espaces. Ex. 'MODEL.VSSM.MLP_RATIO 0.0' pour retrouver "
+                        "la variante à 21,51 M de leur table publiée.")
     return p.parse_args()
 
 
-def build_changemamba(cfg_name: str):
-    """Instancie MambaSCD sans ses poids — la latence n'en dépend pas."""
+def build_changemamba(cfg_name: str, opts: str | None = None):
+    """Instancie MambaSCD sans ses poids — la latence n'en dépend pas.
+
+    ⚠️ **Quelle variante mesure-t-on ?** Le dépôt actuel construit un Tiny à
+    37,13 M et 115,44 GMACs, alors que leur table publiée annonce 21,51 M et
+    73,42 GMACs — écart déjà caractérisé le 13 août : la valeur publiée n'est
+    atteignable qu'avec la branche MLP désactivée, et leur dépôt a évolué depuis.
+
+    Chronométrer la version à MLP actif tout en citant le SeK de la version
+    publiée compare deux modèles différents et **gonfle notre avantage**. D'où
+    `--cm-opts 'MODEL.VSSM.MLP_RATIO 0.0'`, qui retrouve la variante de la table.
+    """
     root = Path(__file__).resolve().parents[1] / "third_party" / "ChangeMamba"
     if str(root) not in sys.path:
         sys.path.insert(0, str(root))
@@ -85,7 +99,11 @@ def build_changemamba(cfg_name: str):
                             enable_amp=None, optim=None, memory_limit_rate=None,
                             fused_layernorm=None, fused_window_process=None,
                             amp_opt_level=None, throughput=None, traincost=None)
+    if opts:
+        ns.opts = opts.split()
     cfg = get_config(ns)
+    print(f"  MambaSCD : mlp_ratio={cfg.MODEL.VSSM.MLP_RATIO} "
+          f"depths={list(cfg.MODEL.VSSM.DEPTHS)}")
     return ChangeMambaSCD(output_cd=2, output_clf=7, pretrained=None,
                           **get_vssm_kwargs(cfg))
 
@@ -171,9 +189,14 @@ def main():
     if args.changemamba:
         del model
         torch.cuda.empty_cache()
-        cm = build_changemamba(args.cm_config).cuda().eval()
+        cm = build_changemamba(args.cm_config, args.cm_opts).cuda().eval()
         n = sum(p.numel() for p in cm.parameters())
-        rapport(f"MambaSCD ({args.cm_config})", n, batches, args.size,
+        # 21,51 M est la valeur de leur table publiée ; 37,13 M celle du dépôt
+        # actuel. Dire laquelle on vient de chronométrer évite de comparer une
+        # latence mesurée sur l'une à un SeK cité pour l'autre.
+        variante = ("≈ table publiée (21,51 M)" if n < 25e6
+                    else "dépôt actuel, MLP actif (37,13 M) — PLUS GROS que leur table")
+        rapport(f"MambaSCD ({args.cm_config}) — {variante}", n, batches, args.size,
                 args.iters, args.warmup, cm)
         print("\n(Poids non chargés : la latence n'en dépend pas. Le compte de "
               "paramètres, lui, est bien celui de leur architecture.)")

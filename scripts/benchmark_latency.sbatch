@@ -31,6 +31,10 @@ SIZE="${SIZE:-512}"
 BATCHES="${BATCHES:-1,8}"
 ITERS="${ITERS:-50}"
 CHANGEMAMBA="${CHANGEMAMBA:-1}"   # 0 pour ne mesurer que le nôtre
+# Surcharges de LEUR config. 'MODEL.VSSM.MLP_RATIO 0.0' retrouve la variante à
+# 21,51 M de leur table publiée ; sans cela on chronomètre celle du dépôt actuel,
+# à 37,13 M, ce qui gonfle notre avantage.
+CM_OPTS="${CM_OPTS:-}"
 
 echo "== démarrage $(date +%H:%M:%S) sur $(hostname)"
 module load python/3.11 cuda/12.2
@@ -38,7 +42,7 @@ source "$SCRATCH/csf-venv-cu12/bin/activate"
 nvidia-smi --query-gpu=name,memory.used,utilization.gpu --format=csv,noheader
 cd "$HOME/csf-mamba"
 
-echo "== config : enc=$ENCODER fusion=$FUSION dec=$DECODER_REFINE size=$SIZE batches=$BATCHES iters=$ITERS cm=$CHANGEMAMBA =="
+echo "== config : enc=$ENCODER fusion=$FUSION dec=$DECODER_REFINE size=$SIZE batches=$BATCHES iters=$ITERS cm=$CHANGEMAMBA cm_opts=[${CM_OPTS:-aucune}] =="
 
 python -u -m scripts.benchmark_latency \
     --encoder "$ENCODER" \
@@ -47,6 +51,7 @@ python -u -m scripts.benchmark_latency \
     --size "$SIZE" \
     --batch-sizes "$BATCHES" \
     --iters "$ITERS" \
-    ${CHANGEMAMBA:+$([ "$CHANGEMAMBA" = 1 ] && echo --changemamba)}
+    ${CHANGEMAMBA:+$([ "$CHANGEMAMBA" = 1 ] && echo --changemamba)} \
+    ${CM_OPTS:+--cm-opts "$CM_OPTS"}
 
 echo "== terminé $(date +%H:%M:%S)"

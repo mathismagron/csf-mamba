@@ -40,6 +40,12 @@ atteint **97 % du SeK de Mamba-FCS** avec 17 % des siens.
 
 ## 2. Tableau comparatif — SECOND
 
+**Deux travaux servent de référence, et leurs noms prêtent à confusion.**
+*ChangeMamba* est un article qui propose trois modèles ; celui qui traite notre
+tâche s'appelle **MambaSCD**, décliné en Tiny, Small et Base. *Mamba-FCS* est un
+article **différent**, plus récent et bien plus gros (189 M). Leurs SeK sont ceux
+qu'ils publient, obtenus par leur propre code sur le même split officiel.
+
 SECOND est le jeu de référence du domaine : 4 662 paires 512×512, 6 classes
 sémantiques, split officiel. **SeK** (Separated Kappa) est la métrique consacrée
 de la SCD ; elle combine la qualité de localisation du changement et celle de la
@@ -47,11 +53,11 @@ classification sémantique à l'intérieur des zones changées. Plus haut = mieu
 
 ### Positionnement face à l'état de l'art
 
-| Modèle | Params | GMACs | **SeK** | Origine |
+| Modèle | Params | GMACs | **SeK** | Origine des chiffres |
 |---|---:|---:|---:|---|
-| Mamba-FCS | 189,54 M | 263,15 | **0,2550** | publié |
-| MambaSCD-Base | 89,99 M | 211,55 | **0,2292** | publié |
-| MambaSCD-Tiny | 21,51 M | 73,42 | **0,2208** | publié |
+| Mamba-FCS | 189,54 M | 263,15 | **0,2550** | article Mamba-FCS, table VI |
+| MambaSCD-Base | 89,99 M | 211,55 | **0,2292** | article **ChangeMamba** |
+| MambaSCD-Tiny | 21,51 M | 73,42 | **0,2208** | article **ChangeMamba** |
 | **CSF-Mamba — performance** | **32,58 M** | **58,06** | **0,2484** | mesuré, n = 3 |
 | **CSF-Mamba — efficience** | **16,48 M** | **31,42** | **0,2387** | mesuré, n = 4 |
 
