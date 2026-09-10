@@ -22,9 +22,11 @@ Le pipeline est complet et validé sur GPU, sur deux jeux de données réels. La
 campagne compte **~150 entraînements**, tous à plusieurs graines depuis le
 7 août.
 
-**Le résultat tient en une phrase :** notre modèle **dépasse le SeK de
-MambaSCD-Base en consommant 6,7 fois moins de calcul**, et dépasse MambaSCD-Tiny
-— le seul de taille comparable — en en consommant 2,3 fois moins.
+**Le résultat tient en une phrase.** Évalué avec **le même code de métriques**
+sur les mêmes images, notre modèle **dépasse le checkpoint publié de MambaSCD
+avec 44 % de ses paramètres, 27 % de son calcul et 1,65 fois moins de temps**.
+Face aux chiffres que la littérature cite, il dépasse aussi MambaSCD-Base en
+consommant 6,7 fois moins de calcul.
 
 Deux configurations sont retenues, aux deux extrémités du compromis :
 
@@ -58,8 +60,22 @@ classification sémantique à l'intérieur des zones changées. Plus haut = mieu
 | Mamba-FCS | 189,54 M | 263,15 | **0,2550** | article Mamba-FCS, table VI |
 | MambaSCD-Base | 89,99 M | 211,55 | **0,2292** | article **ChangeMamba** |
 | MambaSCD-Tiny | 21,51 M | 73,42 | **0,2208** | article **ChangeMamba** |
+| **MambaSCD-Tiny, leur checkpoint publié** | **37,13 M** | **115,44** | **0,2334** | **mesuré par nous, même code** |
 | **CSF-Mamba — performance** | **32,58 M** | **58,06** | **0,2484** | mesuré, n = 3 |
 | **CSF-Mamba — efficience** | **16,48 M** | **31,42** | **0,2387** | mesuré, n = 4 |
+
+⚠️ **Les deux lignes MambaSCD-Tiny ne décrivent pas le même modèle.** La première
+reprend leur table publiée. La seconde est **leur propre checkpoint publié**,
+chargé et évalué par nous : 802 tenseurs, 0 manquant, 0 inattendu — aucune
+ambiguïté sur l'identité du modèle — et il compte 37,13 M paramètres, pas 21,51.
+Nous mesurons son SeK à **0,2334** là où ils annoncent 0,2208.
+
+Nous ne savons pas expliquer cet écart de +0,0126 avec certitude, et **son sens
+compte** : notre chaîne leur donne un score *plus élevé* que le leur, ce qui exclut
+l'hypothèse d'un modèle mal alimenté par notre code. L'explication la plus
+économique est celle déjà établie deux fois — leur dépôt public a évolué après
+publication, ce qui a rendu irreproductibles leur `state_dict` puis leur table de
+complexité. Les deux chiffres sont donc donnés côte à côte.
 
 **Lecture en pourcentages du modèle de référence** (100 % = à égalité) :
 
@@ -68,7 +84,21 @@ classification sémantique à l'intérieur des zones changées. Plus haut = mieu
 | **efficience** (16,48 M) | 94 % SeK · **9 % params** · **12 % calcul** | **104 % SeK · 18 % params · 15 % calcul** | **108 % SeK · 77 % params · 43 % calcul** |
 | **performance** (32,58 M) | **97 % SeK · 17 % params · 22 % calcul** | 108 % SeK · 36 % params · 27 % calcul | 113 % SeK · 152 % params · 79 % calcul |
 
-Les deux cases en gras sont les énoncés à retenir :
+### L'énoncé principal : la comparaison à code identique
+
+C'est la plus rigoureuse dont nous disposions — mêmes images, même split, **même
+code de métriques des deux côtés** — et elle ne dépend d'aucun chiffre publié.
+
+| | SeK | Params | GMACs |
+|---|---:|---:|---:|
+| Leur checkpoint publié, évalué par nous | 0,2334 | 37,13 M | 115,44 |
+| **CSF-Mamba — efficience** | **0,2387** | **16,48 M** | **31,42** |
+| | **102,3 %** | **44,4 %** | **27,2 %** |
+
+C'est aussi la comparaison **la moins favorable pour nous** : face à leur chiffre
+publié, la marge serait de 108 % au lieu de 102,3 %. Nous retenons la plus stricte.
+
+Les autres énoncés, appuyés sur les chiffres que cite la littérature :
 
 - **le point d'efficience bat MambaSCD-Base**, un modèle 5,5 fois plus gros, pour
   **15 % de son calcul** ;
@@ -117,25 +147,29 @@ donc le **régime réel** ; n'en rapporter qu'un des deux cacherait quelque chos
 
 | Modèle | fp32 | bf16 | Mémoire crête |
 |---|---:|---:|---:|
-| **CSF-Mamba — efficience** | **129 ms** · 62 paires/s | **114 ms** · 70 paires/s | 1,9–2,0 Go |
-| **CSF-Mamba — performance** | 144 ms · 56 paires/s | 125 ms · 64 paires/s | 1,9–2,1 Go |
-| MambaSCD ‖ | 316 ms · 25 paires/s | 209 ms · 38 paires/s | 4,1–5,4 Go |
+| **CSF-Mamba — efficience** (16,48 M) | **129 ms** · 62 paires/s | **114 ms** · 70 paires/s | 1,9–2,0 Go |
+| **CSF-Mamba — performance** (32,58 M) | 144 ms · 56 paires/s | 125 ms · 64 paires/s | 1,9–2,1 Go |
+| MambaSCD, variante publiée (19,57 M) ‖ | 252 ms · 32 paires/s | 187 ms · 43 paires/s | 4,0–5,3 Go |
 
-Le point d'efficience est **2,4× plus rapide en fp32, 1,8× en bf16**, pour **2,2 à
-2,7× moins de mémoire**. Sur une heure de calcul : 253 000 paires traitées contre
-138 000.
+Le point d'efficience est **1,95× plus rapide en fp32, 1,65× en bf16**, pour **2,1
+à 2,7× moins de mémoire**. Sur une heure : 253 000 paires traitées contre 154 000.
+
+**Le fait le plus parlant** : notre modèle de **32,58 M** (125 ms) est plus rapide
+que le leur de **19,57 M** (187 ms) — 1,50× à taille supérieure.
 
 **L'avantage rétrécit en bf16, et il faut le dire.** Leur architecture, plus
-dominée par du calcul dense, profite mieux des *tensor cores* — elle gagne 1,51×
-en passant de fp32 à bf16, contre 1,14× pour la nôtre, davantage limitée par les
-accès mémoire (`grid_sample` en tête). La latence ne suit donc pas les GMACs à
-l'identique.
+dominée par du calcul dense, profite mieux des *tensor cores* ; la nôtre est
+davantage limitée par les accès mémoire (`grid_sample` en tête). La latence ne
+suit donc pas les GMACs à l'identique.
 
-‖ ⚠️ **Cette ligne chronomètre MambaSCD tel que leur dépôt actuel le construit —
-37,13 M et 115,44 GMACs — et non la variante à 21,51 M dont le SeK est cité
-ci-dessus** (voir §6, réserve 2). Le facteur mesuré est donc un **majorant** : à
-GMACs comparables, l'avantage retomberait vers 1,5×. La mesure sur la bonne
-variante est en cours.
+‖ Variante à branche MLP désactivée, celle qui correspond à leur table publiée.
+Elle mesure **19,57 M**, à 9 % de leurs 21,51 M annoncés — reconstruction établie
+en août et reproduite ici à l'identique. Une première mesure, faite contre la
+variante à 37,13 M du dépôt actuel, donnait 1,84× en bf16 : elle **surestimait**
+l'avantage et a été remplacée.
+
+**Reproductibilité.** Nos propres temps, remesurés deux jours plus tard sur
+d'autres nœuds, retombent à **0,05 % près**.
 
 ---
 
@@ -268,23 +302,18 @@ mais cela signifie qu'une confirmation sur un troisième jeu manque. Le retrait 
 la loss SeK, résultat principal, **ne transfère pas** à Hi-UCD : il y est neutre
 et y multiplie l'écart-type par quatre. Le résultat est **spécifique à SECOND**.
 
-**2. La référence de latence n'est pas la bonne variante.** La mesure du
-10 septembre chronomètre MambaSCD tel que leur dépôt actuel le construit :
-**37,13 M et 115,44 GMACs**, alors que leur table publiée — celle dont vient le
-SeK que nous citons — décrit un modèle de **21,51 M et 73,42 GMACs**. L'écart est
-caractérisé depuis le 13 août : la valeur publiée n'est atteignable qu'avec la
-branche MLP désactivée, leur dépôt ayant évolué après publication. **Les auteurs
-n'ont ni menti ni fait d'erreur** ; c'est le cas ordinaire d'un dépôt qui continue
-de vivre.
+**2. Leur modèle publié ne correspond pas à leur table publiée.** Trois mesures
+indépendantes le montrent : leur checkpoint charge exactement dans un modèle de
+**37,13 M**, leur variante à branche MLP coupée mesure **19,57 M** contre 21,51
+annoncés, et nous mesurons son SeK à **0,2334** contre 0,2208 annoncé. La cause
+est établie depuis le 13 août : **leur dépôt public a évolué après publication**.
+**Les auteurs n'ont ni menti ni fait d'erreur** ; c'est le cas ordinaire d'un
+dépôt qui continue de vivre, et c'est précisément pourquoi une table publiée est
+difficile à revérifier deux ans plus tard.
 
-Conséquence : notre avantage de vitesse mesuré (1,8× en bf16) est un **majorant**.
-La mesure sur la variante publiée est en cours. Le sens du résultat n'est pas en
-jeu — notre modèle est plus rapide et plus économe dans tous les cas de figure —
-seule son ampleur l'est.
-
-Pour la même raison, ce document conserve **leurs chiffres publiés** (21,51 M,
-73,42 GMACs) plutôt que notre reconstruction à 37,13 M : c'est la référence que
-cite la littérature, et c'est la comparaison **la plus défavorable pour nous**.
+Ce document donne donc **les deux** : leurs chiffres publiés, que cite la
+littérature, et nos mesures à code identique, qui sont les plus rigoureuses et
+aussi les moins favorables pour nous.
 
 **3. Les deux configurations retenues comptent 3 et 4 graines**, contre 7 pour les
 lignes consolidées. Six entraînements sont lancés pour les porter à 7.
@@ -296,20 +325,25 @@ lignes consolidées. Six entraînements sont lancés pour les porter à 7.
 | | Chantier | État |
 |---|---|---|
 | C1 | Latence et mémoire crête, face à MambaSCD au même protocole | ✅ **fait** (§2) |
-| C1b | Refaire la mesure sur leur variante publiée à 21,51 M | **en cours** |
-| C2 | Évaluer le checkpoint MambaSCD publié avec **notre** code de métriques | **en cours** |
+| C2 | Évaluer le checkpoint MambaSCD publié avec **notre** code de métriques | ✅ **fait** (§2) |
 | — | Consolider les deux configurations retenues à 7 graines | **en cours** (6 runs) |
+| — | Élucider l'écart de +0,0126 entre leur SeK publié et notre mesure | ouvert |
 | D | Un troisième jeu de données (Landsat-SCD, rapporté par ChangeMamba) | à décider |
 | — | Trancher l'apport du jitter photométrique (+0,0022, non établi) | à faire |
 | — | Split de validation propre, pour un chiffre sans biais de sélection | à arbitrer |
 
-**C2 a franchi son obstacle historique.** Le checkpoint publié de MambaSCD ne se
-chargeait plus dans leur propre dépôt — 558 poids manquants, 590 inattendus,
-leur décodeur ayant été renommé après publication. Sorti le commit contemporain
-des poids dans un *worktree* git, il se charge désormais **exactement : 802
-tenseurs, 0 manquant, 0 inattendu**. L'évaluation tourne. Elle donnera leur SeK
-sous notre code de métriques, et le tableau comparatif passera de « d'après les
-chiffres publiés » à « évalué avec le même code ».
+**C2 est abouti.** Le checkpoint publié de MambaSCD ne se chargeait plus dans
+leur propre dépôt — 558 poids manquants, 590 inattendus, leur décodeur ayant été
+renommé après publication. Sorti le commit contemporain des poids dans un
+*worktree* git, il se charge **exactement : 802 tenseurs, 0 manquant, 0
+inattendu**, et l'évaluation aboutit. Le tableau comparatif porte désormais une
+ligne « évaluée avec le même code » et non plus seulement « d'après les chiffres
+publiés ».
+
+Reste ouvert l'écart de **+0,0126** entre leur SeK publié et notre mesure de leur
+propre checkpoint. Il ne remet pas en cause la comparaison — il la rend plus
+stricte pour nous — mais son origine mériterait d'être identifiée avant
+publication.
 
 ---
 

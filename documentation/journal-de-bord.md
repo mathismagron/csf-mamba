@@ -2990,10 +2990,83 @@ défaillance le plus coûteux possible ici.
 Ajout d'un contrôle de formes au premier lot, et vérification du contrat : une
 prédiction parfaite passée sous la forme attendue donne SeK = 1,0000.
 
+### La latence refaite sur la bonne variante (10 septembre, soir)
+
+`--cm-opts 'MODEL.VSSM.MLP_RATIO 0.0'` reconstruit la variante de leur table
+publiée. Elle mesure **19,57 M** — exactement la reconstruction du 13 août
+(« Tiny, MLP désactivé : 19,57 M », soit −9,0 % de leurs 21,51 M annoncés). Deux
+méthodes indépendantes, à un mois d'intervalle, le même chiffre.
+
+| Modèle | fp32 (b8) | bf16 (b8) | Mémoire |
+|---|---:|---:|---:|
+| efficience (16,48 M) | 129 ms | 114 ms | 1,9–2,0 Go |
+| performance (32,58 M) | 144 ms | 125 ms | 1,9–2,1 Go |
+| MambaSCD publié (19,57 M) | 252 ms | 187 ms | 4,0–5,3 Go |
+
+**1,95× en fp32 et 1,65× en bf16** pour le point d'efficience, 2,1 à 2,7× moins
+de mémoire. La première mesure, contre la variante à 37,13 M, donnait 1,84× : elle
+surestimait bien l'avantage, comme annoncé, mais moins que les 1,55× estimés.
+
+Le fait le plus parlant du lot : **notre modèle de 32,58 M est plus rapide que le
+leur de 19,57 M** — 125 ms contre 187 ms, 1,50× à taille supérieure.
+
+**Contrôle de reproductibilité.** Nos propres temps, remesurés deux jours plus
+tard sur d'autres nœuds, retombent à **0,05 % près** (129,29 puis 129,36 ms ;
+113,58 puis 113,53). La mesure ne dépend ni du nœud ni du jour.
+
+### ⚠️ Leur checkpoint évalué avec notre code : 0,2334, pas 0,2208
+
+Aboutissement d'un chantier ouvert fin juillet.
+
+    poids chargés : 802 tenseurs | manquants 0 | inattendus 0
+    paramètres    : 37 125 641 (37,13 M)
+    formes        : cd (4, 2, 512, 512)  sem (4, 7, 512, 512)
+    1694 paires dans le split 'test'
+
+| | fscd | mIoU | OA | kappa | **SeK** |
+|---|---|---|---|---|---|
+| MambaSCD publié, notre code | 0,6344 | 0,7333 | 0,8808 | 0,3543 | **0,2334** |
+
+**Écart de +0,0126 avec le 0,2208 qu'ils annoncent**, et le garde-fou a refusé le
+chiffre. Mais **le sens de l'écart compte** : ce garde-fou avait été écrit pour
+attraper un modèle mal alimenté par notre chaîne, qui sortirait un SeK effondré
+qu'on attribuerait à tort à leur performance. Ici notre code leur donne un score
+**plus élevé**. Ce mode de défaillance est donc exclu.
+
+Tout le reste est vérifié : chargement exact, formes correctes, leur normalisation
+ImageNet 0-255 appliquée, et le split test contient 1694 paires — 2968 + 1694 =
+4662, le compte officiel de SECOND.
+
+**Nous ne savons pas expliquer le +0,0126 avec certitude.** L'explication la plus
+économique est celle déjà établie deux fois : leur dépôt public a évolué après
+publication, ce qui a rendu irreproductibles leur `state_dict` (10 août) puis leur
+table de complexité (13 août) ; leur chaîne d'évaluation a pu bouger de même. À
+noter comme question ouverte, pas comme conclusion.
+
+### Ce que ça change : l'énoncé principal ne dépend plus d'aucun chiffre publié
+
+| | SeK | Params | GMACs |
+|---|---:|---:|---:|
+| leur checkpoint, notre code | 0,2334 | 37,13 M | 115,44 |
+| **notre point d'efficience** | **0,2387** | **16,48 M** | **31,42** |
+| rapport | **102,3 %** | **44,4 %** | **27,2 %** |
+
+Mêmes images, même split, même code de métriques des deux côtés. C'est la
+comparaison la plus rigoureuse dont le projet dispose — et **la moins favorable
+pour nous** : face à leur chiffre publié, la marge serait de 108 % au lieu de
+102,3 %. On retient la plus stricte, conformément au principe adopté le 13 août.
+
+Le README donne désormais **les deux** lignes MambaSCD-Tiny, la publiée et la
+mesurée, avec l'avertissement qu'elles ne décrivent pas le même modèle.
+
 ### En attente
 
-- `augswap-s5` et `max-s4` relancés depuis zéro : les groupes passeront de 6 à 7
-  et de 3 à 4 graines. Les moyennes ci-dessus sont donc **provisoires**.
+- `augswap-s5` et `max-s4` relancés depuis zéro, plus six entraînements pour
+  porter les deux configurations retenues à 7 graines. Les moyennes ci-dessus
+  sont donc **provisoires**.
+- L'origine de l'écart de +0,0126 sur leur checkpoint. Piste à écarter en
+  premier : leur boucle d'inférence découpe en crops de 256 (`fixed_crop_size`)
+  là où nous évaluons en 512 pleine tuile.
 - La comparaison `augswap-ema` contre `swap-ema` (+0,0022, non établie) mériterait
   d'être tranchée : c'est elle qui dit si rot90 et le jitter gagnent leur place.
 - Lots C (latence, fermeture ChangeMamba) et D (troisième jeu de données)
