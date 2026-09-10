@@ -2844,11 +2844,10 @@ total. Corrigé.
 | sur l'échange temporel | +0,0087 | +3,84 / +3,69 | ✅ ÉTABLI |
 | sur échange + augmentation | +0,0086 | +4,16 / +4,89 | ✅ ÉTABLI |
 
-Trois contextes, trois fois le même effet à ±0,0007 près. C'est rare dans ce
-projet, où la leçon dominante depuis la phase 8 est que **les effets ne
-s'additionnent pas** ; l'EMA est la première exception nette. Explication
-plausible : elle n'agit pas sur ce que le modèle apprend mais sur la façon dont
-on lit ses poids en fin d'entraînement, donc elle ne recouvre aucun autre levier.
+Trois contextes, le même effet à ±0,0007 près : **première exception nette** à la
+règle de non-additivité de la phase 8. Mécanisme probable — l'EMA ne change pas
+ce que le modèle apprend, seulement la façon dont on lit ses poids en fin
+d'entraînement, donc elle ne recouvre aucun autre levier.
 
 **Apport de rot90 + jitter photométrique — jamais établi, mais pas nul :**
 
@@ -2883,18 +2882,17 @@ que celui du 8 septembre, qui ne dépassait que la variante Tiny.
 paramètres. L'objectif initial du stage — le battre — reste manqué, mais l'écart
 passe de 8,5 % à 2,6 %.
 
-### La prévision du 8 septembre, et ce qu'elle a raté
+### Non-additivité : la règle tient, la fourchette était trop basse
 
-J'avais annoncé « quelque part vers 0,240–0,245, peut-être moins », en
-avertissant que la somme des effets (0,2484 sur l'époque finale) n'arriverait
-pas. Résultat : **0,2484 sur le maximum, 0,2397 sur l'époque finale**.
+Prévision du 8 septembre : « 0,240–0,245, peut-être moins », la somme des cinq
+effets (0,2484 en final) ne devant pas se réaliser. Mesuré : **0,2484 sur le
+maximum, 0,2397 sur l'époque finale**.
 
-La mise en garde sur la non-additivité était juste — la somme prédisait 0,2484 en
-final, on obtient 0,2397 — mais la fourchette était **trop basse**. Empiler cinq
-effets a mieux marché que ce que la phase 8 laissait craindre, sans doute parce
-que ces cinq-là agissent sur des plans différents (données, lecture des poids,
-capacité, supervision) là où les composants d'août se recouvraient tous sur la
-même fonction de perte défectueuse.
+La règle de la phase 8 tient — 0,2397 mesuré contre 0,2484 prédits par
+additivité — mais le recouvrement est bien moindre qu'en août. Hypothèse : ces
+cinq leviers agissent sur des plans distincts (données, lecture des poids,
+capacité, supervision), là où les composants d'août se recouvraient tous sur la
+même loss défectueuse. À vérifier, pas établi.
 
 ### En attente
 
