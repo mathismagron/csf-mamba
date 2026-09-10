@@ -221,10 +221,23 @@ def main():
         t2 = (batch["img_t2"].to(device) * 255.0 - mean) / std
 
         out_cd, out_t1, out_t2 = model(t1, t2)
-        preds = {"change": out_cd.argmax(1),
-                 "sem_t1": out_t1.argmax(1), "sem_t2": out_t2.argmax(1)}
+
+        # ⚠️ `SCDEvaluator.add` attend les LOGITS sous les clés bcd/sem_t1/sem_t2
+        # et fait l'argmax lui-même. La version précédente passait des cartes
+        # déjà argmaxées sous la clé « change » à une méthode `update` qui
+        # n'existe pas. Corriger le seul nom de méthode aurait donné un KeyError ;
+        # corriger aussi la seule clé aurait fait argmaxer une carte (B,H,W) sur
+        # la dimension des hauteurs — un SeK faux, sans la moindre erreur.
+        if i == 0:
+            assert out_cd.shape[1] == 2, f"out_cd a {out_cd.shape[1]} canaux, 2 attendus"
+            assert out_t1.shape[1] == num_classes, \
+                f"out_t1 a {out_t1.shape[1]} canaux, {num_classes} attendus"
+            print(f"  formes vérifiées : cd {tuple(out_cd.shape)} "
+                  f"sem {tuple(out_t1.shape)}")
+
+        outputs = {"bcd": out_cd, "sem_t1": out_t1, "sem_t2": out_t2}
         targets = {k: batch[k].to(device) for k in ("change", "sem_t1", "sem_t2")}
-        evaluator.update(preds, targets)
+        evaluator.add(outputs, targets)
         if i % 50 == 0:
             print(f"    lot {i}/{len(loader)}", flush=True)
 
