@@ -1,426 +1,315 @@
 # CSF-Mamba
 
-*Change-aware Spatio-Frequency Mamba* — architecture Mamba **efficiente** (20,8 M
-paramètres) pour la **détection sémantique de changements** (SCD).
+Architecture Mamba **efficiente** pour la **détection sémantique de changements**
+(SCD) sur imagerie aérienne : à partir de deux images d'une même zone prises à
+deux dates, produire la carte des zones changées **et** la classe d'occupation du
+sol avant et après.
 
-**Résultats principaux, SECOND (10 septembre) — deux points d'une même frontière.**
-Paramètres et GMACs **mesurés**, pas estimés.
+Stage de recherche, Université de Moncton — Mathis Magron, encadré par
+Prof. Eric Hervet et Prof. Andy Couturier. Entraînements sur Narval
+(Alliance Canada, A100).
 
-| | Params | GMACs | SeK |
+- **Journal de bord** : `documentation/journal-de-bord.md` — chronologie complète,
+  décisions, résultats de tous les runs. Matière première du rapport.
+- **Conception de l'architecture** : `documentation/plan_recap_CSF-Mamba2.md`
+- **Lancer un entraînement ou une évaluation** : `RUN.md`
+
+---
+
+## 1. Où en est le projet (10 septembre 2026)
+
+Le pipeline est complet et validé sur GPU, sur deux jeux de données réels. La
+campagne compte **~150 entraînements**, tous à plusieurs graines depuis le
+7 août.
+
+**Le résultat tient en une phrase :** à performance égale ou supérieure, le
+modèle coûte **quatre à sept fois moins de calcul** que les architectures Mamba
+publiées pour cette tâche.
+
+Deux configurations sont retenues, aux deux extrémités du compromis :
+
+| | Paramètres | GMACs | SeK |
 |---|---|---|---|
-| **efficience** — `lean` + échange temporel + jitter + EMA | **16,48 M** | **31,42** | **0,2387 ± 0,0007** (n=4) |
-| **performance** — la même plus encodeur `tiny` et supervision profonde | 32,58 M | 58,06 | **0,2484 ± 0,0017** (n=3) |
+| **Point d'efficience** | **16,48 M** | **31,42** | **0,2387** |
+| **Point de performance** | 32,58 M | 58,06 | **0,2484** |
 
-Le point d'efficience **dépasse MambaSCD-Base** (0,2292, 89,99 M, 211,55 GMACs) :
-**104,1 % de son SeK pour 18,3 % de ses paramètres et 14,9 % de son calcul**. Face
-à MambaSCD-Tiny : 108,1 % du SeK, 76,6 % des paramètres, 42,8 % du calcul.
+Le premier **dépasse MambaSCD-Base** avec 18 % de ses paramètres. Le second
+atteint **97 % du SeK de Mamba-FCS** avec 17 % des siens.
 
-Le point de performance atteint **97,4 % du SeK de Mamba-FCS pour 17,2 % de ses
-paramètres et 22,1 % de son calcul**. L'objectif initial — le battre — n'est
-toujours pas atteint, mais l'écart passe de 8,5 % à 2,6 %.
+---
 
-Les deux sont **établis sur les deux métriques**, maximum et époque finale.
+## 2. Tableau comparatif — SECOND
 
-- Conception et raisonnement d'architecture : `documentation/plan_recap_CSF-Mamba2.md`
-- **Journal de bord** (chronologie, décisions, résultats des runs) :
-  `documentation/journal-de-bord.md` — matière première du rapport
-- Lancer un entraînement / une évaluation : `RUN.md`
+SECOND est le jeu de référence du domaine : 4 662 paires 512×512, 6 classes
+sémantiques, split officiel. **SeK** (Separated Kappa) est la métrique consacrée
+de la SCD ; elle combine la qualité de localisation du changement et celle de la
+classification sémantique à l'intérieur des zones changées. Plus haut = mieux.
 
-## État actuel (14 août 2026)
+### Positionnement face à l'état de l'art
 
-Pipeline complet validé sur GPU (Narval, A100), **20,8 M paramètres**, deux datasets
-supportés et validés sur données réelles.
+| Modèle | Params | GMACs | **SeK** | Origine |
+|---|---:|---:|---:|---|
+| Mamba-FCS | 189,54 M | 263,15 | **0,2550** | publié |
+| MambaSCD-Base | 89,99 M | 211,55 | **0,2292** | publié |
+| MambaSCD-Tiny | 21,51 M | 73,42 | **0,2208** | publié |
+| **CSF-Mamba — performance** | **32,58 M** | **58,06** | **0,2484** | mesuré, n = 3 |
+| **CSF-Mamba — efficience** | **16,48 M** | **31,42** | **0,2387** | mesuré, n = 4 |
 
-**Résultat de référence — SECOND** (split officiel, code de métriques verbatim).
-GMACs mesurés en 512×512 avec fvcore, handlers SSM inclus — même convention que
-ChangeMamba, qui étiquette ses sorties fvcore « GFLOPs » alors qu'il s'agit de
-MACs. **Comptage audité** (13 août) : une seule opération non comptée porte des
-MACs, la FFT2, bornée à 0,126 GMACs soit 0,3 % du total ; tous les modules
-paramétrés sont dans le graphe, la projection d'entrée des blocs Mamba étant
-comptée via `aten::matmul` — 4,832 GMACs analytiques contre 4,832 mesurés. Voir
-la phase 10 du journal.
+**Lecture en pourcentages du modèle de référence** (100 % = à égalité) :
 
-| Méthode | Params | GMACs | OA | Fscd | mIoU | **SeK** |
-|---|---|---|---|---|---|---|
-| Mamba-FCS | 189,54 M | 263,15 | 88,62 | 65,78 | 74,07 | **25,50** |
-| MambaSCD-Base | 89,99 M | 211,55 | — | — | — | *22,92* |
-| **MambaSCD-Tiny** | 21,51 M | 73,42 | — | — | — | *22,08* |
-| CSF-Mamba, recette initiale | 20,80 M | 41,30 | 87,57 | 62,10 | 72,00 | 21,03 ± 1,05 |
-| **CSF-Mamba, sans loss SeK** | **20,80 M** | **41,30** | — | — | — | **22,28 ± 0,19** |
-| **CSF-Mamba, meilleure config ‡** | **20,80 M** | **41,30** | — | — | — | **22,64 ± 0,20** |
-| **CSF-Mamba `lean`** (sans C²S²) | **16,48 M** | **31,42** | — | — | — | **22,30 ± 0,18** |
-| **CSF-Mamba `lean` + échange temporel §** | **16,48 M** | **31,42** | — | — | — | **23,32** |
-| CSF-Mamba `lean` + EMA § | 16,48 M | 31,42 | — | — | — | 22,75 ± 0,09 |
-| CSF-Mamba `lean` + encodeur tiny § | ~30,6 M ¶ | ¶ | — | — | — | 23,67 ± 0,16 |
-| CSF-Mamba, décodeur élargi | 24,27 M | 53,45 | 87,24 | 61,67 | 71,70 | 20,89 † |
+| | vs Mamba-FCS | vs MambaSCD-Base | vs MambaSCD-Tiny |
+|---|---|---|---|
+| **efficience** (16,48 M) | 94 % SeK · **9 % params** · **12 % calcul** | **104 % SeK · 18 % params · 15 % calcul** | **108 % SeK · 77 % params · 43 % calcul** |
+| **performance** (32,58 M) | **97 % SeK · 17 % params · 22 % calcul** | 108 % SeK · 36 % params · 27 % calcul | 113 % SeK · 152 % params · 79 % calcul |
 
-*(SeK en italique = checkpoints publiés par ChangeMamba, évalués par eux, sans
-écart-type connu. † une seule graine. ‡ `nosek` + supervision profonde + LR
-constant sur 200 époques, **7 graines**. IC 95 % de la moyenne :
-**[0,2245 ; 0,2283]**, entièrement au-dessus du 0,2208 de MambaSCD-Tiny.
-§ lot du 8 septembre, **4 graines**, à consolider à 7 comme les lignes ci-dessus.
-Le σ affiché pour `+ échange temporel` (0,0002) n'est pas cité : un écart-type
-estimé sur 3 degrés de liberté est lui-même très incertain — tous les intervalles
-de ce README utilisent le σ mis en commun. ¶ paramètres estimés, GMACs non encore
-mesurés : cette ligne n'est pas plaçable sur la frontière de Pareto tant que ce
-n'est pas fait.)*
+Les deux cases en gras sont les énoncés à retenir :
 
-**Tous nos SeK sont des moyennes sur plusieurs graines**, jamais un run isolé.
-L'écart-type run-à-run mis en commun vaut **0,0059**, mesuré sur 40 entraînements.
+- **le point d'efficience bat MambaSCD-Base**, un modèle 5,5 fois plus gros, pour
+  **15 % de son calcul** ;
+- **le point de performance approche Mamba-FCS à 2,6 % près**, pour **22 % de son
+  calcul**. L'objectif initial du stage — le battre — n'est pas atteint, mais
+  l'écart s'est réduit de 17,5 % (recette de juillet, SeK 0,2103) à 2,6 %.
 
-⚠️ **La recette initiale échoue une fois sur quatre.** Ses 8 graines forment deux
-modes : six à 0,2157 ± 0,0036, deux effondrées à 0,1959 et 0,1923 — uniformément
-mauvaises (kappa 0,304 contre 0,333). Retirer la loss SeK supprime ce mode de
-défaillance **et** divise l'écart-type par cinq (0,0105 → 0,0019, F = 30,5 pour
-un seuil de 4,21).
+### Toutes nos configurations, par ordre de SeK
 
-**Le résultat d'efficience** — face à MambaSCD-Tiny, seul modèle de taille
-comparable : **−3 % de paramètres, −44 % de calcul, et +0,9 % de SeK** pour la
-configuration au changement unique, **+2,5 %** pour la meilleure.
+| Configuration | Params | GMACs | SeK (max) | SeK (finale) | n |
+|---|---:|---:|---:|---:|---:|
+| **performance** = efficience + encodeur `tiny` + supervision profonde | 32,58 M | 58,06 | **0,2484 ± 0,0017** | 0,2397 | 3 ‡ |
+| **efficience** = `lean` + échange temporel + jitter + EMA | **16,48 M** | **31,42** | **0,2387 ± 0,0007** | 0,2325 | 4 |
+| `lean` + encodeur `tiny` | 32,58 M | 58,06 | 0,2367 ± 0,0016 | 0,2258 | 4 |
+| `lean` + échange temporel + EMA | 16,48 M | 31,42 | 0,2348 ± 0,0017 | 0,2303 | 4 |
+| `lean` + échange temporel + jitter | 16,48 M | 31,42 | 0,2331 ± 0,0010 | 0,2239 | 6 ‡ |
+| `lean` + échange temporel | 16,48 M | 31,42 | 0,2285 ± 0,0015 | 0,2216 | 4 |
+| `lean` + EMA | 16,48 M | 31,42 | 0,2275 ± 0,0009 | 0,2238 | 4 |
+| `best` = `nosek` + supervision profonde + LR constant | 20,80 M | 41,30 | 0,2264 ± 0,0020 | 0,2214 | 7 |
+| `lean` = `nosek` sans C²S², LR constant | 16,48 M | 31,42 | 0,2230 ± 0,0018 | 0,2164 | 7 |
+| `nosek` = recette initiale sans la loss SeK | 20,80 M | 41,30 | 0,2228 ± 0,0019 | — | 7 |
+| Recette initiale (juillet) | 20,80 M | 41,30 | 0,2103 ± 0,0105 | — | 8 |
 
-⚠️ **Et la contribution du C²S² n'est pas détectable.** Le retirer entièrement —
-damier, MCA-SF et scan S6 — coûte −0,0016 de SeK, non établi. Sa contribution
-réelle tient dans l'intervalle de confiance à 95 % **[−0,0004 ; +0,0036]** :
-compatible avec zéro, et bornée à trois millièmes et demi. Il pèse pourtant
-**4,31 M de paramètres et 9,88 GMACs**, ce qui justifie de le retirer sans
-attendre d'en savoir plus.
+*(‡ deux entraînements interrompus par un blocage du système de fichiers ont été
+relancés ; ces deux groupes passeront à 4 et 7 graines. Le σ de 0,0007 du point
+d'efficience est estimé sur 3 degrés de liberté et n'est donc pas fiable en
+lui-même : tous les intervalles de confiance de ce document utilisent le σ **mis
+en commun** sur l'ensemble des configurations, plus prudent.)*
 
-*(Corrigé le 7 septembre : ce paragraphe lisait la borne à l'envers et annonçait
-« pas plus de quatre dix-millièmes ». Δ mesure l'effet du RETRAIT ; la
-contribution du bloc vaut −Δ, donc son intervalle est celui de Δ retourné. Un
-facteur dix. La décision d'expédier `lean` est inchangée, la force de l'énoncé
-non : « ce bloc ne peut rien apporter » devient « au plus 0,0036, indiscernable de
-zéro ».)*
+---
 
-| | vs MambaSCD-Tiny | vs Mamba-FCS |
+## 3. Comment ces chiffres ont été obtenus
+
+Trois précautions de protocole, adoptées après avoir constaté que les
+comparaisons du premier mois n'étaient pas fiables. Elles expliquent pourquoi ce
+projet conclut moins souvent mais plus solidement.
+
+**1. Plusieurs graines par configuration, jamais un run isolé.** Deux
+entraînements identiques ne diffèrant que par leur graine aléatoire donnent des
+SeK qui s'écartent de ±0,002 typiquement — et jusqu'à ±0,010 dans le régime
+défectueux de juillet. Un écart de 0,005 entre deux configurations à une graine
+ne veut donc rien dire. Tous les chiffres ci-dessus sont des **moyennes**.
+
+**2. Deux tests statistiques qui doivent concorder.** Un écart n'est déclaré
+« établi » que si le test à variance mise en commun **et** le test de Welch — qui
+ne suppose pas les variances égales — franchissent tous deux le seuil de 95 %. Le
+second est indispensable ici : certaines configurations sont cinq fois plus
+dispersées que d'autres.
+
+**3. Deux métriques qui doivent concorder.** SECOND n'a pas de split de
+validation : l'époque retenue est celle du meilleur SeK **sur le test**, ce qui
+est légèrement optimiste. Cet optimisme a été **mesuré** — il vaut 0,004 à 0,011
+selon la configuration — et chaque conclusion est rejouée sur la **dernière
+époque**, insensible à ce biais. Une conclusion qui ne tient que sur une des deux
+métriques n'est pas retenue.
+
+Ce troisième point n'est pas théorique : l'augmentation par rotations et jitter
+photométrique donnait **+0,0034 « établi »** sur la métrique du maximum et
+**−0,0010 non établi** sur l'époque finale. Sans cette vérification, un résultat
+faux aurait été publié.
+
+⚠️ **ChangeMamba sélectionne également son époque sur le test** — vérifié dans
+leur code (`changedetection/tasks/metadata.py`, tâche `scd` : l'unique *eval
+loader*, pourtant nommé « Validation », lit `test_data_name_list`). La
+comparaison du tableau ci-dessus est donc **appariée et licite**. L'asymétrie qui
+subsiste, et qu'il faut énoncer : nous mesurons notre optimisme, nous ignorons le
+leur.
+
+---
+
+## 4. Ce qui produit le résultat
+
+Effets **établis**, mesurés sur l'époque finale (sans biais de sélection) et
+confirmés sur la métrique du maximum. Par ordre d'ampleur :
+
+| Levier | Δ SeK | Nature | Coût en inférence |
+|---|---:|---|---|
+| Retirer la compensation de déséquilibre (sur SECOND) | **+0,032** | loss | aucun |
+| Crops 512 plutôt que 256 | **+0,022** | résolution | aucun |
+| **Retirer la loss SeK** | **+0,0125** | loss | aucun |
+| LR constant sur 200 époques | +0,0098 | optimisation | aucun |
+| **Échange temporel T1↔T2 à l'entraînement** | **+0,0096** | données | **aucun** |
+| Encodeur `mini` → `tiny` | +0,0094 | capacité | +16,1 M, +26,6 GMACs |
+| **EMA des poids** | **+0,0074 à +0,0087** | optimisation | **aucun** |
+| DySample plutôt qu'un rééchantillonnage bilinéaire | +0,0075 | architecture | négligeable |
+| Supervision profonde des cartes de changement | +0,0056 | loss | aucun |
+
+**Six des neuf leviers ne coûtent rien à l'inférence.** C'est ce qui rend le point
+d'efficience possible : il pèse exactement le même nombre de paramètres et de
+GMACs que la variante `lean` de départ, pour +0,0157 de SeK.
+
+### Trois enseignements qui dépassent ce projet
+
+**La loss SeK, reprise verbatim de Mamba-FCS, était nuisible.** La retirer
+rapporte +0,0125, divise l'écart-type par cinq et supprime un mode de défaillance
+qui frappait **une graine sur quatre**. Elle produit des NaN dès que le kappa
+passe négatif. C'est le résultat principal du stage.
+
+**Un balayage d'hyperparamètre mené dans un régime défectueux mesure la
+défaillance, pas l'hyperparamètre.** La supervision profonde valait +0,0089
+au-dessus de la recette initiale, mais seulement +0,0056 une fois la loss retirée :
+les trois quarts de son bénéfice n'étaient qu'un rattrapage des dégâts d'un terme
+de loss cassé. Plusieurs verdicts de juillet ont dû être rejoués pour cette raison.
+
+**L'EMA des poids est le seul levier additif.** +0,0074 seule, +0,0087 avec
+l'échange temporel, +0,0086 avec échange et jitter : le même effet à 0,0007 près
+dans trois contextes. Elle n'agit pas sur ce que le modèle apprend, seulement sur
+la façon dont ses poids sont lus en fin d'entraînement — donc elle ne recouvre
+aucun autre levier. Tous les autres se recouvrent partiellement.
+
+---
+
+## 5. Ce qui ne contribue pas — résultats négatifs
+
+Ces mesures ont autant de valeur que les précédentes, et elles sont inhabituelles
+dans cette littérature où les ablations sont rarement répliquées.
+
+Convention : la colonne donne ce que le composant **apporte** — donc l'opposé de
+l'effet mesuré en le retirant. Un signe positif signifie « le garder aide ».
+
+| Composant | Ce qu'il apporte | IC 95 % | Verdict |
+|---|---:|---|---|
+| **C²S² entier** (damier + MCA-SF + scan S6) | +0,0016 | [−0,0004 ; +0,0036] | non détectable |
+| MCA-SF seul | +0,0015 | [−0,0024 ; +0,0052] | non détectable |
+| CGA (« Change-aware ») | −0,0001 | — | non détectable |
+| Branche fréquentielle FFT | −0,0046 | — | non établi |
+| Décodeur élargi (+3,5 M, +12 GMACs) | −0,0007 | — | non détectable |
+| Rotations 90° + jitter photométrique | −0,0010 à +0,0023 | — | non établi |
+
+*(Cette distinction n'est pas cosmétique : ce README a porté trois semaines une
+borne lue à l'envers, qui annonçait pour le C²S² « pas plus de 0,0004 » là où la
+valeur juste est 0,0036 — un facteur dix. Δ mesure l'effet du **retrait**, la
+contribution vaut **−Δ**, et l'intervalle se retourne avec.)*
+
+**Trois des quatre briques que le nom du modèle revendique ne gagnent pas leur
+place.** Ni le C²S² (le *Spatio*), ni la branche FFT (le *Frequency*), ni la CGA
+(le *Change-aware*) ne contribuent de façon détectable. Le seul composant
+architectural établi est **DySample**, une brique reprise de ChessMamba.
+
+Le C²S² pesait **4,31 M de paramètres et 9,88 GMACs** : le retirer est ce qui a
+rendu le point d'efficience possible. Sa contribution réelle est bornée à
++0,0036, compatible avec zéro.
+
+L'explication de l'efficience n'est donc **pas** l'architecture revendiquée, mais :
+le backbone VMamba-mini, un décodeur léger à DySample, le retrait d'un terme de
+loss nuisible, les crops 512, le LR constant, et l'augmentation par échange
+temporel.
+
+---
+
+## 6. Les trois réserves à connaître
+
+**1. Un seul jeu de données porte l'énoncé.** L'efficience n'est démontrée que sur
+SECOND. Sur Hi-UCD, le SeK plafonne à 0,054 quel que soit le levier — c'est une
+propriété du jeu (1 130 tuiles porteuses de signal sur 12 000), pas du modèle,
+mais cela signifie qu'une confirmation sur un troisième jeu manque. Le retrait de
+la loss SeK, résultat principal, **ne transfère pas** à Hi-UCD : il y est neutre
+et y multiplie l'écart-type par quatre. Le résultat est **spécifique à SECOND**.
+
+**2. La latence n'est pas encore mesurée.** Toute la thèse d'efficience repose sur
+les paramètres et les GMACs. Or les noyaux SSM ont un mauvais rapport calcul →
+temps, et `grid_sample`, au cœur de DySample, ne compte presque rien en MACs mais
+coûte du temps réel. La mesure est **en cours** (`scripts/benchmark_latency.py`).
+
+**3. Les deux configurations retenues comptent 3 et 4 graines**, contre 7 pour les
+lignes consolidées. Les relances sont lancées.
+
+---
+
+## 7. Ce qui reste à faire
+
+| | Chantier | État |
 |---|---|---|
-| meilleure config (20,80 M, 41,30) | 96,7 % params, **56,3 % calcul**, 102,5 % SeK | 11,0 % params, 15,7 % calcul, 88,8 % SeK |
-| **`lean`, sans C²S²** (16,48 M, 31,42) | **76,6 % params, 42,8 % calcul, 101,0 % SeK** | 8,7 % params, 11,9 % calcul, 87,5 % SeK |
+| C1 | Latence et mémoire crête, face à MambaSCD au même protocole | **en cours** |
+| C2 | Évaluer le checkpoint MambaSCD publié avec **notre** code de métriques | **en cours** |
+| — | Consolider les deux configurations retenues à 7 graines | **en cours** |
+| D | Un troisième jeu de données (Landsat-SCD, rapporté par ChangeMamba) | à décider |
+| — | Trancher l'apport du jitter photométrique (+0,0022, non établi) | à faire |
+| — | Split de validation propre, pour un chiffre sans biais de sélection | à arbitrer |
 
-La variante allégée **dépasse** MambaSCD-Tiny — IC 95 % de sa moyenne
-[0,2213 ; 0,2247], entièrement au-dessus de 0,2208 — avec **23 % de paramètres
-en moins et 57 % de calcul en moins**. Mesuré sur 7 graines. Face à
-Mamba-FCS : **6,4× moins de calcul et 9,1× moins de paramètres** pour 87 % de son
-SeK. Ni le retrait de la loss SeK ni la supervision profonde ne coûtent quoi que
-ce soit en inférence — paramètres et GMACs sont inchangés.
+C2 réglera la dernière réserve de protocole : le tableau comparatif deviendrait
+« évalué avec le même code » au lieu de « d'après les chiffres publiés ». Le
+blocage — leur dépôt refactorisé après publication — est levé, l'évaluation tourne
+sur le commit contemporain des poids.
 
-⚠️ **Ces SeK sont des maxima sélectionnés sur le split de test**, faute de split
-de validation dans SECOND — et **ChangeMamba procède de même** (vérifié dans leur
-code : tâche `scd`, l'unique eval loader nommé « Validation » lit
-`test_data_name_list`, et `best_model.pth` est retenu sur ce score). La
-comparaison est donc **appariée et licite**.
+---
 
-L'optimisme que cela introduit a été **mesuré** (7 septembre, zéro heure GPU) :
-`meilleur − final` vaut 0,0050 pour `best`, 0,0066 pour `lean`, 0,0084 pour
-`nosek`, soit 2,9 à 4,9 σ. Sur l'époque finale, `lean` vaut 0,2164 ± 0,0037,
-**sous** le 0,2208 de MambaSCD-Tiny. L'asymétrie à énoncer dans tout rapport :
-nous mesurons notre optimisme, nous ignorons le leur.
+## 8. L'architecture
 
-Le biais suit **l'époque du pic**, non la dispersion entre graines : `nosek` est
-le groupe le moins dispersé (σ = 0,0011) et porte pourtant le plus gros biais,
-parce qu'il pique à l'époque 60 sur 200 puis erre à LR constant.
+Idée directrice : garder les *idées* de Mamba-FCS (qui coûtent ~0 paramètre) et
+remplacer sa *machinerie* (qui coûte ses 189 M).
 
-**Rejouées sur l'époque finale, les conclusions tiennent** — aucun verdict
-renversé, la supervision profonde promue de « partiel » à établi (+0,0056,
-t = 3,49 / 4,23), le C²S² toujours non contributif. Voir `--on final` de
-`scripts/aggregate_seeds.py` et la phase 12 du journal.
-
-Répartition du coût (512²) : convolutions 63 %, `MambaInnerFn` (C²S²) 12 %,
-matmul 12 %, einsum 9 %, scan sélectif du backbone 3 %. Le modèle est dominé par
-ses parties convolutionnelles, non par la machinerie SSM.
-
-**Ablations sur SECOND** — comparaisons appariées (un seul facteur change),
-testées par `t = Δ/SE`. « ÉTABLI » exige que **les deux** tests concordent : la
-variance mise en commun *et* celle de Welch, qui ne suppose pas les variances
-égales. Le second est indispensable ici, la recette initiale étant cinq fois plus
-dispersée que les autres.
-
-| Facteur | n | Δ SeK | t comm. | t Welch | Statut |
-|---|---|---|---|---|---|
-| **Retirer la loss SeK** | 7 | **+0,0125** | +4,09 | +3,30 | ✅ **établi** |
-| Retirer loss SeK + L_sc + FFT | 3 | +0,0120 | +3,01 | +3,16 | ✅ établi |
-| LR constant, 200 époques | 3 | +0,0098 | +2,45 | +2,52 | ✅ établi |
-| Supervision profonde, λ = 2,0 | 3 | +0,0089 | +2,24 | +2,22 | partiel |
-| Supervision profonde, λ = 1,0 | 3 | +0,0073 | +1,83 | +1,78 | ? |
-| Retirer `L_sc` | 3 | +0,0064 | +1,60 | +1,63 | ? |
-| Retirer la branche FFT | 3 | +0,0046 | +1,14 | +1,00 | ? |
-| Cosine, 200 époques | 3 | +0,0019 | +0,49 | +0,36 | ? |
-| Backbone mini → tiny (c512) | 1 | −0,0012 | −0,19 | — | ? |
-| Décodeur élargi (+3,47 M, +12,15 GMACs) | 1 | −0,0014 | −0,22 | — | ? |
-| LR constant, 100 époques | 4 | −0,0041 | −1,13 | −0,81 | ? |
-
-**Ablations d'architecture, menées par-dessus `nosek`** (4 graines chacune,
-témoin à 7 graines, σ = 0,0017) :
-
-| Composant retiré | Δ SeK du RETRAIT | IC 95 % sur Δ | IC sur la CONTRIBUTION (−Δ) | Statut |
-|---|---|---|---|---|
-| CGA (« Change-aware ») | +0,0011 | [−0,0006 ; +0,0030] | [−0,0030 ; +0,0006] | ? |
-| MCA-SF | −0,0015 | [−0,0052 ; +0,0024] | [−0,0024 ; +0,0052] | ? |
-| **C²S² entier** (−4,31 M params) | −0,0017 | [−0,0036 ; +0,0004] | [−0,0004 ; **+0,0036**] | ? |
-| **DySample → bilinéaire** | **−0,0074** | [−0,0093 ; −0,0055] | [**+0,0055** ; +0,0093] | ✅ **établi** |
-
-*(Les deux dernières colonnes sont la même information retournée, et les
-distinguer n'est pas cosmétique : Δ mesure l'effet du **retrait**, la contribution
-du composant vaut **−Δ**. Confondre les deux a produit une erreur d'un facteur dix
-dans ce README, corrigée le 7 septembre.)*
-
-**Rejouées sur l'époque finale** (7 septembre, sans biais de sélection) : aucun
-verdict ne bouge, DySample se renforce (Welch −8,58 → **−13,05**), et l'effet
-apparent de la CGA tombe de +0,0011 à **+0,0001** — il était **entièrement** du
-biais de sélection, `nocga` portant le plus gros biais du lot (0,0070 contre
-0,0059).
-
-**Un seul composant architectural gagne sa place : DySample** — et c'est une
-brique reprise de ChessMamba, pas une contribution de ce travail. Ni le C²S²
-(le *Spatio*), ni la branche FFT (le *Frequency*), ni la CGA (le *Change-aware*)
-ne contribuent de façon détectable. Le résultat d'efficience est réel, mais son
-explication tient au backbone VMamba-mini, au décodeur avec DySample, au retrait
-de la loss SeK, aux crops 512 et au LR constant sur 200 époques.
-
-**Balayage de la supervision profonde, mené par-dessus `nosek`** — c'est-à-dire
-dans le régime qu'on retient, et non sur la recette défectueuse. Témoin : les
-7 graines de `nosek`.
-
-| λ | n | SeK | Δ vs `nosek` | Statut |
-|---|---|---|---|---|
-| 2,0 | 3 | 0,2248 ± 0,0017 | +0,0020 | ? |
-| 4,0 | 3 | 0,2231 ± 0,0004 | +0,0003 | ? |
-| 8,0 | 3 | 0,2214 ± 0,0021 | −0,0014 | ? |
-
-**Quatre conclusions nettes.**
-
-**1. Le retrait de la loss SeK est le seul levier qui compte**, et il agit de deux
-façons : +0,0071 de performance typique (établi même face aux seules graines non
-effondrées de la référence, t = 4,34) et +0,0054 par disparition du mode de
-défaillance. Cette loss, portée verbatim de Mamba-FCS, produit des NaN dès que
-kappa passe négatif — le journal le documentait depuis juillet.
-
-**2. Les effets ne s'additionnent pas.** Retirer les trois composants donne
-0,2224, soit exactement le résultat du seul retrait de la loss SeK (0,2228), là
-où l'additivité prédisait 0,2338. Corollaire utile : **la branche FFT peut être
-supprimée sans coût** — mêmes performances, 92 448 paramètres en moins. Le « F »
-de CSF-Mamba ne gagne pas sa place.
-
-**3. Les gains apparents n'étaient que des compensations.** La supervision
-profonde valait **+0,0089** sur la recette initiale ; par-dessus `nosek` elle ne
-vaut plus que **+0,0020**, non établi. Les trois quarts de son bénéfice
-n'étaient pas un gain mais un rattrapage partiel des dégâts de la loss SeK. Même
-mécanique que l'absence d'additivité : **tout ce qui semblait aider ne faisait
-que compenser un terme de loss défectueux.**
-
-Conséquence de méthode : un balayage d'hyperparamètre mené dans un régime
-défectueux mesure la défaillance, pas l'hyperparamètre. Le premier balayage,
-conduit avec la loss SeK active, aurait fait conclure à tort que la supervision
-profonde contribue.
-
-**4. Pour le LR, c'est le schedule et non la durée.** Le cosine ne tire rien de
-200 époques (+0,0020, non établi) ; le LR constant en tire +0,0138 (établi). Mais
-`constant 200` contre `cosine 200` reste à t = 1,62 : le LR constant *a besoin*
-de 200 époques, sans qu'on puisse encore dire qu'il bat le cosine.
-
-**« ? » ne signifie pas « effet nul »** mais « indécidable à ce nombre de graines ».
-La plupart de ces runs n'en ont qu'une : détecter 0,010 en demanderait 7 de chaque
-côté, détecter 0,020 en demande 2. Le σ n'a été mesuré que sur SECOND en crops 512 ;
-son application à Hi-UCD est une **hypothèse**, faute de réplicat sur ce dataset.
-
-**Les effets établis, au terme des ablations.** Par ordre d'ampleur :
-
-| Effet | Δ SeK | Nature |
+| Bloc | Provenance | Contribue ? |
 |---|---|---|
-| Retirer la loss SeK | **+0,0125** | loss |
-| **Échange temporel T1↔T2** (8 sept.) | **+0,0096** | données, gratuit en inférence |
-| **Encodeur mini → tiny, hors régime défectueux** (8 sept.) | **+0,0094** | capacité |
-| **EMA des poids** (8 sept.) | **+0,0074** | optimisation, gratuit en inférence |
-| Retirer la compensation de déséquilibre (SECOND) | **+0,032** | loss, calibrée sur les données |
-| Sur-échantillonner les tuiles changées (Hi-UCD) | **+0,037** | données |
-| DySample plutôt que bilinéaire | **+0,0074** | architecture |
-| LR constant sur 200 époques | +0,0098 | optimisation |
-| Crops 512 plutôt que 256 | +0,022 | résolution |
+| Encodeur VMamba siamois (`mini` 13,8 M / `tiny` 29,9 M) | ChangeMamba | oui — c'est le socle |
+| **DySample** (rééchantillonnage appris) | ChessMamba | **oui, +0,0075 établi** |
+| Décodeur SCD partagé + embedding temporel τ | ChessMamba | oui — ÷2 paramètres |
+| C²S²-Block (damier + MCA-SF + scan S6) | ChessMamba + CSSM | **non — retiré** |
+| Injection FFT2 + CGA résiduelle | Mamba-FCS | **non détectable** |
+| Loss composite (CE + Dice + L_sc) | Mamba-FCS + AtrousMamba | oui, **sans** le terme SeK |
 
-*(Les trois lignes du 8 septembre sont mesurées sur l'**époque finale**, donc sans
-biais de sélection, et établies aussi sur le maximum. Les autres datent d'avant
-que ce biais soit mesuré.)*
+Répartition du coût en 512² pour le point d'efficience : convolutions 82 %,
+einsum 11 %, scan sélectif 4 %, `grid_sample` 1 %. **Le modèle est dominé par ses
+parties convolutionnelles, non par la machinerie SSM** — ce qui nuance
+l'étiquette « Mamba ».
 
-⚠️ **Un effet a été retiré de cette liste avant d'y entrer.** Les rotations 90° et
-le jitter photométrique donnaient **+0,0034 « établi »** sur la métrique du
-maximum — et **−0,0010, non établi**, sur l'époque finale. Ce groupe portait le
-plus gros biais de sélection du lot (0,0110 contre 0,0066 pour le témoin) ; le
-retirer efface le gain en entier. Sans la mesure du biais faite la veille, ce
-faux positif figurerait ici comme un résultat acquis.
+**Comptage des GMACs audité** (13 août, revérifié le 10 septembre avec témoin) :
+une seule opération non comptée porte des MACs, la FFT2, bornée à 0,3 % du total.
+Même convention que ChangeMamba, qui étiquette ses sorties fvcore « GFLOPs »
+alors qu'il s'agit de MACs — attention en comparant à la littérature.
 
-**La compensation de déséquilibre doit être calibrée sur le taux de changement du
-dataset.** Elle est indispensable sur Hi-UCD (1,36 % de pixels changés — sans elle
-le modèle s'effondre à SeK 0,000) et **nuisible sur SECOND** (20,07 %, classes déjà
-presque équilibrées) : avec une pondération 5 plus Dice, le modèle prédisait 30,9 %
-de changement pour 20,1 % réels, ce qui détruisait la précision. La retirer a
-rapporté +0,032. Sur Hi-UCD, faire varier le poids de 20 à 5 n'a rien changé
-(+0,0003) : la compensation y est nécessaire quelle que soit sa valeur exacte.
+---
 
-Ces réglages avaient été transportés de Hi-UCD vers SECOND par réflexe. **Un
-réglage anti-déséquilibre ne se recopie pas d'un jeu de données à l'autre.**
+## 9. Utilisation
 
-**Le plafond de l'IoU du changement.** Reconstruit depuis `IoU_fg = 1 + ln(SeK/κ)`,
-il est resté entre **0,546 et 0,562** sur les configurations de juillet et début
-août — encodeur doublé, décodeur élargi, toutes les variantes de loss — avant de
-monter à **0,5732** avec le retrait de la loss SeK puis **0,5756** pour la
-meilleure configuration. Cinq familles de leviers (loss de localisation, données,
-résolution, capacité d'encodeur, capacité de décodeur) l'avaient laissé intact ;
-c'est le retrait d'un terme de loss nuisible qui l'a débloqué.
-
-**Hi-UCD — conclusion.** Les quatre familles de leviers (loss, données, capacité,
-résolution) y sont épuisées : le meilleur SeK plafonne à **0,053** contre 0,226 sur
-SECOND. Doubler le backbone *dégrade*, la résolution 512 *dégrade*, et l'époque du
-pic recule dès qu'on augmente la pression sur les données. **Le plafond est une
-propriété du jeu de données** — 1 130 tuiles porteuses de signal sur 12 000 — non
-du modèle. Hi-UCD est clos comme terrain d'optimisation, conservé comme dataset
-d'ablation et résultat de caractérisation.
-
-**Testé le 14 août, et la conclusion résiste.** Retirer la loss SeK sur Hi-UCD
-donne −0,0038 (t = −1,14, non établi) : l'effet **ne transfère pas**. Il y
-multiplie même l'écart-type par quatre, là où il le divisait par cinq sur SECOND.
-Le résultat principal est donc **spécifique à SECOND**, et le plafond de Hi-UCD
-reste une propriété du jeu de données. Premier σ mesuré sur Hi-UCD : 0,0041.
-
-Chronologie détaillée, décisions et diagnostics : `documentation/journal-de-bord.md`.
-
-## Idée directrice
-
-Garder les *idées* de Mamba-FCS (qui coûtent ~0 paramètre) et remplacer sa
-*machinerie* (qui coûte les 189M) :
-
-| Bloc | Provenance | Statut |
-|---|---|---|
-| Encodeur VMamba siamois | ChangeMamba | ✅ branché (mini 13M / tiny 28M) |
-| C²S²-Block (chessboard + MCA-SF + S6) | ChessMamba + CSSM | ✅ implémenté |
-| Récurrence CSSM-L1 (ablation) | CSSM | ✅ implémenté (2 détails à confirmer) |
-| Injection FFT2 + CGA résiduelle | Mamba-FCS | ✅ implémenté |
-| Décodeur SCD partagé + embedding τ | ChessMamba | ✅ implémenté |
-| DySample | ChessMamba | ✅ implémenté |
-| Loss composite (CE+SeK+L_sc+Dice) | Mamba-FCS + AtrousMamba | ✅ SeK validé verbatim ; +Dice/pondération BCD |
-
-## Décision : code propre + références isolées
-
-On **ne forke pas** Mamba-FCS. Le code propre vit dans `csf_mamba/`. Les dépôts
-de référence (VMamba, baselines, SeK-loss verbatim, module L1) sont clonés dans
-`third_party/` (git-ignoré) par `scripts/setup_third_party.sh` et servent
-uniquement de source à reproduire / lever des briques vérifiées.
-
-## Le point qui dé-risque tout : backend SSM interchangeable
-
-`mamba-ssm` exige une compilation CUDA, et sa présence dans le wheelhouse
-d'Alliance Canada n'est **pas garantie**. Donc **rien n'impose `mamba_ssm` à
-l'import** :
-
-- `backend="ref"` — scan PyTorch pur, tourne sur CPU (tests, debug). Lent.
-- `backend="mamba"` — kernel rapide, exige `mamba_ssm` (erreur claire sinon).
-- `backend="auto"` — kernel si disponible, sinon `ref`.
-
-Conséquence : le modèle complet est instanciable et différentiable sur un laptop
-sans GPU. L'entraînement réel se fait sur Alliance Canada.
-
-## Structure
+**Marche à suivre complète — installation, entraînement, évaluation, pièges :
+`RUN.md`.**
 
 ```
 csf_mamba/
   modules/     chessboard, mca_sf, ssm (+fallback), fusion (FFT/CGA), c2s2, cssm
-  backbone/    encoder (ConvEncoder CPU + VMambaTinyEncoder cluster)
-  decoders/    dysample, binary (Y_BCD + {CM_i}), semantic (partagé + τ)
-  losses/      composite (CE + mIoU + SeK + L_sc)
-  datasets/    hi_ucd (PNG 3 canaux, décalage −1, ignore_index)
-  model.py     assemblage CSF-Mamba + count_parameters
-scripts/       setup_env.sh, setup_third_party.sh, train.py, train.sbatch
+  backbone/    encoder (ConvEncoder CPU + VMambaEncoder cluster)
+  decoders/    dysample, binary (Y_BCD + cartes de changement), semantic (partagé + τ)
+  losses/      composite (CE + Dice + SeK + L_sc + Lovász)
+  datasets/    second, hi_ucd, transforms (augmentations), oversample
+  ema.py       moyenne mobile exponentielle des poids
+  model.py     assemblage CSF-Mamba
+scripts/       train, evaluate, aggregate_seeds, count_gmacs, benchmark_latency, …
+tests/         6 tests de non-régression
 ```
 
-## Feuille de route
-
-1. ✅ **Pipeline sur GPU** — fait.
-2. ✅ **Détection de changements fonctionnelle** sur Hi-UCD (Fscd 0,227).
-3. 🔄 **Sémantique des transitions** : sortir le kappa du négatif (run 3).
-4. **Premier chiffre sur SECOND** — le seul terrain de comparaison non ambigu.
-5. **Ablations** (la contribution) : damier vs CSSM-L1, ± FFT, ± L_sc, ± loss SeK,
-   mini vs tiny, crops 256 vs 512.
-6. **Comparaison efficience/SOTA** : params, FLOPs, temps d'inférence.
-
-Reste à confirmer avant l'ablation L1 : les 2 détails du portage CSSM (axe de
-réduction, RMSNorm) — voir `csf_mamba/modules/cssm.py`.
-
-## Choix de backbone : mini vs tiny (impacte la cible 15M)
-
-Le backbone VMamba est branché sur ChangeMamba, en deux variantes (commutateur =
-`mlp_ratio`, mesuré) :
-
-| `--encoder` | backbone | modèle complet | verdict |
-|---|---|---|---|
-| `vmamba_mini` | 13,84 M | **20,80 M** | **défaut** — meilleur SeK, 41,30 GMACs |
-| `vmamba_tiny` | **29,94 M** ‡ | 36,90 M | +0,0094 de SeK par-dessus `lean` (10 sept., établi) |
-
-*(‡ corrigé le 10 septembre : ce backbone était annoncé à 28,0 M, un chiffre incohérent avec le total de 36,90 M donné juste à côté. Mesure directe : 29 938 176 paramètres, et 29,94 + 6,96 = 36,90 — le total, lui, était juste.)*
-
-*(Comptes mesurés par fvcore. Les estimations initiales — 13,1 / 19,8 / 34,8 M —
-étaient légèrement basses.)*
-
-⚠️ Le « VMamba-Tiny ~14M » du plan correspond en fait à la config **mini** (branche
-MLP désactivée). Le forward VMamba exige le **kernel CUDA `selective_scan`** : il
-ne tourne pas sur CPU. Les tests CPU utilisent donc `--encoder conv`.
-
-Dépendances backbone (au-delà du cœur) : `einops timm fvcore triton`.
-
-## SeK-loss : reproduction Mamba-FCS (fait)
-
-Enseignement de la repro : Mamba-FCS **ne construit pas de carte SCD « from-to »
-unique**. Sa `SeK_Loss` différentiable opère sur les deux branches sémantiques
-restreintes aux zones changées par le `change_mask`, avec le mIoU **déjà inclus**
-dans le terme SeK (pas de terme mIoU séparé). Reproduit dans
-`losses/sek_mambafcs.py` (portage **verbatim**), validé numériquement identique à
-l'original (`tests/test_sek_port.py`). La loss composite est recâblée en
-conséquence — plus besoin de cible `scd`.
-
-## Convention d'index : A (index 0 réservé) — tranché
-
-Retenue pour n'avoir **qu'une seule config de loss** entre SECOND et Hi-UCD.
-Sémantique : classes réelles **1..9**, `unlabeled (0) → 255`, têtes à **10 canaux**
-(index 0 réservé, jamais une cible). La SeK exclut `non_change_class=0` exactement
-comme sur SECOND. `NUM_SEMANTIC_CLASSES = 10` dans `datasets/hi_ucd.py`.
-
-## Évaluation : métriques SCD (fait)
-
-`evaluation/metrics.py` : SeK / Fscd / mIoU / OA, maths portées **verbatim** de
-ChangeMamba, validées numériquement identiques (`tests/test_metrics.py`).
-Accumulation par histogramme (tient les 40k images), gestion de l'ignore, cartes
-SCD par date (0 = no-change = notre index 0 réservé). La boucle de validation est
-câblée dans `scripts/train.py` (`validate()`), appelée à chaque époque, avec suivi
-du meilleur SeK (`best.pt`).
-
-## Poids pré-entraînés ImageNet (fait)
-
-`scripts/download_pretrained.sh` récupère le backbone VMamba-Tiny ImageNet
-(`vssm_tiny_0230_ckpt_epoch_262.pth`, Zenodo, ~123 Mo). **Un seul checkpoint pour
-les deux variantes** (shape-matching) — vérifié en le chargeant réellement :
-
-| variant | poids chargés | mismatch | ignorés |
-|---|---|---|---|
-| tiny | 218 | 0 | tête classif ImageNet (normal) |
-| mini | 152 | 0 | poids MLP absents de mini (normal) |
-
-Les seuls poids frais sont les `outnorm*` (normes d'extraction, hors backbone
-ImageNet). Config alignée sur le checkpoint : `depths=[2,2,5,2]`, MLP présent.
-Passer `--encoder-pretrained <chemin>` à `scripts/train.py`.
-
-## Entraînement & évaluation
-
-Recette (`scripts/train.sbatch`) : crops 256, batch 8, AMP bf16, LR cosine+warmup,
-warmup SeK, loss BCD pondérée + Dice, 100 époques, reprise auto. Métriques
-persistées dans `metrics.csv`. Évaluation d'un checkpoint + visualisations :
-`python -m scripts.evaluate --checkpoint <run>/best.pt ...`.
-
-**Marche à suivre complète (installation, run, éval, pièges) : `RUN.md`.**
-
-## Démarrage rapide (laptop, CPU)
+**Le point qui dé-risque tout : le backend SSM est interchangeable.** `mamba-ssm`
+exige une compilation CUDA dont la disponibilité n'est pas garantie ; rien ne
+l'impose à l'import. `backend="ref"` donne un scan PyTorch pur qui tourne sur CPU
+(lent, pour les tests) ; `backend="mamba"` le noyau rapide ; `backend="auto"`
+choisit. Le modèle complet est donc instanciable et différentiable sur un portable
+sans GPU.
 
 ```bash
-pip install torch numpy pillow scipy      # CPU suffit pour les tests
-PYTHONPATH=. python tests/test_smoke.py   # forward/backward + formes (encodeur conv)
+pip install torch numpy pillow scipy       # CPU suffit pour les tests
+PYTHONPATH=. python tests/test_smoke.py    # formes, forward/backward, budget
 ```
 
-Le forward VMamba (kernel CUDA) ne tourne que sur GPU ; en local on teste la
-plomberie avec `--encoder conv` / `--backend ref`.
+Le forward VMamba exige le noyau CUDA `selective_scan` et ne tourne pas sur CPU :
+les tests locaux utilisent `--encoder conv --backend ref`.
+
+**Reproductibilité.** Chaque `sbatch` affiche au démarrage une ligne `== config`
+énumérant ses 24 paramètres, et chaque run écrit un `metrics.csv` à côté de ses
+checkpoints. `scripts/aggregate_seeds.py` regroupe les runs par configuration,
+calcule les deux tests et les deux métriques, et signale les groupes hétérogènes.
