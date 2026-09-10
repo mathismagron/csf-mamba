@@ -26,6 +26,10 @@ set -euo pipefail
 CKPT="${CKPT:-$SCRATCH/pretrained_weight/MambaSCD_Tiny_SECOND_SeK_0.2208.pth}"
 CONFIG="${CONFIG:-vssm1/vssm_tiny_224_0229flex.yaml}"
 SPLIT="${SPLIT:-test}"
+# Racine du dépôt ChangeMamba. Vide = third_party/ChangeMamba (HEAD courant).
+# Viser un worktree pour charger des poids antérieurs à leur refactorisation,
+# sans déplacer le checkout dont dépendent les autres scripts.
+REPO="${REPO:-}"
 
 if [ ! -f "$CKPT" ]; then
     echo "checkpoint introuvable : $CKPT"
@@ -45,8 +49,11 @@ module load python/3.11 cuda/12.2
 source "$SCRATCH/csf-venv-cu12/bin/activate"
 cd "$HOME/csf-mamba"
 
+echo "== config : ckpt=$(basename "$CKPT") config=$CONFIG split=$SPLIT repo=${REPO:-<défaut>} =="
+
 python -u -m scripts.evaluate_changemamba \
     --checkpoint "$CKPT" \
     --config "$CONFIG" \
     --data-root "$SCRATCH/SECOND" \
-    --split "$SPLIT"
+    --split "$SPLIT" \
+    ${REPO:+--repo "$REPO"}

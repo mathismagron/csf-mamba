@@ -38,6 +38,15 @@ from csf_mamba.evaluation.metrics import SCDEvaluator
 
 _CHANGEMAMBA = Path(__file__).resolve().parents[1] / "third_party" / "ChangeMamba"
 
+# Les poids publiés datent d'AVANT la refactorisation du décodeur (`st_block_41`
+# contre `stage_blocks.0.cat`). Les charger demande le code contemporain, que l'on
+# sort dans un worktree git plutôt que par un `checkout` : le checkout courant
+# reste utilisable par les autres scripts — `benchmark_latency` notamment, qui
+# importe le même paquet et échouerait si on déplaçait le dépôt sous ses pieds.
+#
+#   git -C third_party/ChangeMamba worktree add ../ChangeMamba-pub <sha>
+#   python -m scripts.evaluate_changemamba --repo third_party/ChangeMamba-pub ...
+
 # Statistiques de normalisation de ChangeMamba (changedetection/datasets/imutils.py).
 IMAGENET_MEAN = [123.675, 116.28, 103.53]
 IMAGENET_STD = [58.395, 57.12, 57.375]
@@ -51,18 +60,37 @@ def parse_args():
     p.add_argument("--config", default="vssm1/vssm_tiny_224_0229flex.yaml",
                    help="Config VSSM, relative à changedetection/configs/.")
     p.add_argument("--batch-size", type=int, default=4)
+    p.add_argument("--repo", default=None,
+                   help="Racine du dépôt ChangeMamba à importer. Par défaut "
+                        "third_party/ChangeMamba ; viser un worktree pour charger "
+                        "des poids antérieurs à la refactorisation.")
     return p.parse_args()
 
 
-def build_model(cfg_name: str):
+def build_model(cfg_name: str, repo: str | None = None):
     """Instancie MambaSCD exactement comme leur SCDTrainer.build_model."""
-    if str(_CHANGEMAMBA) not in sys.path:
-        sys.path.insert(0, str(_CHANGEMAMBA))
+    root = Path(repo).resolve() if repo else _CHANGEMAMBA
+    if not (root / "changedetection").is_dir():
+        raise SystemExit(f"⛔ pas un dépôt ChangeMamba : {root}")
+    print(f"  dépôt ChangeMamba : {root}")
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
     from changedetection.configs.config import get_config
     from changedetection.models.ChangeMambaSCD import ChangeMambaSCD
-    from changedetection.script.script_utils import get_vssm_kwargs
+    # `get_vssm_kwargs` appartient à la version REFACTORISÉE. Sur un commit
+    # antérieur il n'existe pas, et l'import échoue — message explicite plutôt
+    # qu'une ImportError nue, parce que c'est précisément le commit qu'on vise.
+    try:
+        from changedetection.script.script_utils import get_vssm_kwargs
+    except ImportError as e:
+        raise SystemExit(
+            f"⛔ `get_vssm_kwargs` absent de {root} ({e}).\n"
+            "   Ce helper vient de la refactorisation ; sur le commit contemporain "
+            "des poids, le modèle se construit avec les kwargs VSSM explicites.\n"
+            "   Lire leur `train_MambaSCD.py` à ce commit et transcrire l'appel."
+        ) from None
 
-    cfg_path = _CHANGEMAMBA / "changedetection" / "configs" / cfg_name
+    cfg_path = root / "changedetection" / "configs" / cfg_name
     if not cfg_path.is_file():
         raise SystemExit(f"config introuvable : {cfg_path}")
 
@@ -108,7 +136,7 @@ def main():
     if device == "cpu":
         sys.exit("Un GPU est requis (le kernel selective_scan ne tourne pas sur CPU).")
 
-    model = build_model(args.config)
+    model = build_model(args.config, args.repo)
     load_weights(model, args.checkpoint)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"  paramètres : {n_params:,} ({n_params / 1e6:.2f} M)")
