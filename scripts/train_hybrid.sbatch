@@ -76,7 +76,27 @@ DATA_ROOT="$SLURM_TMPDIR/SECOND"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/second_mini_chess_$TAG"
-echo "== config HYBRIDE : base=$BASE enc=$ENCODER deep=$LAMBDA_DEEP attn_stages=[$ATTN_STAGES] depth=$ATTN_DEPTH heads=$ATTN_HEADS mlp=$ATTN_MLP seed=$SEED epochs=$EPOCHS -> $OUT =="
+CONF="base=$BASE enc=$ENCODER deep=$LAMBDA_DEEP attn_stages=[$ATTN_STAGES] depth=$ATTN_DEPTH heads=$ATTN_HEADS mlp=$ATTN_MLP seed=$SEED epochs=$EPOCHS"
+echo "== config HYBRIDE : $CONF -> $OUT =="
+
+# ⚠️ Empreinte de configuration — garde-fou contre la collision de dossiers.
+# Si une variable ne se propage pas (préfixe oublié dans --export, faute de
+# frappe), le tag retombe sur sa valeur par défaut et DEUX configurations
+# différentes visent le même dossier. `--resume auto` y reprendrait alors les
+# checkpoints de l'autre run, sans le moindre message. On grave la configuration
+# au premier passage et on refuse de démarrer si elle a changé — une reprise
+# légitime, elle, retrouve la même empreinte et passe.
+mkdir -p "$OUT"
+STAMP="$OUT/config.txt"
+if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" != "$CONF" ]; then
+    echo "⛔ COLLISION : $OUT a déjà servi à une AUTRE configuration."
+    echo "   gravée  : $(cat "$STAMP")"
+    echo "   demandée: $CONF"
+    echo "   Reprendre ici mélangerait deux entraînements. Changer de TAG."
+    exit 1
+fi
+printf '%s\n' "$CONF" > "$STAMP"
+
 
 # Recette du point d'efficience, figée : seule l'attention distingue ce run.
 python -u -m scripts.train \

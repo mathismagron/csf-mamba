@@ -157,9 +157,24 @@ for S in 1 2 3 4; do
 done
 ```
 
-Les tags sont forcés en `hyb-*` — le lanceur refuse tout autre préfixe. Les runs
-de la campagne de référence commencent tous par `crop512-`, ils ne peuvent donc
-pas se mélanger dans un même groupe d'agrégation.
+Les deux blocs ne diffèrent que par `BASE=eff` / `BASE=perf` — c'est voulu, un
+seul facteur varie. Le reste est identique parce qu'il doit l'être.
+
+Trois protections contre le mélange, chacune couvrant ce que la précédente laisse
+passer :
+
+1. **Les tags sont forcés en `hyb-*`** — le lanceur refuse tout autre préfixe. Les
+   runs de la campagne commencent tous par `crop512-`, ils ne peuvent donc pas se
+   retrouver dans un même groupe d'agrégation.
+2. **`BASE` entre dans le tag** (`hyb-eff-…` contre `hyb-perf-…`), donc les deux
+   bases écrivent dans des dossiers distincts.
+3. **Une empreinte de configuration est gravée** dans `config.txt` au premier
+   passage. Si une variable ne se propageait pas — préfixe oublié dans
+   `--export`, faute de frappe — le tag retomberait sur son défaut et deux
+   configurations viseraient le même dossier ; `--resume auto` y reprendrait
+   alors les checkpoints de l'autre run **sans le moindre message**. Le lanceur
+   refuse de démarrer dans ce cas. Une reprise légitime retrouve la même
+   empreinte et passe.
 
 ```bash
 # Dépouillement, sur les deux métriques
