@@ -22,9 +22,9 @@ Le pipeline est complet et validé sur GPU, sur deux jeux de données réels. La
 campagne compte **~150 entraînements**, tous à plusieurs graines depuis le
 7 août.
 
-**Le résultat tient en une phrase :** à performance égale ou supérieure, le
-modèle coûte **quatre à sept fois moins de calcul** que les architectures Mamba
-publiées pour cette tâche.
+**Le résultat tient en une phrase :** notre modèle **dépasse le SeK de
+MambaSCD-Base en consommant 6,7 fois moins de calcul**, et dépasse MambaSCD-Tiny
+— le seul de taille comparable — en en consommant 2,3 fois moins.
 
 Deux configurations sont retenues, aux deux extrémités du compromis :
 
@@ -93,10 +93,49 @@ Les deux cases en gras sont les énoncés à retenir :
 | Recette initiale (juillet) | 20,80 M | 41,30 | 0,2103 ± 0,0105 | — | 8 |
 
 *(‡ deux entraînements interrompus par un blocage du système de fichiers ont été
-relancés ; ces deux groupes passeront à 4 et 7 graines. Le σ de 0,0007 du point
-d'efficience est estimé sur 3 degrés de liberté et n'est donc pas fiable en
-lui-même : tous les intervalles de confiance de ce document utilisent le σ **mis
+relancés ; ces deux groupes passeront à 4 et 7 graines. Six entraînements
+supplémentaires sont par ailleurs lancés pour porter les deux configurations
+retenues à 7 graines, comme les lignes consolidées. Le σ de 0,0007 du point
+d'efficience est estimé sur 3 degrés de liberté et n'est donc **pas fiable en
+lui-même** : tous les intervalles de confiance de ce document utilisent le σ **mis
 en commun** sur l'ensemble des configurations, plus prudent.)*
+
+### Vitesse et mémoire à l'inférence
+
+Mesuré le 10 septembre sur A100, entrée 512×512, lot de 8 paires, médiane sur
+50 itérations après 10 de chauffe.
+
+*Deux précisions numériques sont rapportées.* **fp32** code chaque nombre sur
+32 bits (~7 chiffres significatifs) : c'est le format historique et la référence
+neutre que n'importe qui peut reproduire. **bf16** n'en utilise que 16 tout en
+gardant la **même plage de valeurs** que le fp32 — mêmes bits d'exposant, mais
+~3 chiffres significatifs au lieu de 7. Pour un réseau de neurones, ne pas
+déborder compte plus que la précision décimale, d'où ce compromis : moitié moins
+de mémoire, et des multiplications de matrices bien plus rapides sur les *tensor
+cores* de l'A100. C'est le format utilisé à l'entraînement comme à l'inférence,
+donc le **régime réel** ; n'en rapporter qu'un des deux cacherait quelque chose.
+
+| Modèle | fp32 | bf16 | Mémoire crête |
+|---|---:|---:|---:|
+| **CSF-Mamba — efficience** | **129 ms** · 62 paires/s | **114 ms** · 70 paires/s | 1,9–2,0 Go |
+| **CSF-Mamba — performance** | 144 ms · 56 paires/s | 125 ms · 64 paires/s | 1,9–2,1 Go |
+| MambaSCD ‖ | 316 ms · 25 paires/s | 209 ms · 38 paires/s | 4,1–5,4 Go |
+
+Le point d'efficience est **2,4× plus rapide en fp32, 1,8× en bf16**, pour **2,2 à
+2,7× moins de mémoire**. Sur une heure de calcul : 253 000 paires traitées contre
+138 000.
+
+**L'avantage rétrécit en bf16, et il faut le dire.** Leur architecture, plus
+dominée par du calcul dense, profite mieux des *tensor cores* — elle gagne 1,51×
+en passant de fp32 à bf16, contre 1,14× pour la nôtre, davantage limitée par les
+accès mémoire (`grid_sample` en tête). La latence ne suit donc pas les GMACs à
+l'identique.
+
+‖ ⚠️ **Cette ligne chronomètre MambaSCD tel que leur dépôt actuel le construit —
+37,13 M et 115,44 GMACs — et non la variante à 21,51 M dont le SeK est cité
+ci-dessus** (voir §6, réserve 2). Le facteur mesuré est donc un **majorant** : à
+GMACs comparables, l'avantage retomberait vers 1,5×. La mesure sur la bonne
+variante est en cours.
 
 ---
 
@@ -120,7 +159,7 @@ dispersées que d'autres.
 
 **3. Deux métriques qui doivent concorder.** SECOND n'a pas de split de
 validation : l'époque retenue est celle du meilleur SeK **sur le test**, ce qui
-est légèrement optimiste. Cet optimisme a été **mesuré** — il vaut 0,004 à 0,011
+est légèrement optimiste. Cet optimisme a été **mesuré** — il vaut 0,0037 à 0,0110
 selon la configuration — et chaque conclusion est rejouée sur la **dernière
 époque**, insensible à ce biais. Une conclusion qui ne tient que sur une des deux
 métriques n'est pas retenue.
@@ -156,7 +195,8 @@ confirmés sur la métrique du maximum. Par ordre d'ampleur :
 | DySample plutôt qu'un rééchantillonnage bilinéaire | +0,0075 | architecture | négligeable |
 | Supervision profonde des cartes de changement | +0,0056 | loss | aucun |
 
-**Six des neuf leviers ne coûtent rien à l'inférence.** C'est ce qui rend le point
+**Sept des neuf leviers ne coûtent rien à l'inférence** — seuls l'encodeur
+`tiny` et, marginalement, DySample se paient. C'est ce qui rend le point
 d'efficience possible : il pèse exactement le même nombre de paramètres et de
 GMACs que la variante `lean` de départ, pour +0,0157 de SeK.
 
@@ -228,13 +268,26 @@ mais cela signifie qu'une confirmation sur un troisième jeu manque. Le retrait 
 la loss SeK, résultat principal, **ne transfère pas** à Hi-UCD : il y est neutre
 et y multiplie l'écart-type par quatre. Le résultat est **spécifique à SECOND**.
 
-**2. La latence n'est pas encore mesurée.** Toute la thèse d'efficience repose sur
-les paramètres et les GMACs. Or les noyaux SSM ont un mauvais rapport calcul →
-temps, et `grid_sample`, au cœur de DySample, ne compte presque rien en MACs mais
-coûte du temps réel. La mesure est **en cours** (`scripts/benchmark_latency.py`).
+**2. La référence de latence n'est pas la bonne variante.** La mesure du
+10 septembre chronomètre MambaSCD tel que leur dépôt actuel le construit :
+**37,13 M et 115,44 GMACs**, alors que leur table publiée — celle dont vient le
+SeK que nous citons — décrit un modèle de **21,51 M et 73,42 GMACs**. L'écart est
+caractérisé depuis le 13 août : la valeur publiée n'est atteignable qu'avec la
+branche MLP désactivée, leur dépôt ayant évolué après publication. **Les auteurs
+n'ont ni menti ni fait d'erreur** ; c'est le cas ordinaire d'un dépôt qui continue
+de vivre.
+
+Conséquence : notre avantage de vitesse mesuré (1,8× en bf16) est un **majorant**.
+La mesure sur la variante publiée est en cours. Le sens du résultat n'est pas en
+jeu — notre modèle est plus rapide et plus économe dans tous les cas de figure —
+seule son ampleur l'est.
+
+Pour la même raison, ce document conserve **leurs chiffres publiés** (21,51 M,
+73,42 GMACs) plutôt que notre reconstruction à 37,13 M : c'est la référence que
+cite la littérature, et c'est la comparaison **la plus défavorable pour nous**.
 
 **3. Les deux configurations retenues comptent 3 et 4 graines**, contre 7 pour les
-lignes consolidées. Les relances sont lancées.
+lignes consolidées. Six entraînements sont lancés pour les porter à 7.
 
 ---
 
@@ -242,17 +295,21 @@ lignes consolidées. Les relances sont lancées.
 
 | | Chantier | État |
 |---|---|---|
-| C1 | Latence et mémoire crête, face à MambaSCD au même protocole | **en cours** |
+| C1 | Latence et mémoire crête, face à MambaSCD au même protocole | ✅ **fait** (§2) |
+| C1b | Refaire la mesure sur leur variante publiée à 21,51 M | **en cours** |
 | C2 | Évaluer le checkpoint MambaSCD publié avec **notre** code de métriques | **en cours** |
-| — | Consolider les deux configurations retenues à 7 graines | **en cours** |
+| — | Consolider les deux configurations retenues à 7 graines | **en cours** (6 runs) |
 | D | Un troisième jeu de données (Landsat-SCD, rapporté par ChangeMamba) | à décider |
 | — | Trancher l'apport du jitter photométrique (+0,0022, non établi) | à faire |
 | — | Split de validation propre, pour un chiffre sans biais de sélection | à arbitrer |
 
-C2 réglera la dernière réserve de protocole : le tableau comparatif deviendrait
-« évalué avec le même code » au lieu de « d'après les chiffres publiés ». Le
-blocage — leur dépôt refactorisé après publication — est levé, l'évaluation tourne
-sur le commit contemporain des poids.
+**C2 a franchi son obstacle historique.** Le checkpoint publié de MambaSCD ne se
+chargeait plus dans leur propre dépôt — 558 poids manquants, 590 inattendus,
+leur décodeur ayant été renommé après publication. Sorti le commit contemporain
+des poids dans un *worktree* git, il se charge désormais **exactement : 802
+tenseurs, 0 manquant, 0 inattendu**. L'évaluation tourne. Elle donnera leur SeK
+sous notre code de métriques, et le tableau comparatif passera de « d'après les
+chiffres publiés » à « évalué avec le même code ».
 
 ---
 

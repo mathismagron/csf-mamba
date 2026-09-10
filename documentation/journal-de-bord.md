@@ -786,8 +786,6 @@ paramètres, détection parfaitement calibrée (20,88 % prédits pour 20,07 % r�
 
 ---
 
----
-
 ## Conclusion sur Hi-UCD (30 juillet 2026)
 
 **Les quatre familles de leviers sont épuisées :**
@@ -2893,6 +2891,104 @@ additivité — mais le recouvrement est bien moindre qu'en août. Hypothèse : 
 cinq leviers agissent sur des plans distincts (données, lecture des poids,
 capacité, supervision), là où les composants d'août se recouvraient tous sur la
 même loss défectueuse. À vérifier, pas établi.
+
+### La latence, mesurée — et la référence n'est pas la bonne
+
+Premier chiffre de temps réel du projet. A100, 512×512, lot de 8, médiane sur
+50 itérations après 10 de chauffe, synchronisation CUDA explicite.
+
+| Modèle | fp32 | bf16 | Mémoire crête |
+|---|---:|---:|---:|
+| CSF-Mamba efficience (16,48 M) | **129 ms** · 62 paires/s | **114 ms** · 70 paires/s | 1,9–2,0 Go |
+| CSF-Mamba performance (32,58 M) | 144 ms · 56 paires/s | 125 ms · 64 paires/s | 1,9–2,1 Go |
+| MambaSCD (37,13 M — voir réserve) | 316 ms · 25 paires/s | 209 ms · 38 paires/s | 4,1–5,4 Go |
+
+**2,44× plus rapide en fp32, 1,84× en bf16, 2,2 à 2,7× moins de mémoire.**
+
+**La réserve posée en écrivant le script se vérifie, à moitié.** En fp32, la
+latence suit les GMACs presque exactement — 2,44× mesuré contre 2,34× prédits par
+les GMACs publiés : rien ne se perd. En bf16 en revanche, leur modèle gagne
+**1,51×** et le nôtre seulement **1,14×**. Leur architecture, plus dominée par du
+calcul dense, exploite mieux les *tensor cores* ; la nôtre est davantage limitée
+par les accès mémoire — `grid_sample` ne compte presque rien en MACs et coûte du
+temps réel, comme anticipé.
+
+Curiosité à noter : **à lot de 1, notre modèle est plus lent en bf16 qu'en fp32**
+(28,1 contre 24,8 ms). Le surcoût de conversion domine quand il n'y a presque rien
+à calculer.
+
+### ⚠️ Erreur de ma part : chronométrer une variante, en citer une autre
+
+Le job a construit MambaSCD depuis le dépôt **actuel**, donc la variante à
+**37,13 M et 115,44 GMACs** — pas celle à 21,51 M / 73,42 dont le tableau cite le
+SeK. Comparer un temps mesuré sur l'un à un score cité pour l'autre **gonfle notre
+avantage** : à GMACs comparables, il retomberait vers 1,55×.
+
+D'où `--cm-opts 'MODEL.VSSM.MLP_RATIO 0.0'`, qui reconstruit la variante de leur
+table, et un rapport qui annonce désormais laquelle il vient de chronométrer.
+
+### ⚠️ Rétractation : le 37,13 M n'était pas une découverte
+
+En lisant le log d'évaluation, j'ai annoncé le compte de 37,13 M comme un fait
+nouveau et suggéré d'en tirer une comparaison plus favorable (44 % de leurs
+paramètres au lieu de 77 %). **C'était doublement fautif.**
+
+Ce chiffre est au journal **depuis le 13 août**, mesuré pendant l'audit des GMACs,
+avec une analyse que je n'aurais pas dû oublier : 21,51 M n'est atteignable
+qu'avec la branche MLP désactivée ; leurs variantes Small et Base montrent un
+décalage régulier de +7,8 %, Tiny de +72,6 % ; l'explication est que leur dépôt a
+évolué après publication, sans faute de leur part.
+
+Et la **décision** d'août — conserver leurs chiffres publiés — était la bonne,
+pour deux raisons : c'est la référence que cite la littérature, et c'est la
+comparaison **la plus défavorable pour nous**. Revendiquer −44 % de paramètres sur
+la base d'une reconstruction serait de la sur-revendication. Rien n'a été changé
+au README.
+
+Le seul élément réellement nouveau : le checkpoint publié se charge **exactement**
+dans le modèle à 37,13 M (802 tenseurs, 0 manquant, 0 inattendu). En août, la
+reconstruction à 37,13 M venait du dépôt courant sans pouvoir être confrontée aux
+poids ; c'est fait.
+
+### ChangeMamba : le blocage historique est levé
+
+Chantier ouvert depuis fin juillet, bloqué depuis le 10 août par un décalage de
+version — leur checkpoint publié ne se chargeait plus dans leur propre dépôt,
+558 poids manquants et 590 inattendus, leur décodeur ayant été renommé
+(`st_block_41` → `stage_blocks.0.cat`).
+
+Résolu en trois temps. `git fetch --unshallow` a rendu l'historique complet, que
+le clone `--depth 1` amputait. La recherche par contenu (`git log -S st_block_41`)
+a désigné **c8dfa7e** (30 mars 2026, « clean code ») comme le commit qui retire
+l'ancien nom et introduit le nouveau — donc **c8dfa7e~1** comme code contemporain
+des poids. Et un **worktree** plutôt qu'un `checkout` : le dossier courant reste
+utilisable par les autres scripts, `benchmark_latency` important le même paquet.
+
+Résultat : **802 tenseurs chargés, 0 manquant, 0 inattendu.**
+
+Deux détails qui auraient coûté un job chacun. À ce commit, le code s'importe sous
+le préfixe **`MambaCD.`** : le dossier doit littéralement s'appeler `MambaCD` et
+c'est son *parent* qui va sur `sys.path`. Et `get_vssm_kwargs` n'existe pas encore
+— ses 24 kwargs VSSM sont énumérés à la main dans leur trainer, et ont été
+transcrits à l'identique.
+
+### ⚠️ Deux bugs dans NOTRE boucle d'évaluation, dont un silencieux
+
+Le job a tout de même échoué, mais après le chargement : `AttributeError:
+'SCDEvaluator' object has no attribute 'update'`. Deux erreurs superposées :
+
+1. la méthode s'appelle `add`, pas `update` ;
+2. `add` attend les **logits** sous les clés `bcd`/`sem_t1`/`sem_t2` et fait
+   l'argmax lui-même, là où la boucle passait des cartes **déjà argmaxées** sous
+   la clé `change`.
+
+Corriger seulement le nom aurait donné un `KeyError`. Corriger aussi la seule clé
+aurait fait argmaxer une carte `(B,H,W)` sur la dimension des hauteurs : **un SeK
+faux, sans la moindre erreur** — et attribué à leur modèle. C'est le mode de
+défaillance le plus coûteux possible ici.
+
+Ajout d'un contrôle de formes au premier lot, et vérification du contrat : une
+prédiction parfaite passée sous la forme attendue donne SeK = 1,0000.
 
 ### En attente
 
