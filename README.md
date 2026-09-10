@@ -3,17 +3,23 @@
 *Change-aware Spatio-Frequency Mamba* — architecture Mamba **efficiente** (20,8 M
 paramètres) pour la **détection sémantique de changements** (SCD).
 
-**Résultat principal, SECOND (8 septembre) :** SeK **0,2332** — variante `lean`
-plus **échange temporel T1↔T2** à l'entraînement, 4 graines — soit **105,6 % du
-SeK de MambaSCD-Tiny pour 42,8 % de son calcul** et 76,6 % de ses paramètres.
-L'augmentation ne coûte rien en inférence : **16,48 M et 31,42 GMACs**, inchangés.
-IC 95 % prudent [0,2317 ; 0,2347], entièrement au-dessus de 0,2208, et **établi
-sur les deux métriques** (maximum et époque finale).
+**Résultats principaux, SECOND (10 septembre) — deux points d'une même frontière.**
+Paramètres et GMACs **mesurés**, pas estimés.
 
-L'objectif initial — battre Mamba-FCS (189 M) — n'est toujours pas atteint à ce
-budget (91,5 % de son SeK pour 11,9 % de son calcul) ; l'énoncé soutenu reste
-celui de l'efficience face au modèle de taille comparable, désormais avec une
-marge de 5,6 % au lieu de 0,9 %.
+| | Params | GMACs | SeK |
+|---|---|---|---|
+| **efficience** — `lean` + échange temporel + jitter + EMA | **16,48 M** | **31,42** | **0,2387 ± 0,0007** (n=4) |
+| **performance** — la même plus encodeur `tiny` et supervision profonde | 32,58 M | 58,06 | **0,2484 ± 0,0017** (n=3) |
+
+Le point d'efficience **dépasse MambaSCD-Base** (0,2292, 89,99 M, 211,55 GMACs) :
+**104,1 % de son SeK pour 18,3 % de ses paramètres et 14,9 % de son calcul**. Face
+à MambaSCD-Tiny : 108,1 % du SeK, 76,6 % des paramètres, 42,8 % du calcul.
+
+Le point de performance atteint **97,4 % du SeK de Mamba-FCS pour 17,2 % de ses
+paramètres et 22,1 % de son calcul**. L'objectif initial — le battre — n'est
+toujours pas atteint, mais l'écart passe de 8,5 % à 2,6 %.
+
+Les deux sont **établis sur les deux métriques**, maximum et époque finale.
 
 - Conception et raisonnement d'architecture : `documentation/plan_recap_CSF-Mamba2.md`
 - **Journal de bord** (chronologie, décisions, résultats des runs) :
@@ -346,7 +352,9 @@ Le backbone VMamba est branché sur ChangeMamba, en deux variantes (commutateur 
 | `--encoder` | backbone | modèle complet | verdict |
 |---|---|---|---|
 | `vmamba_mini` | 13,84 M | **20,80 M** | **défaut** — meilleur SeK, 41,30 GMACs |
-| `vmamba_tiny` | 28,0 M | 36,90 M | +0,018 de SeK en crops 256, −0,005 en crops 512 |
+| `vmamba_tiny` | **29,94 M** ‡ | 36,90 M | +0,0094 de SeK par-dessus `lean` (10 sept., établi) |
+
+*(‡ corrigé le 10 septembre : ce backbone était annoncé à 28,0 M, un chiffre incohérent avec le total de 36,90 M donné juste à côté. Mesure directe : 29 938 176 paramètres, et 29,94 + 6,96 = 36,90 — le total, lui, était juste.)*
 
 *(Comptes mesurés par fvcore. Les estimations initiales — 13,1 / 19,8 / 34,8 M —
 étaient légèrement basses.)*

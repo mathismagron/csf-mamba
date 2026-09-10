@@ -2787,6 +2787,125 @@ faudra le mesurer.
 4. Le lot C (latence, fermeture ChangeMamba) et le lot D (troisième jeu de
    données) restent inchangés.
 
+## Phase 14 — La frontière de Pareto (10 septembre 2026)
+
+### ⚠️ Deux jobs figés, pas lents — et le diagnostic compte
+
+2667720 (`augswap-s5`) et 2667898 (`max-s4`) ont épuisé leur walltime avec 1 et
+12 époques écrites. Réflexe initial : « c'est lent, il faut relancer plus
+longtemps ». Faux, et la relance aurait été perdue.
+
+Les 12 époques de 2667898 ont pris ~46 min, soit la vitesse normale de ses
+jumeaux. Les deux logs s'arrêtent **exactement au même endroit** — après
+`[val] epoch N` et `sauvé dans best.pt`, donc **pendant l'écriture de `last.pt`**
+sur `$SCRATCH` — puis plus rien pendant 20 et 23 heures. Ce sont des blocages
+d'écriture, sur deux nœuds différents (ng20203, ng11002), pendant que vingt jobs
+écrivaient leurs checkpoints au même moment.
+
+Deux conséquences pratiques :
+
+- **`last.pt` a été interrompu en cours d'écriture** : il est vraisemblablement
+  tronqué, et reprendre dessus n'a pas de sens.
+- **`metrics.csv` s'écrit en append.** Relancer sans effacer le dossier
+  produirait des numéros d'époque en double, qu'aucun garde-fou ne détecte —
+  `read_run` prendrait le maximum sur une série mélangeant deux entraînements.
+
+D'où : effacer le dossier de sortie et repartir de zéro. Une époque et douze
+époques ne valent pas le risque.
+
+### Comptage de GMACs — le témoin passe, et corrige le README
+
+Le job mesurait **les deux** encodeurs, pour que `mini + concat` serve de témoin
+à la mesure de `tiny`. Il redonne **16,48 M et 31,42 GMACs**, exactement les
+valeurs de `lean` connues depuis le 13 août. La mesure est donc fiable.
+
+| Configuration | Params | GMACs |
+|---|---|---|
+| `lean` (mini + concat) | 16,48 M | 31,42 |
+| `enctiny` (tiny + concat) | **32,58 M** | **58,06** |
+
+Au passage, une incohérence de longue date : le README annonçait **28,0 M** pour
+le backbone `vmamba_tiny`. La mesure directe donne **29 938 176**. Et
+l'arithmétique tranche sans ambiguïté : 32,58 (tiny + concat) + 4,32 (C²S²) =
+36,90 M, exactement le total que le README annonçait par ailleurs pour
+tiny + C²S². C'est donc la ligne « backbone 28,0 M » qui était fausse, pas le
+total. Corrigé.
+
+### Le plan 2×2, sur l'époque finale
+
+Échange temporel toujours actif ; on croise {rot90 + jitter photométrique} et
+{EMA}. σ mis en commun 0,0032 sur 14 configurations, df 50, seuil 1,96.
+
+**Apport de l'EMA — remarquablement additif :**
+
+| Contexte | Δ | t comm. / Welch | verdict |
+|---|---|---|---|
+| seule | +0,0074 | +3,69 / +4,92 | ✅ ÉTABLI |
+| sur l'échange temporel | +0,0087 | +3,84 / +3,69 | ✅ ÉTABLI |
+| sur échange + augmentation | +0,0086 | +4,16 / +4,89 | ✅ ÉTABLI |
+
+Trois contextes, trois fois le même effet à ±0,0007 près. C'est rare dans ce
+projet, où la leçon dominante depuis la phase 8 est que **les effets ne
+s'additionnent pas** ; l'EMA est la première exception nette. Explication
+plausible : elle n'agit pas sur ce que le modèle apprend mais sur la façon dont
+on lit ses poids en fin d'entraînement, donc elle ne recouvre aucun autre levier.
+
+**Apport de rot90 + jitter photométrique — jamais établi, mais pas nul :**
+
+| Contexte | Δ | verdict |
+|---|---|---|
+| sans échange temporel | −0,0010 | non établi |
+| avec échange | +0,0023 | non établi |
+| avec échange + EMA | +0,0022 | non établi |
+
+Le signe change selon que l'échange est présent ou non. Point estimé positif dans
+les deux contextes qui comptent, jamais franchi le seuil. On les **garde** dans la
+recette retenue — c'est la configuration mesurée la meilleure à cette taille —
+en notant que leur contribution n'est pas démontrée.
+
+### Les deux points retenus
+
+| | Params | GMACs | SeK max | SeK final |
+|---|---|---|---|---|
+| **efficience** (`augswap-ema`) | **16,48 M** | **31,42** | **0,2387 ± 0,0007** (n=4) | 0,2325 |
+| **performance** (`max`) | 32,58 M | 58,06 | **0,2484 ± 0,0017** (n=3) | 0,2397 |
+
+| | vs Mamba-FCS | vs MambaSCD-Base | vs MambaSCD-Tiny |
+|---|---|---|---|
+| efficience | 93,6 % SeK / 8,7 % params / 11,9 % calcul | **104,1 % / 18,3 % / 14,9 %** | 108,1 % / 76,6 % / 42,8 % |
+| performance | **97,4 % / 17,2 % / 22,1 %** | 108,4 % / 36,2 % / 27,4 % | 112,5 % / 151,5 % / 79,1 % |
+
+**Le point d'efficience dépasse MambaSCD-Base** — 0,2387 contre 0,2292 — pour
+**18 % de ses paramètres et 15 % de son calcul**. C'est un énoncé bien plus fort
+que celui du 8 septembre, qui ne dépassait que la variante Tiny.
+
+**Le point de performance atteint 97,4 % du SeK de Mamba-FCS** pour 17 % de ses
+paramètres. L'objectif initial du stage — le battre — reste manqué, mais l'écart
+passe de 8,5 % à 2,6 %.
+
+### La prévision du 8 septembre, et ce qu'elle a raté
+
+J'avais annoncé « quelque part vers 0,240–0,245, peut-être moins », en
+avertissant que la somme des effets (0,2484 sur l'époque finale) n'arriverait
+pas. Résultat : **0,2484 sur le maximum, 0,2397 sur l'époque finale**.
+
+La mise en garde sur la non-additivité était juste — la somme prédisait 0,2484 en
+final, on obtient 0,2397 — mais la fourchette était **trop basse**. Empiler cinq
+effets a mieux marché que ce que la phase 8 laissait craindre, sans doute parce
+que ces cinq-là agissent sur des plans différents (données, lecture des poids,
+capacité, supervision) là où les composants d'août se recouvraient tous sur la
+même fonction de perte défectueuse.
+
+### En attente
+
+- `augswap-s5` et `max-s4` relancés depuis zéro : les groupes passeront de 6 à 7
+  et de 3 à 4 graines. Les moyennes ci-dessus sont donc **provisoires**.
+- La comparaison `augswap-ema` contre `swap-ema` (+0,0022, non établie) mériterait
+  d'être tranchée : c'est elle qui dit si rot90 et le jitter gagnent leur place.
+- Lots C (latence, fermeture ChangeMamba) et D (troisième jeu de données)
+  inchangés — et le lot C devient plus urgent, la thèse d'efficience portant
+  désormais deux points au lieu d'un.
+
 ---
 
 ## Notes de méthode
