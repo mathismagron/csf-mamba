@@ -306,7 +306,8 @@ temporel.
 ## 6. Les trois réserves à connaître
 
 **1. Un seul jeu de données porte l'énoncé.** L'efficience n'est démontrée que sur
-SECOND. Sur Hi-UCD, le SeK plafonne à 0,054 quel que soit le levier — c'est une
+SECOND. *(Chantier en cours : le support de **Landsat-SCD** est implémenté et
+testé — voir `documentation/landsat-scd.md`. Il ne manque que le dump.)* Sur Hi-UCD, le SeK plafonne à 0,054 quel que soit le levier — c'est une
 propriété du jeu (1 130 tuiles porteuses de signal sur 12 000), pas du modèle,
 mais cela signifie qu'une confirmation sur un troisième jeu manque. Le retrait de
 la loss SeK, résultat principal, **ne transfère pas** à Hi-UCD : il y est neutre
@@ -339,7 +340,7 @@ ont bougé de moins de 0,0004 en doublant les graines — le chiffre est stable.
 | C2 | Évaluer le checkpoint MambaSCD publié avec **notre** code de métriques | ✅ **fait** (§2) |
 | — | Consolider les deux configurations retenues à 7 graines | ✅ **fait** (1 run restant) |
 | — | Élucider l'écart de +0,0126 entre leur SeK publié et notre mesure | ouvert |
-| D | Un troisième jeu de données (Landsat-SCD, rapporté par ChangeMamba) | à décider |
+| D | **Troisième jeu de données — Landsat-SCD** | 🔧 **implémenté**, dump à vérifier |
 | — | Trancher l'apport du jitter photométrique (+0,0022, non établi) | à faire |
 | — | Split de validation propre | ⏸️ **écarté** (voir ci-dessous) |
 
@@ -441,11 +442,11 @@ csf_mamba/
   backbone/    encoder (ConvEncoder CPU + VMambaEncoder cluster)
   decoders/    dysample, binary (Y_BCD + cartes de changement), semantic (partagé + τ)
   losses/      composite (CE + Dice + SeK + L_sc + Lovász)
-  datasets/    second, hi_ucd, transforms (augmentations), oversample
+  datasets/    second, hi_ucd, landsat_scd, transforms (augmentations), oversample
   ema.py       moyenne mobile exponentielle des poids
   model.py     assemblage CSF-Mamba
 scripts/       train, evaluate, aggregate_seeds, count_gmacs, benchmark_latency, …
-tests/         6 tests de non-régression
+tests/         8 fichiers de tests de non-régression
 ```
 
 **Le point qui dé-risque tout : le backend SSM est interchangeable.** `mamba-ssm`
