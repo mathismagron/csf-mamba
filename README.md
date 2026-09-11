@@ -341,7 +341,7 @@ ont bougé de moins de 0,0004 en doublant les graines — le chiffre est stable.
 | — | Élucider l'écart de +0,0126 entre leur SeK publié et notre mesure | ouvert |
 | D | Un troisième jeu de données (Landsat-SCD, rapporté par ChangeMamba) | à décider |
 | — | Trancher l'apport du jitter photométrique (+0,0022, non établi) | à faire |
-| — | Split de validation propre, pour un chiffre sans biais de sélection | à arbitrer |
+| — | Split de validation propre | ⏸️ **écarté** (voir ci-dessous) |
 
 **C2 est abouti.** Le checkpoint publié de MambaSCD ne se chargeait plus dans
 leur propre dépôt — 558 poids manquants, 590 inattendus, leur décodeur ayant été
@@ -350,6 +350,16 @@ renommé après publication. Sorti le commit contemporain des poids dans un
 inattendu**, et l'évaluation aboutit. Le tableau comparatif porte désormais une
 ligne « évaluée avec le même code » et non plus seulement « d'après les chiffres
 publiés ».
+
+**Décision sur le split de validation (11 septembre) : on conserve la convention
+du domaine.** SECOND ne fournit pas de split de validation, l'époque est donc
+choisie sur le test — et **ChangeMamba procède de même**, vérifié dans leur code.
+Adopter unilatéralement un split de validation ferait baisser notre chiffre
+d'environ 0,005 sans faire bouger le leur : nous paraîtrions moins bons **en étant
+plus honnêtes**, pour une raison sans rapport avec le modèle. Le biais est donc
+**mesuré et rapporté** (§3 et §6) plutôt que corrigé d'un seul côté. Si la
+question devait être rouverte, la bonne forme serait d'**ajouter** une ligne
+conservatrice, pas de remplacer le chiffre comparable.
 
 Reste ouvert l'écart de **+0,0126** entre leur SeK publié et notre mesure de leur
 propre checkpoint. Il ne remet pas en cause la comparaison — il la rend plus

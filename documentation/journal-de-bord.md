@@ -3112,6 +3112,40 @@ Trois runs perturbés sur les vingt-six lancés en trois jours, sur des nœuds
 différents à chaque fois. À surveiller si cela se reproduit, mais rien qui
 ressemble à un défaut de notre code.
 
+### Décision : on conserve la sélection d'époque sur le test (11 septembre)
+
+Question ouverte depuis le 9 août, rouverte le 7 septembre quand le biais est
+passé de 0,63 σ à 3-5 σ. **Tranchée : on ne change pas de convention.**
+
+Le raisonnement n'est pas que le biais soit acceptable — il ne l'est pas dans
+l'absolu. Il est que **ChangeMamba sélectionne son époque sur le test exactement
+comme nous** (vérifié dans leur code). Adopter un split de validation de notre
+seul côté ferait baisser notre chiffre d'environ 0,005 sans toucher le leur :
+nous paraîtrions moins bons **en étant plus honnêtes**, pour une raison sans
+rapport avec le modèle.
+
+Le biais est donc **mesuré, chiffré et rapporté** — c'est ce que permet la colonne
+« époque finale » et la section dédiée du README — plutôt que corrigé d'un seul
+côté d'une comparaison.
+
+**Si la question est rouverte**, la bonne forme est d'**ajouter** une ligne
+conservatrice (configuration finale réentraînée avec un vrai split, ~50 h GPU),
+pas de remplacer le chiffre comparable à la littérature.
+
+**Ordre de grandeur du mécanisme, vérifié par simulation.** Un modèle au SeK
+strictement constant, mesuré 200 fois avec un bruit époque à époque de 0,0018,
+voit son « meilleur sur 200 » dépasser sa vraie valeur de **+0,0049** en moyenne —
+2,7 fois le bruit. Nos biais mesurés valent 0,0037 à 0,0110. Le simple fait de
+prendre un maximum sur une série bruitée suffit à expliquer l'essentiel de ce
+qu'on observe ; il n'y a pas de fuite plus grave à chercher.
+
+⚠️ **Confusion à éviter, notée pour le rapport.** La colonne « époque finale »
+n'est **pas** ce que donnerait un split de validation : elle prend la dernière
+époque, bonne ou mauvaise, et constitue une borne basse. Un split choisirait une
+*bonne* époque, simplement pas celle qui flatte le test. Le chiffre juste se situe
+entre les deux colonnes, plus près du maximum — pour le point d'efficience,
+quelque part vers 0,236-0,237 entre 0,2330 et 0,2390.
+
 ### En attente
 
 - Une septième graine du point de performance (`max-s6`, relancée après un nœud
