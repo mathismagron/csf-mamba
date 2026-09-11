@@ -75,6 +75,57 @@ def _map_semantic(index_map: np.ndarray) -> np.ndarray:
     return mapped
 
 
+def apparier_dossiers(root: Path, dossiers=("A", "B", "label")) -> tuple[list, dict]:
+    """Noms utilisables dans TOUS les dossiers, et rapport des écarts.
+
+    ⚠️ Le dump figshare n'est pas cohérent d'un dossier à l'autre : `label/`
+    contient `…01Zhedang2.png` là où `A/` contient `…01ZheDang2.png`. Sur Linux
+    les noms sont sensibles à la casse, donc une jointure naïve par nom de
+    fichier échoue — c'est ce qui a fait planter le premier décodage.
+
+    On apparie donc sur le nom **en minuscules**, mais seulement après avoir
+    vérifié qu'aucun dossier ne contient deux fichiers ne différant que par la
+    casse : dans ce cas l'appariement serait ambigu et il faut s'arrêter.
+
+    -> (noms appariés, rapport) où `rapport[dossier]` donne le nom réel à
+       utiliser pour chaque clé.
+    """
+    par_dossier, collisions = {}, {}
+    for d in dossiers:
+        m = {}
+        for f in (root / d).iterdir():
+            if not f.is_file():
+                continue
+            cle = f.name.lower()
+            if cle in m:
+                collisions.setdefault(d, []).append((m[cle], f.name))
+            m[cle] = f.name
+        par_dossier[d] = m
+
+    if collisions:
+        detail = "; ".join(f"{d} : {v[:2]}" for d, v in collisions.items())
+        raise ValueError(
+            "Deux fichiers ne différant que par la casse dans un même dossier — "
+            f"l'appariement serait ambigu : {detail}"
+        )
+
+    communs = set.intersection(*(set(m) for m in par_dossier.values()))
+    # Distinguer « mêmes noms » de « mêmes noms à la casse près » : dire que les
+    # dossiers concordent alors qu'ils ne concordent qu'en minuscules serait
+    # trompeur, et masquerait précisément le défaut du dump.
+    casse_seule = sorted(
+        c for c in communs
+        if len({par_dossier[d][c] for d in dossiers}) > 1
+    )
+    rapport = {
+        "communs": sorted(communs),
+        "par_dossier": par_dossier,
+        "exclus": {d: sorted(set(m) - communs) for d, m in par_dossier.items()},
+        "casse_seule": casse_seule,
+    }
+    return sorted(communs), rapport
+
+
 class LandsatSCDDataset(Dataset):
     def __init__(self, root: str, split: str = "train", transform=None,
                  merge_val_into_train: bool = True):

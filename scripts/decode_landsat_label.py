@@ -41,6 +41,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from csf_mamba.datasets.landsat_scd import apparier_dossiers
+
 
 def parse_args():
     p = argparse.ArgumentParser()
@@ -87,18 +89,33 @@ def _groupes(moyennes: dict, seuil: float):
 def main():
     args = parse_args()
     root = Path(args.data_root)
-    fichiers = sorted(p.name for p in (root / "label").iterdir() if p.is_file())
-    pas = max(1, len(fichiers) // args.tuiles)
-    echantillon = fichiers[::pas][:args.tuiles]
-    print(f"Échantillon : {len(echantillon)} tuiles sur {len(fichiers)}\n")
+    # ⚠️ Apparier sur le nom en minuscules : le dump mélange `ZheDang` et
+    # `Zhedang` entre dossiers, et Linux distingue la casse.
+    try:
+        cles, rapport = apparier_dossiers(root)
+    except ValueError as e:
+        print(f"⛔ {e}")
+        return 1
+    exclus = {d: len(v) for d, v in rapport["exclus"].items() if v}
+    if exclus:
+        print(f"⚠️ noms présents dans un dossier mais pas dans les autres : {exclus}")
+        for d, v in rapport["exclus"].items():
+            if v:
+                print(f"   {d}/ : ex. {v[:3]}")
+    pas = max(1, len(cles) // args.tuiles)
+    echantillon = cles[::pas][:args.tuiles]
+    print(f"Échantillon : {len(echantillon)} tuiles sur {len(cles)} appariées\n")
+    nom_reel = rapport["par_dossier"]
 
     somme_a, somme_b, compte = {}, {}, {}
-    for nom in echantillon:
-        lab = np.asarray(Image.open(root / "label" / nom))
-        a = np.asarray(Image.open(root / "A" / nom).convert("RGB"), dtype=np.float64)
-        b = np.asarray(Image.open(root / "B" / nom).convert("RGB"), dtype=np.float64)
+    for cle in echantillon:
+        lab = np.asarray(Image.open(root / "label" / nom_reel["label"][cle]))
+        a = np.asarray(Image.open(root / "A" / nom_reel["A"][cle]).convert("RGB"),
+                       dtype=np.float64)
+        b = np.asarray(Image.open(root / "B" / nom_reel["B"][cle]).convert("RGB"),
+                       dtype=np.float64)
         if a.shape[:2] != lab.shape:
-            print(f"⛔ formes incohérentes pour {nom} : {a.shape[:2]} vs {lab.shape}")
+            print(f"⛔ formes incohérentes pour {cle} : {a.shape[:2]} vs {lab.shape}")
             return 1
         for v in np.unique(lab).tolist():
             m = lab == v

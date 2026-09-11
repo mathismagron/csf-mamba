@@ -32,6 +32,8 @@ BASE = re.compile(r"^(.*_\d+)(.*)$")
 import numpy as np
 from PIL import Image
 
+from csf_mamba.datasets.landsat_scd import apparier_dossiers
+
 # ⚠️ LA LITTÉRATURE NE CORRESPOND PAS AU DUMP, et c'est le dump qui fait foi.
 # Elle annonce 2 425 paires, « 1 908 pour l'entraînement et 477 pour le test » —
 # chiffres déjà incohérents entre eux (1 908 + 477 = 2 385). Le dump figshare en
@@ -166,6 +168,35 @@ def explorer(root: Path, n_scan: int = 600):
             print(f"  {p.name + '/':<16} {len(fichiers):>6} fichiers   {dict(exts)}")
         else:
             print(f"  {p.name:<16} {p.stat().st_size:>6} octets  (fichier)")
+
+    print("\n-- cohérence des noms entre dossiers --")
+    try:
+        cles, rap = apparier_dossiers(root)
+        exclus = {d: len(v) for d, v in rap["exclus"].items() if v}
+        print(f"  {len(cles)} noms appariés dans les trois dossiers")
+        if exclus:
+            print(f"  ⚠️ noms présents dans un dossier mais pas dans les autres : {exclus}")
+            for d, v in rap["exclus"].items():
+                if v:
+                    print(f"     {d}/ : ex. {v[:3]}")
+            print("     -> le dump mélange les casses entre dossiers (ZheDang / Zhedang).")
+            print("        L'appariement se fait sur le nom en minuscules ; seules les")
+            print("        tuiles présentes PARTOUT sont utilisables.")
+        elif rap["casse_seule"]:
+            pass
+        else:
+            print("  ✓ les trois dossiers portent exactement les mêmes noms")
+        if rap["casse_seule"]:
+            n = len(rap["casse_seule"])
+            print(f"  ⚠️ {n} tuiles dont le nom ne concorde QUE à la casse près")
+            for c in rap["casse_seule"][:3]:
+                variantes = {d: rap["par_dossier"][d][c] for d in ("A", "B", "label")}
+                print(f"     {variantes}")
+            print("     -> appariement fait sur le nom en minuscules. Toute liste de")
+            print("        split devra utiliser la même convention, sinon elle")
+            print("        désignerait des fichiers introuvables dans un des dossiers.")
+    except ValueError as e:
+        print(f"  ⛔ {e}")
 
     print("\n-- listes de splits --")
     listes = sorted(root.rglob("*.txt"))
