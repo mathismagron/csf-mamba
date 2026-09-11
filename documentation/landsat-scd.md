@@ -53,7 +53,28 @@ convention A : index 0 réservé, classes réelles 1..4.
 **L'entraînement concatène `train_list` et `val_list`.** C'est ce que fait leur
 config ; s'en écarter rendrait notre chiffre non comparable au leur.
 
-## 3. ⚠️ Vérifier le dump AVANT d'entraîner
+## 3. Télécharger
+
+⚠️ **Sur un nœud de connexion** : les nœuds de calcul d'Alliance Canada n'ont pas
+d'accès réseau, et les nœuds de connexion sont précisément faits pour ça.
+
+```bash
+cd $HOME/csf-mamba
+scripts/download_landsat.sh              # vers $SCRATCH/Landsat-SCD
+```
+
+Le script télécharge `Landsat-SCD_dataset.zip` (figshare 19946135, **4,1 Gio**,
+CC BY 4.0), **vérifie la taille exacte** (4 400 617 661 octets) avant d'extraire,
+regarde la structure de l'archive, et **normalise l'arborescence** : beaucoup de
+dumps enferment tout dans un dossier racine, et l'extraire à l'aveugle donnerait
+`A/` un niveau trop bas — le dataloader échouerait. Les trois cas — archive à
+plat, archive imbriquée, archive au mauvais format — sont couverts et testés.
+
+Le téléchargement **reprend là où il s'est arrêté** : une session de nœud de
+connexion coupée ne coûte pas les 4 Gio déjà transférés. Prévoir ~9 Gio libres,
+l'archive et son contenu coexistant un moment ; `diskusage_report` donne le quota.
+
+## 4. ⚠️ Vérifier le dump AVANT d'entraîner
 
 Le dataloader a été écrit d'après leur code, **pas d'après les fichiers**.
 Personne n'a encore regardé le dump.
@@ -74,7 +95,7 @@ ne correspondait pas aux indices du dump. Les noms retenus ici — *farmland,
 desert, buildings, water* — sont **explicitement marqués non vérifiés** dans le
 code, et un test échoue si l'on oublie de lever le drapeau après vérification.
 
-## 4. Deux réglages qui ne se transposent pas
+## 5. Deux réglages qui ne se transposent pas
 
 **Le nombre d'époques se transpose en PAS, pas en époques.** Le résultat « LR
 constant sur 200 époques » a été établi sur SECOND, qui compte 2 968 paires
@@ -93,7 +114,7 @@ Landsat annonce ~19 % de changement, proche des 20,1 % de SECOND, d'où ce défa
 Mais c'est `check_landsat` qui mesure le taux réel, et il avertit s'il est faible.
 Le cas échéant : `WEIGHT=20 DICE=1`.
 
-## 5. Lancer
+## 6. Lancer
 
 ```bash
 # 1. Vérifier le dump (2 minutes, sans GPU)
@@ -121,7 +142,7 @@ for MODE in best final; do
 done
 ```
 
-## 6. Pré-enregistrement
+## 7. Pré-enregistrement
 
 Écrit avant tout lancement, selon la méthode de la phase 7.
 
