@@ -49,6 +49,89 @@ def parse_args():
     return p.parse_args()
 
 
+def _decrire_images(dossier: Path, n=3):
+    """Mode, taille et valeurs d'un échantillon d'images d'un dossier."""
+    fichiers = sorted(p for p in dossier.iterdir() if p.is_file())[:n]
+    for f in fichiers:
+        try:
+            img = Image.open(f)
+        except Exception as e:
+            print(f"      {f.name} : illisible ({e})")
+            continue
+        arr = np.asarray(img)
+        print(f"      {f.name}")
+        print(f"        mode={img.mode} taille={img.size} shape={arr.shape} dtype={arr.dtype}")
+        if arr.ndim == 2:
+            vals = np.unique(arr)
+            print(f"        {len(vals)} valeurs distinctes : {vals[:20].tolist()}"
+                  f"{' …' if len(vals) > 20 else ''}")
+        elif arr.ndim == 3:
+            couleurs = np.unique(arr.reshape(-1, arr.shape[2]), axis=0)
+            print(f"        {len(couleurs)} couleurs distinctes : "
+                  f"{[tuple(int(x) for x in c) for c in couleurs[:8]]}"
+                  f"{' …' if len(couleurs) > 8 else ''}")
+        if img.mode == "P":
+            pal = img.getpalette() or []
+            entrees = [tuple(pal[i * 3:i * 3 + 3]) for i in range(min(len(pal) // 3, 12))]
+            print(f"        palette (12 premières entrées) : {entrees}")
+            print("        -> image À PALETTE : les VALEURS sont des indices, la")
+            print("           couleur n'est qu'un affichage. np.asarray rend bien")
+            print("           les indices, pas du RGB.")
+
+
+def explorer(root: Path):
+    """Rapporte ce que contient RÉELLEMENT le dump, quand il ne suit pas le format.
+
+    Le dump brut de figshare contient `A/`, `B/` et un unique `label/`, là où le
+    code de Mamba-FCS attend `labelA/`, `labelB/` et trois listes de splits. Ils
+    ont donc prétraité le jeu sans publier ce prétraitement. Pour écrire un
+    dataloader juste il faut d'abord savoir ce que `label/` encode :
+
+    * une carte sémantique par date fusionnée — peu probable avec un seul dossier ;
+    * une carte de TRANSITION « from-to » — les 10 types de changement annoncés le
+      suggèrent, et il faudrait alors la décoder en deux cartes sémantiques ;
+    * une image à palette dont les indices sont les classes.
+
+    Ce rapport tranche à partir des fichiers, pas d'une hypothèse.
+    """
+    print("\n" + "=" * 70)
+    print("EXPLORATION — le dump ne suit pas le format attendu, voici son contenu")
+    print("=" * 70)
+
+    print("\n-- entrées à la racine --")
+    for p in sorted(root.iterdir()):
+        if p.is_dir():
+            fichiers = [f for f in p.iterdir() if f.is_file()]
+            exts = Counter(f.suffix.lower() for f in fichiers)
+            print(f"  {p.name + '/':<16} {len(fichiers):>6} fichiers   {dict(exts)}")
+        else:
+            print(f"  {p.name:<16} {p.stat().st_size:>6} octets  (fichier)")
+
+    print("\n-- listes de splits --")
+    listes = sorted(root.rglob("*.txt"))
+    if listes:
+        for f in listes:
+            n = len([l for l in f.read_text().splitlines() if l.strip()])
+            print(f"  {f.relative_to(root)} : {n} entrées")
+    else:
+        print("  ⚠️ AUCUN fichier .txt : le dump ne fournit pas les splits officiels.")
+        print("     Mamba-FCS en utilise trois (train/val/test). Sans eux, notre")
+        print("     comparaison à leur chiffre ne porterait pas sur le même découpage.")
+
+    for nom in ("label", "labelA", "labelB", "A", "B"):
+        d = root / nom
+        if d.is_dir():
+            print(f"\n-- contenu de {nom}/ --")
+            _decrire_images(d)
+
+    print("\n" + "=" * 70)
+    print("À DÉCIDER À PARTIR DE CE RAPPORT :")
+    print("  1. Que code `label/` — sémantique par date, ou transition « from-to » ?")
+    print("  2. Comment obtenir les splits de Mamba-FCS, sans quoi la comparaison")
+    print("     à leur chiffre ne serait pas appariée.")
+    print("Ne rien écrire dans le dataloader avant d'avoir répondu aux deux.")
+
+
 def main():
     args = parse_args()
     root = Path(args.data_root)
@@ -64,8 +147,11 @@ def main():
     for d in ("A", "B", "labelA", "labelB"):
         verif((root / d).is_dir(), f"dossier {d}/")
     if pbs:
-        print("\nArborescence incomplète — voir la docstring de "
-              "csf_mamba/datasets/landsat_scd.py pour le format attendu.")
+        # Le dump brut de figshare ne suit PAS la structure qu'attend le code
+        # de Mamba-FCS : ils l'ont prétraité sans publier le prétraitement.
+        # Plutôt que de refuser, on explore et on rapporte ce qui est
+        # réellement là — seule façon de décider quoi écrire ensuite.
+        explorer(root)
         return 1
 
     print("\n== 2. Listes officielles ==")
