@@ -293,12 +293,45 @@ que le bloc est resté éteint.
 
 Deux issues, et elles ne mènent pas au même endroit :
 
-| `|gamma|` moyen final | Lecture |
+| valeur moyenne de gamma | Lecture |
 |---|---|
 | ≈ 1e-5, soit inchangé | **Le bloc est resté éteint.** Le résultat ne porte pas sur l'attention. Régler l'optimisation est indispensable avant de conclure. |
 | ≥ 1e-2, soit ×1000 | **Le bloc a été utilisé** et a quand même dégradé le modèle. Le résultat porte sur l'idée, et l'optimisation n'y changera pas grand-chose. |
 
 Deux minutes, et cela décide si les huit entraînements suivants valent la peine.
+
+### Résultat du diagnostic (11 septembre) — le bloc s'est bien allumé
+
+| Run | valeur moyenne de gamma | facteur depuis l'init |
+|---|---:|---:|
+| `hyb-eff-s3-d2-s1` | **1,78 · 10⁻²** | ×1 780 |
+| `hyb-perf-s3-d2-s1` | **7,30 · 10⁻³** | ×730 |
+
+Le bloc n'était **pas** gelé : l'optimiseur a multiplié `gamma` par mille. Deux
+des trois hypothèses « il n'a pas eu les moyens de s'allumer » tombent, et il faut
+le dire d'autant plus clairement que j'en avais désigné une comme la plus suspecte.
+
+**⚠️ Le weight decay n'a rien bridé.** J'avais écrit qu'il « pousse gamma vers zéro
+pendant que le bloc essaie de s'allumer ». Le calcul dit l'inverse : AdamW
+découplé applique `gamma ← gamma·(1 − lr·wd)` = `×0,999999` par pas, soit
+**×0,93 sur les 74 200 pas de l'entraînement entier**. Sept pour cent. Négligeable.
+L'hypothèse était fausse.
+
+**⚠️ L'initialisation non plus.** Atteindre 1,78 · 10⁻² demande environ 178 pas
+d'Adam, sur 74 200 disponibles — **0,2 % du budget**. `gamma` avait tout le temps
+de monter bien plus haut et ne l'a pas fait. Et l'initialisation à 1e-1 que je
+proposais est **5,6 à 13,7 fois au-dessus** de la valeur retenue par
+l'entraînement : la forcer reviendrait à imposer au bloc de contribuer plus que ce
+que l'optimisation a choisi.
+
+**Ce qu'il reste.** Une seule hypothèse cohérente : **l'attention elle-même était
+mal conditionnée, et le petit `gamma` en est le symptôme, pas la cause.** Si la
+sortie du bloc est bruitée ou inutile, l'optimiseur apprend justement un `gamma`
+faible pour l'étouffer — c'est exactement ce qu'on observe. Un taux
+d'apprentissage plus doux sur les seuls paramètres d'attention pourrait produire
+une attention mieux conditionnée, donc un `gamma` utile plus grand.
+
+C'est le dernier test défendable. S'il échoue, la piste reste close.
 
 ### Les réglages câblés, et pourquoi
 
@@ -306,16 +339,12 @@ Quatre leviers, ajoutés le 11 septembre. **Tous inertes par défaut** : sans eu
 l'optimiseur est littéralement l'appel d'origine sur `model.parameters()`, et un
 test le vérifie — les 150 entraînements de la campagne restent reproductibles.
 
-| Réglage | Défaut | À tester | Raison |
-|---|---|---|---|
-| `--attn-no-wd` | non | **oui** | Le weight decay s'applique aujourd'hui **au LayerScale lui-même**, qu'il pousse vers zéro pendant que le bloc essaie de s'allumer. L'optimiseur travaille contre l'apprentissage. C'est le levier le plus suspect. |
-| `--attn-layer-scale` | 1e-5 | **1e-1** | 1e-5 est la valeur de CaiT pour les réseaux **très profonds**. Avec deux blocs, elle est excessivement timide — le bloc met très longtemps à devenir audible. |
-| `--attn-lr-scale` | 1.0 | 0.5 | Les blocs Transformer sont réputés plus sensibles au taux d'apprentissage que les convolutions ou les SSM. Rien n'oblige à leur imposer celui du reste. |
-| `--attn-dropout` | 0.0 | 0.1 | Sur la base efficience, l'attention ajoute +57 % de paramètres à un modèle entraîné sur 2 968 paires. Seule piste contre le surapprentissage — non démontré, mais plausible. |
-
-Les trois premiers visent la même hypothèse : **le bloc n'a pas eu les moyens de
-s'allumer**. Le quatrième vise l'hypothèse opposée : il s'est allumé et a
-surappris. Le diagnostic de `gamma` dit laquelle des deux instruire.
+| Réglage | Défaut | Statut après diagnostic |
+|---|---|---|
+| **`--attn-lr-scale`** | 1.0 | ✅ **seul levier encore défendable.** Agit sur les poids de l'attention (qkv, mlp), pas sur la liberté de `gamma`. Une attention mieux conditionnée donnerait un `gamma` utile plus grand. |
+| `--attn-dropout` | 0.0 | ➖ plausible sur la base efficience seulement (+57 % de paramètres sur 2 968 paires), mais les époques de pic ne montrent pas de surapprentissage. |
+| `--attn-no-wd` | non | ⛔ **hypothèse réfutée** — 7 % d'effet sur tout l'entraînement. Conservé parce qu'il ne coûte rien et retire un confondant mineur. |
+| `--attn-layer-scale` | 1e-5 | ⛔ **hypothèse réfutée** — `gamma` a grimpé ×1 780 en 0,2 % du budget, et l'init proposée dépasse la valeur choisie par l'entraînement. |
 
 ### Autres pistes, non engagées
 
