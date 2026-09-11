@@ -17,7 +17,14 @@ ce que l'entraînement en a fait :
 Distinguer les deux coûte deux minutes et décide s'il vaut la peine de relancer
 huit entraînements.
 
-    python -m scripts.inspect_layerscale $SCRATCH/csf-mamba-runs/second_mini_chess_hyb-*/best.pt
+⚠️ Le venv doit être activé, même sur un nœud de connexion — le script lit un
+checkpoint PyTorch :
+
+    module load python/3.11 cuda/12.2
+    source $SCRATCH/csf-venv-cu12/bin/activate
+    python -m scripts.inspect_layerscale \\
+        $SCRATCH/csf-mamba-runs/second_mini_chess_hyb-eff-s3-d2-s1/best.pt \\
+        $SCRATCH/csf-mamba-runs/second_mini_chess_hyb-perf-s3-d2-s1/best.pt
 """
 
 import argparse
@@ -34,8 +41,14 @@ def main():
 
     print(f"{'run':<34} {'paramètre':<26} {'|gamma| moyen':>14} {'max':>10}  état")
     print("-" * 96)
+    resume = []
     for chemin in args.checkpoints:
-        etat = torch.load(chemin, map_location="cpu", weights_only=False)
+        # `best.pt` est un state_dict nu : weights_only=True suffit, évite
+        # l'avertissement de dépickling et va plus vite.
+        try:
+            etat = torch.load(chemin, map_location="cpu", weights_only=True)
+        except Exception:
+            etat = torch.load(chemin, map_location="cpu", weights_only=False)
         if isinstance(etat, dict) and "model" in etat:
             etat = etat["model"]
         nom = Path(chemin).parent.name.replace("second_mini_chess_", "")
@@ -55,9 +68,29 @@ def main():
             court = k.replace("attn.", "").replace(".blocks.", ".b")
             print(f"{nom:<34} {court:<26} {m:>14.2e} {mx:>10.2e}  {etat_txt}")
         g = statistics.fmean(moyennes)
+        resume.append((nom, g))
         print(f"{'':<34} {'-> moyenne du run':<26} {g:>14.2e} {'':>10}  "
-              f"{'facteur ' + format(g / 1e-5, '.0f') + ' x l initialisation'}")
+              f"facteur {g / 1e-5:.0f} x l'initialisation")
         print()
+
+    if not resume:
+        return
+    pire = min(g for _, g in resume)
+    print("=" * 96)
+    if pire < 1e-4:
+        print("VERDICT : le bloc d'attention est resté ÉTEINT.")
+        print("  Le résultat négatif ne porte pas sur l'attention mais sur le fait")
+        print("  qu'elle n'a jamais contribué. Régler l'optimisation est indispensable")
+        print("  avant de conclure : --attn-no-wd et --attn-layer-scale 1e-1.")
+    elif pire < 1e-2:
+        print("VERDICT : le bloc s'est allumé FAIBLEMENT.")
+        print("  Contribution réelle mais ténue. Relancer avec --attn-no-wd et")
+        print("  --attn-layer-scale 1e-1 vaut la peine, sans garantie.")
+    else:
+        print("VERDICT : le bloc a bien été UTILISÉ, et il a quand même dégradé le")
+        print("  modèle. Le résultat négatif porte sur l'idée elle-même ; régler")
+        print("  l'optimisation n'y changera pas grand-chose. Seul le dropout garde")
+        print("  un sens, contre l'hypothèse de surapprentissage.")
 
 
 if __name__ == "__main__":
