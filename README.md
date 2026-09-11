@@ -394,16 +394,39 @@ alors qu'il s'agit de MACs — attention en comparant à la littérature.
 
 ---
 
-## 9. Piste annexe : hybride Mamba / Transformer
+## 9. Piste annexe close : hybride Mamba / Transformer
 
-⚗️ **Hors du cadre initial**, tenue à l'écart et sans effet sur ce qui précède :
-une attention bi-temporelle jointe aux stages profonds, pour attaquer la
-localisation du changement — le goulot identifié au §6.
+⚗️ **Hors du cadre initial**, tenue à l'écart et sans effet sur ce qui précède.
+Une attention bi-temporelle jointe aux stages profonds, conçue pour attaquer la
+localisation du changement — le goulot identifié au §6. 8 entraînements, 4 graines
+par configuration.
+
+**Résultat : elle n'apporte rien, et nuit au petit modèle.**
+
+| Base | Δ sur le maximum | Δ sur l'époque finale |
+|---|---:|---:|
+| efficience (16,48 → 25,95 M) | −0,0028 *(partiel)* | **−0,0051 (établi)** |
+| performance (32,58 → 42,05 M) | −0,0000 | +0,0012 |
+
+Et le critère secondaire, inscrit d'avance, réfute le mécanisme supposé :
+l'**IoU du changement baisse** de 0,0064 sur la base efficience — l'attention a
+dégradé exactement ce qu'elle devait améliorer.
+
+**C'est le quatrième bloc architectural testé dans ce projet, et le quatrième à
+ne rien rapporter.** Face à cela, les leviers de données et d'optimisation
+donnent +0,0074 à +0,032. Le motif mérite d'être énoncé : *sur ce jeu de données
+et à cette échelle, les ajouts de conception architecturale ne déplacent pas le
+SeK ; les données, l'optimisation et la capacité brute d'encodeur le déplacent.*
+
+Réserve principale, écrite sans l'atténuer : les blocs Transformer ont été
+entraînés avec le réglage du reste du modèle (LR constant, pas de warmup dédié),
+alors qu'ils y sont réputés plus sensibles. C'est la seule objection qui pourrait
+renverser ce résultat, et elle n'a pas été testée.
 
 Le code vit dans `csf_mamba/experimental/`, se lance par
-`scripts/train_hybrid.sbatch`, tague ses runs `hyb-*` et se documente dans
-**`documentation/hybride.md`**. Sans `--attn-stages`, le modèle de référence est
-inchangé à l'octet près — `tests/test_hybride.py` le vérifie.
+`scripts/train_hybrid.sbatch`, tague ses runs `hyb-*` et se documente en détail
+dans **`documentation/hybride.md`**. Sans `--attn-stages`, le modèle de référence
+est inchangé à l'octet près — `tests/test_hybride.py` le vérifie.
 
 ---
 

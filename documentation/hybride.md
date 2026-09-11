@@ -187,16 +187,120 @@ for MODE in best final; do
 done
 ```
 
-## 7. Ce qui reste à faire avant de conclure
+## 7. Résultat — l'attention n'apporte rien, et nuit sur le petit modèle
 
-- Mesurer les GMACs et la latence réels de l'hybride (`count_gmacs`,
-  `benchmark_latency` acceptent déjà `--attn-stages` via le modèle).
-- Si `eff` gagne mais pas `perf`, ou l'inverse, ne pas transposer : la leçon du
-  12 août est qu'un optimum trouvé dans un régime ne vaut pas dans un autre.
-- Si le gain est établi, balayer la profondeur (1, 2, 4) et les stages (3 seul,
-  2+3) — mais seulement alors.
+8 entraînements, 200 époques chacun, 4 graines par base. Contrôle d'intégrité
+passé : deux lignes de configuration à quatre occurrences, et le bloc d'attention
+mesure **9 466 368 paramètres** contre 9 440 000 prévus analytiquement — totaux
+25,95 M et 42,05 M contre 25,92 et 42,02 annoncés. Le modèle entraîné est bien
+celui conçu.
 
-## 8. Sources
+**Lecture selon les critères fixés au §5, chaque base contre son propre témoin.**
+
+| Base | Δ sur le maximum | Δ sur l'époque finale | Verdict |
+|---|---:|---:|---|
+| **efficience** (16,48 → 25,95 M) | −0,0028 *(partiel)* | **−0,0051 (ÉTABLI)** | ⛔ **nuit** |
+| **performance** (32,58 → 42,05 M) | −0,0000 | +0,0012 | ⛔ **aucun effet** |
+
+**Sur la base efficience, l'attention dégrade le modèle**, et c'est établi sur la
+métrique sans biais de sélection. Sur la base performance, elle ne fait
+strictement rien : −0,0000 sur le maximum, les deux moyennes sont identiques au
+dix-millième.
+
+**Le record n'est pas pris.** L'écart à Mamba-FCS reste de +0,0065, inchangé.
+
+### Le signal secondaire réfute le mécanisme supposé
+
+C'était le critère inscrit d'avance : *si l'attention agit bien sur la
+localisation, l'IoU du changement doit monter davantage que le reste.*
+
+| Base | IoU du changement (époque finale) | Δ |
+|---|---|---:|
+| efficience | 0,5665 contre **0,5729** | **−0,0064** |
+| performance | 0,5784 contre 0,5777 | +0,0007 |
+
+Sur la base efficience, **l'IoU baisse** — l'attention a dégradé précisément ce
+qu'elle était censée améliorer. Ce n'est pas un gain obtenu par un autre chemin :
+c'est une réfutation directe de l'hypothèse de départ.
+
+### Ce que le garde-fou d'initialisation permet de conclure
+
+Le LayerScale garantissait qu'à l'initialisation le bloc est l'identité — mesuré à
+8·10⁻⁶ — et les 132 tenseurs partagés étaient identiques à ceux du témoin. Le
+modèle hybride **est donc bien parti de la ligne de base**, puis a appris à se
+servir de l'attention d'une façon qui l'a dégradé.
+
+C'est exactement ce que ce garde-fou devait établir : le résultat négatif porte
+sur **l'idée**, pas sur une initialisation malheureuse. Sans lui, on n'aurait pas
+pu trancher.
+
+### Trois réserves, écrites sans les atténuer
+
+**Une seule configuration a été testée** — stage 4, profondeur 2, 8 têtes,
+mlp_ratio 2. Ce n'est pas un balayage. Une autre profondeur ou un autre stage
+pourrait se comporter autrement, même si le pré-enregistrement prévoyait de ne
+balayer qu'en cas de gain.
+
+**Les blocs Transformer ont été entraînés avec le réglage du reste du modèle** :
+LR constant 1e-4, AdamW à weight decay 0,01, sans warmup propre. Les blocs
+d'attention y sont réputés plus sensibles que les convolutions ou les SSM. Le
+LayerScale atténue ce risque sans l'annuler — c'est la réserve la plus sérieuse
+contre ce résultat négatif.
+
+**Sur la base efficience, l'attention ajoute +57 % de paramètres** à un modèle
+entraîné sur 2 968 paires. Le surapprentissage est une explication plausible, mais
+les époques de pic ne le montrent pas : [50, 57, 62, 69] pour l'hybride contre
+[47, 62, 62, 66, 72, 94, 100] pour le témoin — pas de pic nettement plus précoce.
+L'hypothèse reste non vérifiée.
+
+### Ce que ça ajoute au tableau d'ensemble
+
+C'est le **quatrième** bloc architectural testé dans ce projet, et le quatrième à
+ne rien rapporter :
+
+| Composant | Ce qu'il apporte |
+|---|---:|
+| C²S² entier | +0,0016 |
+| MCA-SF | +0,0015 |
+| CGA | −0,0001 |
+| Branche FFT | −0,0046 |
+| Décodeur élargi | −0,0007 |
+| **Attention bi-temporelle** | **−0,0051 à +0,0012** |
+| *DySample* | *+0,0075 — la seule exception* |
+
+Face aux leviers de **données et d'optimisation** : retrait de la loss SeK
++0,0125, échange temporel +0,0096, LR constant +0,0098, EMA +0,0074 à +0,0087,
+crops 512 +0,022, compensation de déséquilibre +0,032.
+
+**Le motif est net et vaut d'être énoncé dans le rapport : sur ce jeu de données
+et à cette échelle, les ajouts de conception architecturale ne déplacent pas le
+SeK ; les données, l'optimisation et la capacité brute d'encodeur le déplacent.**
+La seule exception, DySample, n'est pas un module de raisonnement mais un
+opérateur de rééchantillonnage — la façon de décoder, pas la façon de penser.
+
+**Décision : la piste est close.** Le code reste en place, désactivé par défaut,
+documenté. Rien n'est repris dans le modèle de référence.
+
+## 8. Ce qui resterait à faire pour rouvrir la piste
+
+Par ordre de ce qui lèverait la réserve la plus sérieuse :
+
+- **Un réglage d'optimisation propre aux blocs d'attention** : LR plus faible sur
+  les paramètres du Transformer, warmup dédié, weight decay séparé. C'est la
+  seule réserve qui pourrait renverser le résultat, et elle n'a pas été testée.
+- Une profondeur de 1 plutôt que 2, pour réduire de moitié les paramètres ajoutés
+  et tester l'hypothèse de surapprentissage sur la base efficience.
+- Le stage 3 plutôt que le 4 : moins de paramètres (1,18 M par bloc contre 4,72)
+  pour plus de calcul (5,64 GMACs contre 2,82), et une résolution où la
+  localisation se joue davantage.
+
+Aucune de ces pistes n'est engagée. Le résultat tel qu'il est suffit à conclure
+que **l'attention bi-temporelle, telle que conçue ici, n'apporte rien** — et le
+tableau d'ensemble du §7 suggère que le problème n'est pas cette brique en
+particulier, mais l'idée qu'un ajout architectural puisse déplacer le SeK sur ce
+jeu de données.
+
+## 9. Sources
 
 - [MambaVision: A Hybrid Mamba-Transformer Vision Backbone](https://arxiv.org/abs/2407.08083) — CVPR 2025
 - [RCDT: Relational Remote Sensing Change Detection with Transformer](https://arxiv.org/pdf/2212.04869)
