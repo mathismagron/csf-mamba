@@ -122,6 +122,50 @@ def test_resolution_variable():
         assert o1.shape == o2.shape == (1, 32, hw, hw)
 
 
+
+
+def test_l_optimiseur_par_defaut_est_inchange():
+    """Aux valeurs par défaut, un seul groupe — comme les 150 runs de la campagne."""
+    import argparse
+    from scripts.train import _build_optimizer
+    args = argparse.Namespace(lr=1e-4, attn_lr_scale=1.0, attn_no_wd=False)
+    for m in (_model(), _model(attn_stages=(3,))):
+        opt = _build_optimizer(m, args)
+        assert len(opt.param_groups) == 1, "plus d'un groupe alors que les défauts sont actifs"
+        assert opt.param_groups[0]["weight_decay"] == 0.01
+        assert opt.param_groups[0]["lr"] == 1e-4
+
+
+def test_le_weight_decay_epargne_bien_le_layerscale():
+    """C'est le point : le decay pousse gamma vers zéro pendant qu'il s'allume."""
+    import argparse
+    from scripts.train import _build_optimizer
+    m = _model(attn_stages=(3,))
+    args = argparse.Namespace(lr=1e-4, attn_lr_scale=0.5, attn_no_wd=True)
+    opt = _build_optimizer(m, args)
+    assert len(opt.param_groups) == 3
+
+    gammas = {id(p) for n, p in m.attn.named_parameters() if "gamma" in n}
+    assert gammas, "aucun gamma trouvé"
+    for g in opt.param_groups:
+        contient = gammas & {id(p) for p in g["params"]}
+        if contient:
+            assert g["weight_decay"] == 0.0, "gamma reçoit encore du weight decay"
+            assert g["lr"] == 5e-5, f"lr {g['lr']} au lieu de 5e-5 pour l'attention"
+
+    # Aucun paramètre ne doit être oublié ni compté deux fois.
+    vus = [id(p) for g in opt.param_groups for p in g["params"]]
+    assert len(vus) == len(set(vus)), "un paramètre apparaît dans deux groupes"
+    assert set(vus) == {id(p) for p in m.parameters()}, "des paramètres manquent"
+
+
+def test_layer_scale_et_dropout_atteignent_le_bloc():
+    m = _model(attn_stages=(3,), attn_layer_scale=0.1, attn_dropout=0.25)
+    blk = m.attn["3"].blocks[0]
+    assert abs(blk.gamma1.mean().item() - 0.1) < 1e-6, "layer_scale non propagé"
+    assert blk.mlp[2].p == 0.25, "dropout non propagé"
+
+
 if __name__ == "__main__":
     for nom, fn in sorted(globals().items()):
         if nom.startswith("test_"):

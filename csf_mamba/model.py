@@ -47,6 +47,8 @@ class CSFMamba(nn.Module):
         attn_depth: int = 2,
         attn_heads: int = 8,
         attn_mlp_ratio: float = 2.0,
+        attn_layer_scale: float = 1e-5,
+        attn_dropout: float = 0.0,
     ):
         super().__init__()
         self.channels = channels
@@ -92,7 +94,8 @@ class CSFMamba(nn.Module):
                     raise ValueError(f"stage d'attention {i} hors de [0, {len(channels)})")
                 self.attn[str(i)] = BiTemporalAttention(
                     channels[i], depth=attn_depth, num_heads=attn_heads,
-                    mlp_ratio=attn_mlp_ratio,
+                    mlp_ratio=attn_mlp_ratio, layer_scale=attn_layer_scale,
+                    dropout=attn_dropout,
                 )
 
     def forward(self, img_t1: torch.Tensor, img_t2: torch.Tensor) -> dict:

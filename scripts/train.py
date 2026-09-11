@@ -89,6 +89,21 @@ def parse_args():
                    help="Nombre de blocs Transformer par stage attentionné.")
     p.add_argument("--attn-heads", type=int, default=8)
     p.add_argument("--attn-mlp-ratio", type=float, default=2.0)
+    p.add_argument("--attn-layer-scale", type=float, default=1e-5,
+                   help="Valeur initiale du LayerScale. 1e-5 rend le bloc "
+                        "identitaire au départ (sûr mais lent à s'allumer) ; "
+                        "1e-1 est la valeur de CaiT pour les réseaux peu profonds.")
+    p.add_argument("--attn-dropout", type=float, default=0.0,
+                   help="Dropout dans les blocs d'attention. Régularise un ajout "
+                        "de +57 %% de paramètres sur 2 968 paires d'entraînement.")
+    p.add_argument("--attn-lr-scale", type=float, default=1.0,
+                   help="Multiplicateur du LR pour les seuls paramètres "
+                        "d'attention (1.0 = même LR que le reste).")
+    p.add_argument("--attn-no-wd", action="store_true",
+                   help="Retire le weight decay des gammas, normes, biais et "
+                        "embeddings de date de l'attention. Le décroissement "
+                        "s'applique sinon au LayerScale lui-même, qu'il pousse "
+                        "vers zéro alors que le bloc essaie de s'allumer.")
     p.add_argument("--rot90", action="store_true",
                    help="Ajoute les rotations 90° : groupe diédral complet (8 variantes).")
     p.add_argument("--photometric", type=float, default=0.0,
@@ -145,6 +160,7 @@ def main():
         upsample=args.upsample,
         attn_stages=attn_stages, attn_depth=args.attn_depth,
         attn_heads=args.attn_heads, attn_mlp_ratio=args.attn_mlp_ratio,
+        attn_layer_scale=args.attn_layer_scale, attn_dropout=args.attn_dropout,
         encoder_kwargs=encoder_kwargs,
     ).to(device)
     if attn_stages:
@@ -163,7 +179,7 @@ def main():
         lambda_sem_change=args.lambda_sem_change,
         lambda_lovasz=args.lambda_lovasz,
     ).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+    optimizer = _build_optimizer(model, args)
     ema = ModelEMA(model, args.ema_decay, args.ema_warmup) if args.ema_decay > 0 else None
     if ema is not None:
         print(f"EMA active : decay {args.ema_decay}, warmup {args.ema_warmup} itérations")
@@ -305,6 +321,52 @@ def main():
             torch.save(eval_model.state_dict(), out_dir / "best.pt")
             print(f"  -> nouveau meilleur SeK {best_sek:.4f}, sauvé dans best.pt")
         torch.save(ckpt, out_dir / "last.pt")
+
+
+def _build_optimizer(model, args):
+    """AdamW, avec des groupes distincts pour l'attention si on le demande.
+
+    ⚠️ Aux valeurs par défaut, c'est **exactement** l'appel d'origine — un seul
+    groupe sur `model.parameters()`. Les 150 entraînements de la campagne restent
+    donc reproductibles à l'identique ; un test le vérifie.
+
+    Deux réglages spécifiques aux blocs Transformer, motivés par la réserve
+    inscrite au terme du premier lot hybride (cf. documentation/hybride.md) :
+
+    * `--attn-no-wd` retire le weight decay des gammas du LayerScale, des normes,
+      des biais et de l'embedding de date. Le décroissement s'applique sinon au
+      LayerScale lui-même, qu'il **pousse vers zéro pendant que le bloc essaie de
+      s'allumer** — l'optimiseur travaille alors contre l'apprentissage.
+    * `--attn-lr-scale` donne aux paramètres d'attention un taux d'apprentissage
+      propre. Les blocs Transformer y sont réputés plus sensibles que les
+      convolutions ou les SSM, et rien n'oblige à leur imposer celui du reste.
+    """
+    defaut = args.attn_lr_scale == 1.0 and not args.attn_no_wd
+    if defaut or not getattr(model, "attn_stages", ()):
+        return torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+
+    attn_ids = {id(p) for p in model.attn.parameters()}
+    # Sans decay : tout ce qui n'est pas une matrice de poids. Y appliquer un
+    # décroissement est une erreur classique, et ici elle vise précisément le
+    # paramètre dont dépend l'activation du bloc.
+    sans_wd = {
+        id(p) for n, p in model.attn.named_parameters()
+        if n.endswith(("gamma1", "gamma2", "date", ".bias")) or "norm" in n
+    }
+    groupes = [
+        {"params": [p for p in model.parameters() if id(p) not in attn_ids],
+         "lr": args.lr, "weight_decay": 0.01, "name": "modèle"},
+        {"params": [p for p in model.attn.parameters() if id(p) not in sans_wd],
+         "lr": args.lr * args.attn_lr_scale, "weight_decay": 0.01, "name": "attention"},
+        {"params": [p for p in model.attn.parameters() if id(p) in sans_wd],
+         "lr": args.lr * args.attn_lr_scale,
+         "weight_decay": 0.0 if args.attn_no_wd else 0.01, "name": "attention sans wd"},
+    ]
+    for g in groupes:
+        n_par = sum(p.numel() for p in g["params"])
+        print(f"  groupe « {g['name']} » : {len(g['params'])} tenseurs, "
+              f"{n_par / 1e6:.2f} M params, lr {g['lr']:.2e}, wd {g['weight_decay']}")
+    return torch.optim.AdamW(groupes, lr=args.lr, weight_decay=0.01)
 
 
 def _to_fp32(v):

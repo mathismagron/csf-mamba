@@ -283,22 +283,49 @@ documenté. Rien n'est repris dans le modèle de référence.
 
 ## 8. Ce qui resterait à faire pour rouvrir la piste
 
-Par ordre de ce qui lèverait la réserve la plus sérieuse :
+### ⚠️ Le diagnostic à faire AVANT de relancer quoi que ce soit
 
-- **Un réglage d'optimisation propre aux blocs d'attention** : LR plus faible sur
-  les paramètres du Transformer, warmup dédié, weight decay séparé. C'est la
-  seule réserve qui pourrait renverser le résultat, et elle n'a pas été testée.
-- Une profondeur de 1 plutôt que 2, pour réduire de moitié les paramètres ajoutés
-  et tester l'hypothèse de surapprentissage sur la base efficience.
-- Le stage 3 plutôt que le 4 : moins de paramètres (1,18 M par bloc contre 4,72)
-  pour plus de calcul (5,64 GMACs contre 2,82), et une résolution où la
-  localisation se joue davantage.
+`gamma` part de 1e-5. Si l'entraînement ne l'a pas fait grandir, **le bloc n'a
+jamais été allumé** et le résultat négatif ne dit rien de l'attention — il dit
+que le bloc est resté éteint.
 
-Aucune de ces pistes n'est engagée. Le résultat tel qu'il est suffit à conclure
-que **l'attention bi-temporelle, telle que conçue ici, n'apporte rien** — et le
-tableau d'ensemble du §7 suggère que le problème n'est pas cette brique en
-particulier, mais l'idée qu'un ajout architectural puisse déplacer le SeK sur ce
-jeu de données.
+    python -m scripts.inspect_layerscale $SCRATCH/csf-mamba-runs/second_mini_chess_hyb-*/best.pt
+
+Deux issues, et elles ne mènent pas au même endroit :
+
+| `|gamma|` moyen final | Lecture |
+|---|---|
+| ≈ 1e-5, soit inchangé | **Le bloc est resté éteint.** Le résultat ne porte pas sur l'attention. Régler l'optimisation est indispensable avant de conclure. |
+| ≥ 1e-2, soit ×1000 | **Le bloc a été utilisé** et a quand même dégradé le modèle. Le résultat porte sur l'idée, et l'optimisation n'y changera pas grand-chose. |
+
+Deux minutes, et cela décide si les huit entraînements suivants valent la peine.
+
+### Les réglages câblés, et pourquoi
+
+Quatre leviers, ajoutés le 11 septembre. **Tous inertes par défaut** : sans eux,
+l'optimiseur est littéralement l'appel d'origine sur `model.parameters()`, et un
+test le vérifie — les 150 entraînements de la campagne restent reproductibles.
+
+| Réglage | Défaut | À tester | Raison |
+|---|---|---|---|
+| `--attn-no-wd` | non | **oui** | Le weight decay s'applique aujourd'hui **au LayerScale lui-même**, qu'il pousse vers zéro pendant que le bloc essaie de s'allumer. L'optimiseur travaille contre l'apprentissage. C'est le levier le plus suspect. |
+| `--attn-layer-scale` | 1e-5 | **1e-1** | 1e-5 est la valeur de CaiT pour les réseaux **très profonds**. Avec deux blocs, elle est excessivement timide — le bloc met très longtemps à devenir audible. |
+| `--attn-lr-scale` | 1.0 | 0.5 | Les blocs Transformer sont réputés plus sensibles au taux d'apprentissage que les convolutions ou les SSM. Rien n'oblige à leur imposer celui du reste. |
+| `--attn-dropout` | 0.0 | 0.1 | Sur la base efficience, l'attention ajoute +57 % de paramètres à un modèle entraîné sur 2 968 paires. Seule piste contre le surapprentissage — non démontré, mais plausible. |
+
+Les trois premiers visent la même hypothèse : **le bloc n'a pas eu les moyens de
+s'allumer**. Le quatrième vise l'hypothèse opposée : il s'est allumé et a
+surappris. Le diagnostic de `gamma` dit laquelle des deux instruire.
+
+### Autres pistes, non engagées
+
+- Profondeur 1 au lieu de 2 : moitié moins de paramètres ajoutés.
+- Stage 3 au lieu du 4 : 1,18 M par bloc au lieu de 4,72, pour 5,64 GMACs au lieu
+  de 2,82, et une résolution où la localisation se joue davantage.
+
+Le résultat tel qu'il est suffit à conclure que **l'attention bi-temporelle, telle
+qu'entraînée ici, n'apporte rien**. Ce qu'il ne tranche pas encore, c'est si elle
+a seulement eu l'occasion d'essayer.
 
 ## 9. Sources
 

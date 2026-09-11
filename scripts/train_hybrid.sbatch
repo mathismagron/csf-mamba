@@ -57,9 +57,28 @@ ATTN_STAGES="${ATTN_STAGES:-3}"       # stages attentionnés (0..3), vide = réf
 ATTN_DEPTH="${ATTN_DEPTH:-2}"         # blocs Transformer par stage
 ATTN_HEADS="${ATTN_HEADS:-8}"
 ATTN_MLP="${ATTN_MLP:-2.0}"
+# --- Réglages propres aux blocs Transformer (lot du 11 septembre).
+# Le premier lot les entraînait avec le réglage du reste du modèle ; c'est la
+# réserve principale contre son résultat négatif. Voir documentation/hybride.md.
+ATTN_LS="${ATTN_LS:-1e-5}"        # init du LayerScale (1e-1 = CaiT peu profond)
+ATTN_DROP="${ATTN_DROP:-0.0}"     # dropout dans les blocs
+ATTN_LRS="${ATTN_LRS:-1.0}"       # multiplicateur de LR pour l'attention seule
+ATTN_NOWD="${ATTN_NOWD:-0}"       # 1 = pas de weight decay sur gammas/normes/biais
 SEED="${SEED:-1}"
 EPOCHS="${EPOCHS:-200}"
-TAG="${TAG:-hyb-${BASE}-s${ATTN_STAGES//,/}-d${ATTN_DEPTH}-s${SEED}}"
+# Suffixe de tag pour les réglages non par défaut : sans lui, un second lot
+# viserait le même dossier que le premier. Le garde-fou d'empreinte le refuserait
+# — correctement — mais mieux vaut que le tag se distingue de lui-même.
+#
+# ⚠️ Écrit en `if` et non en `[ ... ] && ...` : sous `set -e`, un test faux en fin
+# de ligne fait avorter le script entier.
+OPT_SUFFIX=""
+if [ "$ATTN_LS" != "1e-5" ]; then OPT_SUFFIX="${OPT_SUFFIX}-ls${ATTN_LS}"; fi
+if [ "$ATTN_DROP" != "0.0" ]; then OPT_SUFFIX="${OPT_SUFFIX}-dr${ATTN_DROP}"; fi
+if [ "$ATTN_LRS" != "1.0" ]; then OPT_SUFFIX="${OPT_SUFFIX}-lrs${ATTN_LRS}"; fi
+if [ "$ATTN_NOWD" = "1" ]; then OPT_SUFFIX="${OPT_SUFFIX}-nowd"; fi
+
+TAG="${TAG:-hyb-${BASE}-s${ATTN_STAGES//,/}-d${ATTN_DEPTH}${OPT_SUFFIX}-s${SEED}}"
 
 case "$TAG" in
   hyb-*) ;;
@@ -76,7 +95,7 @@ DATA_ROOT="$SLURM_TMPDIR/SECOND"
 
 CKPT="$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth"
 OUT="$SCRATCH/csf-mamba-runs/second_mini_chess_$TAG"
-CONF="base=$BASE enc=$ENCODER deep=$LAMBDA_DEEP attn_stages=[$ATTN_STAGES] depth=$ATTN_DEPTH heads=$ATTN_HEADS mlp=$ATTN_MLP seed=$SEED epochs=$EPOCHS"
+CONF="base=$BASE enc=$ENCODER deep=$LAMBDA_DEEP attn_stages=[$ATTN_STAGES] depth=$ATTN_DEPTH heads=$ATTN_HEADS mlp=$ATTN_MLP ls=$ATTN_LS drop=$ATTN_DROP lrs=$ATTN_LRS nowd=$ATTN_NOWD seed=$SEED epochs=$EPOCHS"
 echo "== config HYBRIDE : $CONF -> $OUT =="
 
 # ⚠️ Empreinte de configuration — garde-fou contre la collision de dossiers.
@@ -114,4 +133,8 @@ python -u -m scripts.train \
     --attn-depth "$ATTN_DEPTH" \
     --attn-heads "$ATTN_HEADS" \
     --attn-mlp-ratio "$ATTN_MLP" \
+    --attn-layer-scale "$ATTN_LS" \
+    --attn-dropout "$ATTN_DROP" \
+    --attn-lr-scale "$ATTN_LRS" \
+    ${ATTN_NOWD:+$([ "$ATTN_NOWD" = 1 ] && echo --attn-no-wd)} \
     --output "$OUT"
