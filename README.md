@@ -32,8 +32,8 @@ Deux configurations sont retenues, aux deux extrémités du compromis :
 
 | | Paramètres | GMACs | SeK |
 |---|---|---|---|
-| **Point d'efficience** | **16,48 M** | **31,42** | **0,2387** |
-| **Point de performance** | 32,58 M | 58,06 | **0,2484** |
+| **Point d'efficience** | **16,48 M** | **31,42** | **0,2390** |
+| **Point de performance** | 32,58 M | 58,06 | **0,2485** |
 
 Le premier **dépasse MambaSCD-Base** avec 18 % de ses paramètres. Le second
 atteint **97 % du SeK de Mamba-FCS** avec 17 % des siens.
@@ -61,8 +61,8 @@ classification sémantique à l'intérieur des zones changées. Plus haut = mieu
 | MambaSCD-Base | 89,99 M | 211,55 | **0,2292** | article **ChangeMamba** |
 | MambaSCD-Tiny | 21,51 M | 73,42 | **0,2208** | article **ChangeMamba** |
 | **MambaSCD-Tiny, leur checkpoint publié** | **37,13 M** | **115,44** | **0,2334** | **mesuré par nous, même code** |
-| **CSF-Mamba — performance** | **32,58 M** | **58,06** | **0,2484** | mesuré, n = 3 |
-| **CSF-Mamba — efficience** | **16,48 M** | **31,42** | **0,2387** | mesuré, n = 4 |
+| **CSF-Mamba — performance** | **32,58 M** | **58,06** | **0,2485** | mesuré, n = 6 |
+| **CSF-Mamba — efficience** | **16,48 M** | **31,42** | **0,2390** | mesuré, n = 7 |
 
 ⚠️ **Les deux lignes MambaSCD-Tiny ne décrivent pas le même modèle.** La première
 reprend leur table publiée. La seconde est **leur propre checkpoint publié**,
@@ -92,11 +92,14 @@ code de métriques des deux côtés** — et elle ne dépend d'aucun chiffre pub
 | | SeK | Params | GMACs |
 |---|---:|---:|---:|
 | Leur checkpoint publié, évalué par nous | 0,2334 | 37,13 M | 115,44 |
-| **CSF-Mamba — efficience** | **0,2387** | **16,48 M** | **31,42** |
-| | **102,3 %** | **44,4 %** | **27,2 %** |
+| **CSF-Mamba — efficience** | **0,2390** | **16,48 M** | **31,42** |
+| | **102,4 %** | **44,4 %** | **27,2 %** |
 
 C'est aussi la comparaison **la moins favorable pour nous** : face à leur chiffre
-publié, la marge serait de 108 % au lieu de 102,3 %. Nous retenons la plus stricte.
+publié, la marge serait de 108 % au lieu de 102,4 %. Nous retenons la plus stricte.
+
+L'IC 95 % de notre moyenne est **[0,2377 ; 0,2403]** sur 7 graines : **sa borne
+basse reste au-dessus de leur 0,2334**.
 
 Les autres énoncés, appuyés sur les chiffres que cite la littérature :
 
@@ -110,8 +113,8 @@ Les autres énoncés, appuyés sur les chiffres que cite la littérature :
 
 | Configuration | Params | GMACs | SeK (max) | SeK (finale) | n |
 |---|---:|---:|---:|---:|---:|
-| **performance** = efficience + encodeur `tiny` + supervision profonde | 32,58 M | 58,06 | **0,2484 ± 0,0017** | 0,2397 | 3 ‡ |
-| **efficience** = `lean` + échange temporel + jitter + EMA | **16,48 M** | **31,42** | **0,2387 ± 0,0007** | 0,2325 | 4 |
+| **performance** = efficience + encodeur `tiny` + supervision profonde | 32,58 M | 58,06 | **0,2485 ± 0,0011** | 0,2389 | 6 ‡ |
+| **efficience** = `lean` + échange temporel + jitter + EMA | **16,48 M** | **31,42** | **0,2390 ± 0,0015** | 0,2330 | 7 |
 | `lean` + encodeur `tiny` | 32,58 M | 58,06 | 0,2367 ± 0,0016 | 0,2258 | 4 |
 | `lean` + échange temporel + EMA | 16,48 M | 31,42 | 0,2348 ± 0,0017 | 0,2303 | 4 |
 | `lean` + échange temporel + jitter | 16,48 M | 31,42 | 0,2331 ± 0,0010 | 0,2239 | 6 ‡ |
@@ -122,13 +125,20 @@ Les autres énoncés, appuyés sur les chiffres que cite la littérature :
 | `nosek` = recette initiale sans la loss SeK | 20,80 M | 41,30 | 0,2228 ± 0,0019 | — | 7 |
 | Recette initiale (juillet) | 20,80 M | 41,30 | 0,2103 ± 0,0105 | — | 8 |
 
-*(‡ deux entraînements interrompus par un blocage du système de fichiers ont été
-relancés ; ces deux groupes passeront à 4 et 7 graines. Six entraînements
-supplémentaires sont par ailleurs lancés pour porter les deux configurations
-retenues à 7 graines, comme les lignes consolidées. Le σ de 0,0007 du point
-d'efficience est estimé sur 3 degrés de liberté et n'est donc **pas fiable en
-lui-même** : tous les intervalles de confiance de ce document utilisent le σ **mis
-en commun** sur l'ensemble des configurations, plus prudent.)*
+*(‡ une septième graine du point de performance tourne encore. Les deux
+configurations retenues sont désormais à 7 et 6 graines, comme les lignes
+consolidées.)*
+
+**Les deux chiffres de tête ont résisté au doublement des graines** — c'est le
+contrôle le plus utile de cette consolidation. L'efficience passe de 0,2387 (n=4)
+à **0,2390** (n=7) et la performance de 0,2484 (n=3) à **0,2485** (n=6) : moins de
+quatre dix-millièmes d'écart dans les deux cas.
+
+En revanche l'écart-type affiché à 4 graines, 0,0007, **valait bien le double** :
+0,0015 une fois mesuré sur 7. La réserve inscrite ici — un σ estimé sur 3 degrés
+de liberté n'est pas fiable en lui-même — était fondée. Tous les intervalles de
+confiance de ce document utilisent le σ **mis en commun** sur l'ensemble des
+configurations, plus prudent.
 
 ### Vitesse et mémoire à l'inférence
 
@@ -315,8 +325,9 @@ Ce document donne donc **les deux** : leurs chiffres publiés, que cite la
 littérature, et nos mesures à code identique, qui sont les plus rigoureuses et
 aussi les moins favorables pour nous.
 
-**3. Les deux configurations retenues comptent 3 et 4 graines**, contre 7 pour les
-lignes consolidées. Six entraînements sont lancés pour les porter à 7.
+**3. Il reste une septième graine à venir** sur le point de performance (6 sur 7
+terminées). Le point d'efficience est consolidé à 7 graines, et les deux moyennes
+ont bougé de moins de 0,0004 en doublant les graines — le chiffre est stable.
 
 ---
 
@@ -326,7 +337,7 @@ lignes consolidées. Six entraînements sont lancés pour les porter à 7.
 |---|---|---|
 | C1 | Latence et mémoire crête, face à MambaSCD au même protocole | ✅ **fait** (§2) |
 | C2 | Évaluer le checkpoint MambaSCD publié avec **notre** code de métriques | ✅ **fait** (§2) |
-| — | Consolider les deux configurations retenues à 7 graines | **en cours** (6 runs) |
+| — | Consolider les deux configurations retenues à 7 graines | ✅ **fait** (1 run restant) |
 | — | Élucider l'écart de +0,0126 entre leur SeK publié et notre mesure | ouvert |
 | D | Un troisième jeu de données (Landsat-SCD, rapporté par ChangeMamba) | à décider |
 | — | Trancher l'apport du jitter photométrique (+0,0022, non établi) | à faire |

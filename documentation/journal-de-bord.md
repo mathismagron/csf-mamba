@@ -3059,11 +3059,63 @@ pour nous** : face à leur chiffre publié, la marge serait de 108 % au lieu de
 Le README donne désormais **les deux** lignes MambaSCD-Tiny, la publiée et la
 mesurée, avec l'avertissement qu'elles ne décrivent pas le même modèle.
 
+### Consolidation à 7 graines (11 septembre) — les deux chiffres tiennent
+
+Six entraînements pour porter les configurations retenues au niveau de preuve des
+lignes de la campagne. Contrôle d'intégrité : 200 époques partout sauf un run
+encore en cours, et **deux lignes de configuration, trois occurrences chacune**,
+ne différant du témoin que par l'encodeur et la supervision profonde.
+
+| Configuration | avant | après | écart |
+|---|---|---|---|
+| efficience | 0,2387 (n=4) | **0,2390 ± 0,0015** (n=7) | +0,0003 |
+| performance | 0,2484 (n=3) | **0,2485 ± 0,0011** (n=6) | +0,0001 |
+
+**Les deux moyennes ont bougé de moins de quatre dix-millièmes en doublant les
+graines.** C'est le contrôle le plus utile de l'opération : il dit que les
+chiffres de tête n'étaient pas un artefact de petit échantillon.
+
+**En revanche l'écart-type, si.** Le σ de 0,0007 affiché pour l'efficience à
+4 graines vaut **0,0015** une fois mesuré sur 7 — le double. La réserve inscrite
+au README le 8 septembre (« un écart-type estimé sur 3 degrés de liberté n'est pas
+fiable en lui-même, ne pas citer ce chiffre ») était fondée, et c'est pourquoi
+tous les intervalles du projet utilisent le σ mis en commun.
+
+**Positionnement définitif**, IC 95 % calculés avec le σ mis en commun (0,0018) :
+
+| | SeK | IC 95 % | Params | GMACs |
+|---|---|---|---|---|
+| efficience | **0,2390** | [0,2377 ; 0,2403] | 16,48 M | 31,42 |
+| performance | **0,2485** | [0,2471 ; 0,2499] | 32,58 M | 58,06 |
+
+| | vs Mamba-FCS | vs MambaSCD-Base | vs leur checkpoint (notre code) |
+|---|---|---|---|
+| efficience | 93,7 % | **104,3 %** | **102,4 %** |
+| performance | **97,5 %** | 108,4 % | 106,5 % |
+
+La borne basse de l'efficience (0,2377) reste **au-dessus** du 0,2334 mesuré sur
+leur checkpoint : la comparaison à code identique tient à 7 graines.
+
+**L'IoU du changement suit**, ce qui confirme le mécanisme : 0,5693 pour `lean`,
+0,5806 pour l'efficience, **0,5898** pour la performance. C'est bien la
+localisation qui progresse — le goulot identifié le 14 août.
+
+### ⚠️ Un troisième run ralenti, mais pas figé
+
+`max-s6` a écrit **83 époques en 17 h 40**, soit 12,8 min par époque contre 3,85
+en régime normal — 3,3× trop lent. Mais contrairement aux deux cas du 10
+septembre (1 et 12 époques puis plus rien), **celui-ci progresse** : le log montre
+l'époque 82 validée normalement. C'est un nœud lent, pas un blocage d'écriture.
+Relancé en reprise, il n'y a pas de checkpoint tronqué à craindre.
+
+Trois runs perturbés sur les vingt-six lancés en trois jours, sur des nœuds
+différents à chaque fois. À surveiller si cela se reproduit, mais rien qui
+ressemble à un défaut de notre code.
+
 ### En attente
 
-- `augswap-s5` et `max-s4` relancés depuis zéro, plus six entraînements pour
-  porter les deux configurations retenues à 7 graines. Les moyennes ci-dessus
-  sont donc **provisoires**.
+- Une septième graine du point de performance (`max-s6`, relancée après un nœud
+  lent). Les moyennes sont désormais consolidées à 7 et 6 graines.
 - L'origine de l'écart de +0,0126 sur leur checkpoint. Piste à écarter en
   premier : leur boucle d'inférence découpe en crops de 256 (`fixed_crop_size`)
   là où nous évaluons en 512 pleine tuile.
