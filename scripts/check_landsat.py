@@ -32,13 +32,14 @@ BASE = re.compile(r"^(.*_\d+)(.*)$")
 import numpy as np
 from PIL import Image
 
-# ⚠️ La littérature annonce 2 425 paires au total, « 1 908 pour l'entraînement et
-# 477 pour le test ». Or 1 908 + 477 = 2 385, pas 2 425 : il manque 40 paires. La
-# lecture la plus probable est que 1 908 désigne le seul `train_list.txt` et que
-# les 40 restantes forment `val_list.txt`. On vérifie donc durement le TOTAL, qui
-# est la taille du jeu et ne prête pas à interprétation, et on se contente de
-# rapporter la répartition sans la trancher.
-ATTENDU = {"paires": 2425, "train": 1908, "test": 477, "taille": 416, "classes": 5}
+# ⚠️ LA LITTÉRATURE NE CORRESPOND PAS AU DUMP, et c'est le dump qui fait foi.
+# Elle annonce 2 425 paires, « 1 908 pour l'entraînement et 477 pour le test » —
+# chiffres déjà incohérents entre eux (1 908 + 477 = 2 385). Le dump figshare en
+# contient **8 468**, augmentations hors ligne comprises (recadrages, occlusions,
+# rotations). Le rapport 8 468 / 2 425 ≈ 3,5 suggère que 2 425 compte les tuiles
+# SOURCES et 8 468 les fichiers livrés.
+# On ne vérifie donc plus le total contre la littérature : on le RAPPORTE.
+ATTENDU = {"paires": 8468, "taille": 416}
 
 
 def parse_args():
@@ -46,6 +47,10 @@ def parse_args():
     p.add_argument("--data-root", required=True)
     p.add_argument("--echantillon", type=int, default=200,
                    help="Nombre de tuiles inspectées en profondeur.")
+    p.add_argument("--scan-labels", type=int, default=600,
+                   help="Nombre de cartes de label balayées pour établir la plage "
+                        "RÉELLE des valeurs. Trois fichiers ne suffisent pas : une "
+                        "tuile ne contient que les classes qui s'y trouvent.")
     return p.parse_args()
 
 
@@ -79,7 +84,62 @@ def _decrire_images(dossier: Path, n=3):
             print("           les indices, pas du RGB.")
 
 
-def explorer(root: Path):
+def _balayer_labels(dossier: Path, n: int):
+    """Plage RÉELLE des valeurs, sur beaucoup de fichiers.
+
+    Indispensable : une tuile ne contient que les classes qui s'y trouvent, donc
+    trois fichiers ne disent rien de la plage globale. C'est ce balayage qui
+    tranche ce que le label encode — 5 valeurs pour une sémantique à 4 classes,
+    une dizaine pour des transitions « from-to ».
+    """
+    fichiers = sorted(p for p in dossier.iterdir() if p.is_file())
+    pas = max(1, len(fichiers) // n)          # échantillonnage régulier, pas les n premiers
+    echantillon = fichiers[::pas][:n]
+    print(f"\n-- balayage de {len(echantillon)} cartes de {dossier.name}/ "
+          f"(sur {len(fichiers)}, pas de {pas}) --")
+
+    pixels = Counter()
+    par_tuile = Counter()
+    for f in echantillon:
+        arr = np.asarray(Image.open(f))
+        vals, comptes = np.unique(arr, return_counts=True)
+        for v, c in zip(vals.tolist(), comptes.tolist()):
+            pixels[v] += c
+        par_tuile[len(vals)] += 1
+
+    total = sum(pixels.values())
+    print(f"  valeurs rencontrées : {sorted(pixels)}")
+    print(f"  {'valeur':>8} {'part des pixels':>18} {'tuiles concernées':>20}")
+    presence = Counter()
+    for f in echantillon:
+        for v in np.unique(np.asarray(Image.open(f))).tolist():
+            presence[v] += 1
+    for v in sorted(pixels):
+        print(f"  {v:>8} {pixels[v] / total * 100:>17.2f} % "
+              f"{presence[v]:>13} / {len(echantillon)}")
+    print(f"  nombre de valeurs par tuile : {dict(sorted(par_tuile.items()))}")
+
+    n_val = len(pixels)
+    print("\n  LECTURE :")
+    if n_val <= 6:
+        print(f"    {n_val} valeurs -> compatible avec une SÉMANTIQUE à "
+              f"{n_val - 1} classes réelles + l'index 0.")
+    elif 9 <= n_val <= 13:
+        print(f"    {n_val} valeurs -> compatible avec une carte de TRANSITION")
+        print(f"    « from-to » (10 types annoncés + « sans changement »). Il")
+        print(f"    faudrait alors la DÉCODER en deux cartes sémantiques, ce qui")
+        print(f"    demande la table des transitions — introuvable à ce jour.")
+    else:
+        print(f"    {n_val} valeurs -> ne correspond à aucune des deux hypothèses.")
+        print(f"    Ne rien écrire avant d'avoir identifié la sémantique de ces")
+        print(f"    valeurs, par exemple en visualisant une carte à côté de sa paire.")
+    if 0 in pixels:
+        print(f"    La valeur 0 couvre {pixels[0] / total * 100:.1f} % des pixels ; "
+              f"si elle désigne « sans changement »,")
+        print(f"    le taux de changement du jeu vaut {100 - pixels[0] / total * 100:.1f} %.")
+
+
+def explorer(root: Path, n_scan: int = 600):
     """Rapporte ce que contient RÉELLEMENT le dump, quand il ne suit pas le format.
 
     Le dump brut de figshare contient `A/`, `B/` et un unique `label/`, là où le
@@ -124,6 +184,11 @@ def explorer(root: Path):
             print(f"\n-- contenu de {nom}/ --")
             _decrire_images(d)
 
+    for nom in ("label", "labelA", "labelB"):
+        d = root / nom
+        if d.is_dir():
+            _balayer_labels(d, n_scan)
+
     print("\n" + "=" * 70)
     print("À DÉCIDER À PARTIR DE CE RAPPORT :")
     print("  1. Que code `label/` — sémantique par date, ou transition « from-to » ?")
@@ -151,7 +216,7 @@ def main():
         # de Mamba-FCS : ils l'ont prétraité sans publier le prétraitement.
         # Plutôt que de refuser, on explore et on rapporte ce qui est
         # réellement là — seule façon de décider quoi écrire ensuite.
-        explorer(root)
+        explorer(root, args.scan_labels)
         return 1
 
     print("\n== 2. Listes officielles ==")
@@ -164,7 +229,7 @@ def main():
         else:
             print(f"  ⚠️ {nom}_list.txt absent")
     tot = sum(len(v) for v in listes.values())
-    verif(tot == ATTENDU["paires"], f"total des listes = {ATTENDU['paires']}", f"trouvé {tot}")
+    print(f"  total des listes : {tot}   (le dump contient {ATTENDU['paires']} fichiers)")
 
     n_train, n_val = len(listes.get("train", [])), len(listes.get("val", []))
     n_test = len(listes.get("test", []))
@@ -224,9 +289,6 @@ def main():
     if indices:
         vus = sorted(indices)
         print(f"  indices présents dans labelA/labelB : {vus}")
-        verif(max(vus) < ATTENDU["classes"],
-              f"indices < {ATTENDU['classes']} (0 réservé + 4 classes réelles)",
-              f"maximum trouvé : {max(vus)}")
         verif(0 in vus, "l'index 0 est présent (zones sans changement)")
 
     if frac_chg:

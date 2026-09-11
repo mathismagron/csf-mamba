@@ -15,18 +15,22 @@ ChangeMamba, qui ne le traite pas.)*
 
 | | |
 |---|---|
-| Paires | 2 425 de 416×416, résolution 30 m |
-| Répartition | ~1 908 train, ~40 val, 477 test |
+| Fichiers livrés | **8 468** de 416×416, résolution 30 m |
+| Tuiles sources | ~2 425, le reste étant des variantes augmentées hors ligne |
+| Répartition | **aucune liste de split dans le dump** |
 | Période | Landsat, 1990–2020 |
 | Zone | Tumushuke, Xinjiang, Chine — bordure du Taklamakan |
 | Classes | **4 réelles** — farmland, desert, buildings, water — plus « sans changement » |
 | Transitions | 10 types |
 | Téléchargement | <https://figshare.com/articles/19946135> |
 
-⚠️ **La littérature est incohérente sur la répartition** : elle annonce 2 425
-paires au total et « 1 908 pour l'entraînement, 477 pour le test », or
-1 908 + 477 = 2 385. Les 40 manquantes sont vraisemblablement la validation.
-`check_landsat` rapporte les comptes réels sans trancher à la place du dump.
+⚠️ **La littérature ne correspond pas au dump, et c'est le dump qui fait foi.**
+Elle annonce 2 425 paires et « 1 908 pour l'entraînement, 477 pour le test » —
+chiffres déjà incohérents entre eux, puisque 1 908 + 477 = 2 385. Le dump figshare
+contient **8 468 fichiers** par dossier. Le rapport 8 468 / 2 425 ≈ 3,5 suggère
+que 2 425 compte les **tuiles sources** et 8 468 les fichiers livrés, variantes
+augmentées comprises. `check_landsat` rapporte les comptes réels plutôt que de les
+vérifier contre des chiffres publiés qui ne décrivent pas ce fichier.
 
 ## 2. Format, repris de leur code et non deviné
 
