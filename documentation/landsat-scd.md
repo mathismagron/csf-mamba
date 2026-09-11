@@ -78,6 +78,58 @@ Le téléchargement **reprend là où il s'est arrêté** : une session de nœud
 connexion coupée ne coûte pas les 4 Gio déjà transférés. Prévoir ~9 Gio libres,
 l'archive et son contenu coexistant un moment ; `diskusage_report` donne le quota.
 
+## 3bis. ⚠️ Le dump ne suit pas le format attendu — état du chantier
+
+Exploration du 11 septembre. **Trois obstacles**, dont deux ouverts.
+
+| Constat | Statut |
+|---|---|
+| **8 468 fichiers**, pas 2 425 | ✅ compris — 2 425 tuiles sources, le reste étant des variantes augmentées |
+| **Un seul dossier `label/`**, valeurs 0..9, mode L | 🔧 ce sont des **transitions**, pas de la sémantique par date |
+| **Aucune liste de split** | ⛔ **ouvert** |
+
+### `label/` encode des transitions, pas des classes
+
+La description figshare est sans ambiguïté : *« each "from-to" change type is a
+separate class representing land-cover transitions »*. Les valeurs 0..9 codent
+donc des **transitions**, quand tout notre pipeline — loss, SeK, décodeurs —
+travaille sur **deux cartes sémantiques**, une par date. Il faut décoder
+`v → (classe à T1, classe à T2)`.
+
+La table n'est publiée nulle part : ni dans les métadonnées figshare, ni dans le
+dépôt de Mamba-FCS, qui a prétraité le jeu sans publier son prétraitement.
+
+**Elle est récupérable depuis les données.** Si `v` code « X → Y », les pixels
+portant `v` montrent l'aspect de X dans A et celui de Y dans B. Donc les valeurs
+partageant une classe de départ ont la même couleur moyenne dans A, et avec
+4 classes de terrain les couleurs doivent former **4 groupes** — pas 9, pas 2.
+La prédiction est falsifiable : si la structure n'apparaît pas, on ne décode pas.
+
+```bash
+python -m scripts.decode_landsat_label --data-root $SCRATCH/Landsat-SCD
+```
+
+Le script regroupe les couleurs de A **et** de B ensemble — les séparer donnerait
+deux numérotations indépendantes et fabriquerait de fausses transitions vers
+elles-mêmes, défaut qu'un test sur une table connue a révélé. Il vérifie ensuite
+qu'aucune transition ne pointe vers sa propre classe, et que la valeur 0 présente
+un écart A→B **plus faible** que les transitions — contrôle indépendant de son
+statut « sans changement ».
+
+Validé sur un jeu synthétique dont la table était connue : **les neuf transitions
+sont retrouvées à l'identique**. Et il refuse correctement sur un jeu sans
+structure, comme sur un seuil de regroupement absurde dans les deux sens.
+
+### Les splits restent à trouver
+
+Aucune liste dans le dump, aucune dans le dépôt de Mamba-FCS. Deux conséquences :
+
+- sans les leurs, notre chiffre ne porterait pas sur le même découpage — or c'est
+  la raison même d'utiliser ce jeu ;
+- **un découpage fabriqué au hasard créerait de la fuite**, puisque les variantes
+  augmentées d'une même tuile source se retrouveraient des deux côtés. Tout
+  découpage devra se faire **par tuile source**, jamais par fichier.
+
 ## 4. ⚠️ Vérifier le dump AVANT d'entraîner
 
 Le dataloader a été écrit d'après leur code, **pas d'après les fichiers**.
