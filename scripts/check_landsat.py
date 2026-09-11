@@ -15,9 +15,19 @@ nœud de connexion.
 """
 
 import argparse
+import re
 import sys
 from collections import Counter
 from pathlib import Path
+
+# Les noms observés dans le dump portent des suffixes d'augmentation HORS LIGNE :
+#   From1990To1993_01.png            tuile source
+#   From1990To1993_01CropResize0.png recadrage
+#   From1990To1993_01ZheDang1.png    occlusion (遮挡)
+#   From1990To1993_01rotate180.png   rotation
+# La tuile d'origine se termine par « _<numéro> » ; tout ce qui suit est un
+# suffixe de variante.
+BASE = re.compile(r"^(.*_\d+)(.*)$")
 
 import numpy as np
 from PIL import Image
@@ -150,7 +160,47 @@ def main():
         else:
             print("     -> le OU n'est PAS anodin ; on le conserve, c'est leur convention")
 
-    print("\n== 5. Une version colorée existe-t-elle ? ==")
+    print("\n== 5. ⚠️ Variantes augmentées et fuite entre splits ==")
+    if len(listes) >= 2 and "test" in listes:
+        def base(nom):
+            m = BASE.match(Path(nom).stem)
+            return (m.group(1), m.group(2)) if m else (Path(nom).stem, "")
+
+        suffixes = Counter()
+        bases = {}
+        for split, noms_l in listes.items():
+            bases[split] = set()
+            for n in noms_l:
+                b, s = base(n)
+                bases[split].add(b)
+                suffixes[s or "(tuile source)"] += 1
+
+        print("  suffixes rencontrés :")
+        for s, c in suffixes.most_common(12):
+            print(f"    {s:<24} {c:>6}")
+        n_src = suffixes.get("(tuile source)", 0)
+        tot_f = sum(suffixes.values())
+        if tot_f and n_src < tot_f:
+            print(f"  -> {n_src} tuiles sources pour {tot_f} fichiers : le jeu contient")
+            print(f"     des variantes AUGMENTÉES HORS LIGNE (rotations, recadrages,")
+            print(f"     occlusions). Deux conséquences à ne pas manquer.")
+
+        entrainement = bases.get("train", set()) | bases.get("val", set())
+        fuite = entrainement & bases["test"]
+        print(f"\n  tuiles sources distinctes : entraînement {len(entrainement)}, "
+              f"test {len(bases['test'])}")
+        if fuite:
+            print(f"  ⛔ FUITE : {len(fuite)} tuiles sources apparaissent des DEUX côtés")
+            print(f"     du split. Exemples : {sorted(fuite)[:3]}")
+            print(f"     Le test contient donc des variantes d'images d'entraînement.")
+            print(f"     Tout chiffre publié sur ce jeu — le nôtre comme celui de")
+            print(f"     Mamba-FCS — en est affecté. À SIGNALER, pas à corriger")
+            print(f"     unilatéralement : changer de split romprait la comparaison.")
+            pbs.append("fuite entre splits")
+        else:
+            print("  ✓ aucune tuile source partagée entre entraînement et test")
+
+    print("\n== 6. Une version colorée existe-t-elle ? ==")
     colores = [p.name for p in root.iterdir()
                if p.is_dir() and ("color" in p.name.lower() or "rgb" in p.name.lower())]
     if colores:

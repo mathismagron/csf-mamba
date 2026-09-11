@@ -95,6 +95,33 @@ ne correspondait pas aux indices du dump. Les noms retenus ici — *farmland,
 desert, buildings, water* — sont **explicitement marqués non vérifiés** dans le
 code, et un test échoue si l'on oublie de lever le drapeau après vérification.
 
+### ⚠️⚠️ Le jeu contient des variantes augmentées hors ligne
+
+Découvert en listant l'archive, pas dans la littérature :
+
+```
+From1990To1993_01.png              tuile source
+From1990To1993_01CropResize0.png   recadrage
+From1990To1993_01ZheDang1.png      occlusion (遮挡)
+From1990To1993_01rotate180.png     rotation
+```
+
+Chaque tuile source existe en plusieurs variantes déjà présentes dans le dump.
+**Deux conséquences, et la première est grave.**
+
+**Risque de fuite entre splits.** Si une tuile et sa rotation se trouvent de part
+et d'autre du découpage train/test, le test contient des variantes d'images
+d'entraînement, et tout chiffre publié sur ce jeu en est gonflé — **le nôtre
+comme celui de Mamba-FCS**. `check_landsat` regroupe les noms par tuile source et
+signale les recouvrements. Si fuite il y a, la bonne réponse est de **la
+signaler**, pas de refaire le split : changer de découpage romprait la
+comparaison, qui est la raison même d'utiliser ce jeu.
+
+**Notre augmentation fait doublon.** Les rotations 90° et l'échange temporel
+s'ajouteraient à des rotations déjà présentes dans les données. L'effet mesuré sur
+SECOND n'a donc aucune raison de se reproduire ici — c'est une raison de plus de
+faire tourner la base `lean` en témoin.
+
 ## 5. Deux réglages qui ne se transposent pas
 
 **Le nombre d'époques se transpose en PAS, pas en époques.** Le résultat « LR

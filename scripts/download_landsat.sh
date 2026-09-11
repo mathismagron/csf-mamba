@@ -54,9 +54,16 @@ echo "✓ taille conforme : $taille octets"
 # Beaucoup de dumps enferment tout dans un dossier racine. L'extraire à l'aveugle
 # donnerait $DEST/Landsat-SCD_dataset/A/ au lieu de $DEST/A/, et le dataloader
 # échouerait sur une arborescence introuvable.
+# ⚠️ Ne JAMAIS mettre `head` dans un pipeline ici. Sous `set -o pipefail`, il
+# ferme le tuyau, `unzip` reçoit SIGPIPE, le script sort en 141 — SANS message,
+# puisque `set -e` interrompt avant tout affichage. C'est précisément ce qui a
+# fait échouer la première exécution. On capture d'abord, on filtre ensuite, et
+# awk lit son flux jusqu'au bout.
 echo "== structure de l'archive (10 premières entrées)"
-unzip -l "$ZIP" | sed -n '4,13p'
-racine=$(unzip -l "$ZIP" | awk 'NR>3 && $4 != "" {print $4}' | head -1 | cut -d/ -f1)
+listing=$(unzip -l "$ZIP")
+printf '%s\n' "$listing" | sed -n '4,13p'
+racine=$(printf '%s\n' "$listing" \
+    | awk 'NR>3 && $4 != "" && !vu {split($4, p, "/"); print p[1]; vu=1}')
 echo "== premier segment de chemin : « $racine »"
 
 # --- 4. Extraction, puis normalisation de l'arborescence.
@@ -72,7 +79,7 @@ else
     src=$(find "$TMP" -maxdepth 2 -type d -name A -print -quit || true)
     if [ -z "$src" ]; then
         echo "⛔ aucun dossier A/ trouvé dans l'archive. Contenu extrait :"
-        find "$TMP" -maxdepth 2 | head -20
+        find "$TMP" -maxdepth 2 | sed -n '1,20p'    # sed lit tout : pas de SIGPIPE
         echo "   Ne PAS lancer d'entraînement : le format diffère de celui attendu."
         exit 1
     fi
@@ -86,7 +93,8 @@ rm -rf "$TMP"
 
 echo
 echo "== contenu installé"
-ls -1 "$DEST" | head -20
+ls -1 "$DEST" | sed -n '1,20p'
+
 echo
 echo "✓ Installé dans $DEST"
 echo "  ÉTAPE SUIVANTE, obligatoire avant tout entraînement :"
