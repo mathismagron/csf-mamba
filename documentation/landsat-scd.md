@@ -120,6 +120,27 @@ Validé sur un jeu synthétique dont la table était connue : **les neuf transit
 sont retrouvées à l'identique**. Et il refuse correctement sur un jeu sans
 structure, comme sur un seuil de regroupement absurde dans les deux sens.
 
+**⚠️ Première tentative : hypothèse réfutée par les données.** Les couleurs
+moyennes absolues donnent **deux** groupes au lieu de quatre. La raison est
+visible dans les chiffres : (124, 120, 118), (65, 63, 61), (94, 88, 86) —
+**R ≈ G ≈ B partout**, les images du dump sont quasi monochromes. Seule la
+luminosité sépare désert, cultures et bâti, et elle varie d'une tuile et d'une
+date à l'autre — saison, capteur, atmosphère. Moyenner sur 400 tuiles écrase donc
+le contraste entre classes sous la variation d'éclairement. Seule l'eau ressort,
+à (35, 42, 42).
+
+Le script travaille désormais sur des couleurs **relatives à chaque tuile**, ce
+qui supprime l'éclairement et ne laisse que le contraste entre classes. Il affiche
+en outre la **matrice des distances** et **balaie le seuil** : s'il existe un
+palier large où le regroupement donne 4 groupes, la structure est réelle ; s'il
+n'existe aucun seuil qui la produise, elle ne l'est pas et le script refuse.
+
+**Si le décodage échoue malgré tout**, la table est publiée dans l'article source
+— Table 3 de [Yuan *et al.*, *Int. J. Digital Earth*
+2022](https://www.tandfonline.com/doi/full/10.1080/17538947.2022.2111470), fermé
+en accès libre mais accessible depuis un réseau universitaire. C'est la voie sûre,
+et elle dispense de toute reconstruction.
+
 ### Les splits restent à trouver
 
 Aucune liste dans le dump, aucune dans le dépôt de Mamba-FCS. Deux conséquences :
