@@ -309,6 +309,12 @@ sbatch scripts/teacher/eval_perascd.sbatch         # 0b : ~1 h GPU (compile l'op
 # retour (portable) : scp 'magron13@narval.alliancecan.ca:/scratch/magron13/csf-distill/checks/*.json' ~/Projects/csf-mamba/logs/
 ```
 
+**Journal d'exécution.**
+
+- 26 sept. : `setup_teacher.sh` OK sur Narval. PerASCD `legacy` @ `a4d808a` (2026-05-29, « init »). Checkpoint `PerAChain_40e_mIoU74.33_Sek26.11_Fscd66.41_OA88.70.pth`, 4 386 148 239 octets, sha256 `a820956553bf89bac4b48f60be4c0cbc1cc080998f4dc83a257777a403c0e4f5` (zip `6f6de82c…c35dea`). venv `$SCRATCH/perascd-venv` : torch 2.5.1 (CUDA 12.2), torchvision 0.20.1, timm 1.0.29, numpy 2.4.2, scipy 1.17.1. Jobs soumis : P = 4023058, 0b = 4023491.
+- 26 sept., **étape P : PASS** (job 4023058, A100-SXM4-40GB, torch 2.5.1). Les 7 `best.pt` réévalués en bf16 retrouvent le SeK de leur `metrics.csv` à **4,1e-6 près au pire** (seed 2), sous l'arrondi du CSV (5e-6) : environnement, code et données inchangés depuis septembre. En fp32, écarts de −3,7e-5 à +9,7e-5 (moyenne +1,8e-5), soit ≤ 0,01 pt : la précision de validation ne biaise pas la sélection. 16 483 643 paramètres, comme le README. ~40 s par évaluation de 1 694 paires.
+- 26 sept., **étape 0b, 1er essai (job 4023491) : arrêt au chargement.** L'opérateur `MultiScaleDeformableAttention` s'est compilé sans erreur (setuptools 82, sm_80). Le `load_state_dict(strict=True)` a refusé 6 clés : le checkpoint porte `decoder.blocks.{0,1,2}.cagm.conv2.*`, le code `legacy` construit `…cagm.conv_local.*`. Le dépôt contient deux copies de `ChangeAwareGatingModule` (`models/Encoders.py` : `conv2` ; `models/PerAChain.py` : `conv_local`) au calcul **identique ligne à ligne** et aux tenseurs de même forme — le checkpoint vient de la première. Correctif : renommage borné à ce motif, avec contrôle de forme, `strict=True` conservé, clés renommées listées dans le JSON. Vérifié localement : un state_dict renommé se recharge à l'identique (tous les tenseurs égaux). La reproduction du 26,11 validera le renommage de bout en bout : une erreur d'appariement effondrerait le score.
+
 Ce que `eval_perascd.py` mesure en un passage, pour fp32, fp16 et bf16 :
 
 - SeK / Fscd / mIoU par **trois** calculs sur les mêmes prédictions : leur code (`legacy`), notre formule sur leur histogramme, et notre `SCDEvaluator` complet ;

@@ -272,6 +272,37 @@ def flops_one_pair(model, device):
             "note": "aten uniquement : l'opérateur déformable (extension C++) n'est pas compté"}
 
 
+CAGM_KEY = __import__("re").compile(r"^(decoder\.blocks\.\d+\.cagm\.)conv2\.(weight|bias)$")
+
+
+def rename_cagm_keys(state, target):
+    """`cagm.conv2` (checkpoint) -> `cagm.conv_local` (code `legacy` @ a4d808a).
+
+    Le dépôt `legacy` contient DEUX copies de `ChangeAwareGatingModule` :
+    `models/Encoders.py` nomme la convolution locale `conv2`, `models/PerAChain.py`
+    la nomme `conv_local`. Le checkpoint publié a été produit avec la première
+    appellation, le modèle se construit avec la seconde. Les deux classes font
+    exactement le même calcul (conv1 3×3 → ReLU → 1×1 vers 2 canaux, sigmoïde,
+    × (1 + sigmoïde de la branche globale)) sur des tenseurs de même forme :
+    vérifié ligne à ligne le 26 septembre. Le renommage est borné à ce motif, ne
+    s'applique que si la clé cible existe et est absente, et vérifie les formes.
+    """
+    out, renamed = {}, []
+    for k, v in state.items():
+        m = CAGM_KEY.match(k)
+        if m:
+            new = f"{m.group(1)}conv_local.{m.group(2)}"
+            if new in target and new not in state:
+                assert target[new].shape == v.shape, (k, v.shape, target[new].shape)
+                out[new] = v
+                renamed.append(f"{k} -> {new}")
+                continue
+        out[k] = v
+    if renamed:
+        print(f"{len(renamed)} clés renommées (cagm.conv2 -> cagm.conv_local)")
+    return out, renamed
+
+
 def main():
     args = parse_args()
     device = args.device
@@ -284,7 +315,9 @@ def main():
         ckpt = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
         state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
         state = {k.removeprefix("module."): v for k, v in state.items()}
+        state, renamed = rename_cagm_keys(state, model.state_dict())
         model.load_state_dict(state, strict=True)          # lève au moindre écart
+        ckpt_info["renamed_keys"] = renamed
         ckpt_info.update({k: (float(v) if isinstance(v, (float, np.floating)) else v)
                           for k, v in ckpt.items() if k in ("epoch", "Fscd", "Sek", "mIoU")})
         ckpt_info["tensors"] = len(state)
