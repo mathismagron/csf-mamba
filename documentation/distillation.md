@@ -244,9 +244,9 @@ Coût d'un run élève à **120 époques** : **7,7 h A100** sur 2 968 paires (3,
 | **1** | Élève sans KD | **les 7 graines Narval existantes**, tronquées à 120 époques (max 23,90 ± 0,15 ; finale 23,65 ± 0,22) + 2 graines sur 2 671 (témoin du criblage, 120 époques) | le chemin sans KD du code modifié reste identique à l'octet près (test à la manière de `tests/test_hybride.py`) | 14 |
 | **2** | KD du **changement** seul (cache) | BCE à cibles douces, λ ∈ {0,5 ; 1 ; 2} × 2 graines, criblage sur val | Δ ≥ +0,36 pt contre le témoin sur val | 44 |
 | **3** | + KD **sémantique** (cache) | KL sur canaux 1..6, T ∈ {2 ; 4} × masque {changé GT ∪ professeur ; toute l'image}, 2 graines | incrément ≥ +0,36 pt sur l'étape 2, sur val | 58 |
-| **4** | + KD de **features** (en ligne) | adaptateurs 1×1 élève → 1024, cosinus après LayerNorm ; {1/8+1/16} vs {1/8+1/16+1/32}, 2 graines | incrément ≥ +0,36 pt sur l'étape 3, sur val, sinon non retenu | 39 |
-| **5** | Confirmation, convention du projet | meilleure KD logits seuls et meilleure KD logits+features, **5 graines chacune sur 2 968, 120 époques**, max SeK test + finale ; params, GMACs, latence fp32/bf16 sur A100, **mêmes conditions que la latence du README** (lot de 8, 512², médiane sur 50) | fraction d'écart comblée (S_KD − S_1)/(S_prof − S_1) avec IC 95 %, les deux tests et les deux métriques concordants | 95 |
-| **Total** | | | | **≈ 255** |
+| **4** | + KD de **features** (en ligne) | adaptateurs 1×1 élève → 1024, cosinus après LayerNorm ; {1/8+1/16} vs {1/8+1/16+1/32}, 2 graines | incrément ≥ +0,36 pt sur l'étape 3, sur val, sinon non retenu | 50 |
+| **5** | Confirmation, convention du projet | meilleure KD logits seuls et meilleure KD logits+features, **5 graines chacune sur 2 968, 120 époques**, max SeK test + finale ; params, GMACs, latence fp32/bf16 sur A100, **mêmes conditions que la latence du README** (lot de 8, 512², médiane sur 50) | fraction d'écart comblée (S_KD − S_1)/(S_prof − S_1) avec IC 95 %, les deux tests et les deux métriques concordants | 110 |
+| **Total** | | | | **≈ 280** (255 avant la mesure du coût du professeur) |
 
 **Chemin court (~160 A100-h).** λ = 1 sans balayage à l'étape 2, un seul masque à
 l'étape 3 (toute l'image, le plus informatif), une seule variante de features. On
@@ -314,6 +314,36 @@ sbatch scripts/teacher/eval_perascd.sbatch         # 0b : ~1 h GPU (compile l'op
 - 26 sept. : `setup_teacher.sh` OK sur Narval. PerASCD `legacy` @ `a4d808a` (2026-05-29, « init »). Checkpoint `PerAChain_40e_mIoU74.33_Sek26.11_Fscd66.41_OA88.70.pth`, 4 386 148 239 octets, sha256 `a820956553bf89bac4b48f60be4c0cbc1cc080998f4dc83a257777a403c0e4f5` (zip `6f6de82c…c35dea`). venv `$SCRATCH/perascd-venv` : torch 2.5.1 (CUDA 12.2), torchvision 0.20.1, timm 1.0.29, numpy 2.4.2, scipy 1.17.1. Jobs soumis : P = 4023058, 0b = 4023491.
 - 26 sept., **étape P : PASS** (job 4023058, A100-SXM4-40GB, torch 2.5.1). Les 7 `best.pt` réévalués en bf16 retrouvent le SeK de leur `metrics.csv` à **4,1e-6 près au pire** (seed 2), sous l'arrondi du CSV (5e-6) : environnement, code et données inchangés depuis septembre. En fp32, écarts de −3,7e-5 à +9,7e-5 (moyenne +1,8e-5), soit ≤ 0,01 pt : la précision de validation ne biaise pas la sélection. 16 483 643 paramètres, comme le README. ~40 s par évaluation de 1 694 paires.
 - 26 sept., **étape 0b, 1er essai (job 4023491) : arrêt au chargement.** L'opérateur `MultiScaleDeformableAttention` s'est compilé sans erreur (setuptools 82, sm_80). Le `load_state_dict(strict=True)` a refusé 6 clés : le checkpoint porte `decoder.blocks.{0,1,2}.cagm.conv2.*`, le code `legacy` construit `…cagm.conv_local.*`. Le dépôt contient deux copies de `ChangeAwareGatingModule` (`models/Encoders.py` : `conv2` ; `models/PerAChain.py` : `conv_local`) au calcul **identique ligne à ligne** et aux tenseurs de même forme — le checkpoint vient de la première. Correctif : renommage borné à ce motif, avec contrôle de forme, `strict=True` conservé, clés renommées listées dans le JSON. Vérifié localement : un state_dict renommé se recharge à l'identique (tous les tenseurs égaux). La reproduction du 26,11 validera le renommage de bout en bout : une erreur d'appariement effondrerait le score.
+- 26 sept., **étape 0 : PASS** (job 4026049, A100-SXM4-40GB). Le checkpoint publié, réévalué sur **notre** SECOND test en fp32 :
+
+  | | publié (journal TB) | notre réévaluation | écart |
+  |---|---:|---:|---:|
+  | SeK | 26,1087 | **26,1079** | −0,0008 pt |
+  | Fscd | 66,4138 | **66,4104** | −0,0034 pt |
+  | mIoU | 74,33 | 74,331 | — |
+
+  - leur code et le nôtre (`SCDEvaluator` complet, alimenté par les sorties du professeur) concordent à **1e-8** ;
+  - données : **0 pixel** où `GT_CD` ≠ (label T1 > 0), 0 où label T1 > 0 ≠ label T2 > 0 sur 444 M pixels ; ordre des classes identique (l'appariement optimal est l'identité, précision sémantique 88,6 % sur les pixels changés). Notre SECOND et leur SECONDbi sont équivalents pour l'évaluation : **télécharger SECONDbi est inutile** ;
+  - opérateur déformable CUDA ↔ référence PyTorch : écart max 0,003 sur les logits, argmax identique à 99,9994 % ;
+  - précision : SeK fp16 = 26,1082, bf16 = 26,1049 (≤ 0,003 pt du fp32) → **fp16 retenu** pour le cache et la KD en ligne ;
+  - le renommage `cagm.conv2 → conv_local` est validé par la reproduction elle-même.
+
+  **Coût du professeur, mesuré** (lot de 8, 512², médiane de 50, protocole du README ; élève : README, 10 sept.) :
+
+  | | professeur | élève (efficience) | rapport |
+  |---|---:|---:|---:|
+  | Paramètres | 548,17 M | 16,48 M | 33× |
+  | GMACs / paire | 1 509,7 ¹ | 31,42 ² | ≈48× |
+  | Latence fp32 | 1 613 ms · 5,0 paires/s | 129 ms · 62 paires/s | 12,5× |
+  | Latence bf16 | 563 ms · 14,2 paires/s | 114 ms · 70 paires/s | 4,9× |
+  | Latence fp16 | 490 ms · 16,3 paires/s | — | — |
+  | Mémoire crête | 27–28 Go | 1,9–2,0 Go | ≈14× |
+
+  ¹ `torch.utils.flop_counter`, opérateur déformable non compté. ² compteur du projet (fvcore). Les deux compteurs diffèrent : recompter l'élève avec le même outil à l'étape 5 avant de publier le rapport.
+
+  **Conséquence sur le budget.** Mon estimation de 1,3 TMAC était basse (1,51 mesuré). À 16,3 paires/s, le professeur en ligne ajoute ≈2,7 min par époque de 2 671 paires, soit **+80 %** et non +40 % : un run de KD de features passe à ≈12,4 h (2 671) / ≈13,8 h (2 968), donc en partition 24 h. Étapes 4 et 5 : +11 h et +15 h ; **plan complet ≈280 A100-h** au lieu de 255. Réserve : avec le micro-batch de 2 de l'élève, le débit du professeur peut être inférieur à celui mesuré en lot de 8 — à mesurer au premier run de l'étape 4.
+- 26 sept. : split `robustcd` copié à l'octet près dans `splits/SECOND/` (2 671 / 297 / 1 694). Les sha256 de `README.json` portent sur `"\n".join(ids)` sans saut de ligne final (convention de `robustcd/scripts/check_dataset.py`), d'où leur différence avec `sha256sum` des fichiers — vérifié, les listes sont identiques.
+- 26 sept. : `scripts/teacher/cache_teacher.{py,sbatch}` écrit. 8 fichiers `d4_{0..7}.npy` (2 968, 15, 128, 128) fp16, `ids.txt`, `meta.json`. Testé localement (CPU, ViT-B aléatoire) : la correspondance entre les transforms de l'élève (flips puis rot90) et l'index de cache est vérifiée sur 200 tirages de la vraie chaîne `csf_mamba.datasets.transforms`, et le suréchantillonnage du cache redonne exactement la sortie 512 (écart 0,0). Le job mesure aussi l'écart d'équivariance du professeur et son SeK sur le train depuis le cache relu.
 
 Ce que `eval_perascd.py` mesure en un passage, pour fp32, fp16 et bf16 :
 
