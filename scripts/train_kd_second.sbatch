@@ -60,14 +60,29 @@ cd "$REPO"
 echo "== commit $(git rev-parse --short HEAD) ($(git status --porcelain | wc -l) fichiers modifiés) | job $SLURM_JOB_ID"
 echo "$(date '+%F %T') job=$SLURM_JOB_ID commit=$(git rev-parse --short HEAD)" >> "$OUT/slurm_jobs.txt"
 
-echo "== staging SECOND vers \$SLURM_TMPDIR"
-cp -r "$SCRATCH/SECOND" "$SLURM_TMPDIR/"
-DATA_ROOT="$SLURM_TMPDIR/SECOND"
+# Staging par UNE archive : `cp -r` de ~33 000 petits fichiers depuis /scratch a
+# bloqué un job entier le 26 septembre (job 4030416, 1 h sans finir). Archive à
+# créer une fois, sur un nœud de connexion :
+#   tar -cf $SCRATCH/csf-distill/SECOND_stage.tar -C $SCRATCH --exclude='*_COLORED' SECOND
+# Sans archive, lecture directe dans /scratch (même résultat, plus lent).
+STAGE_TAR="$SCRATCH/csf-distill/SECOND_stage.tar"
+t0=$(date +%s)
+if [ -f "$STAGE_TAR" ]; then
+    echo "== staging SECOND : extraction de $STAGE_TAR"
+    tar -xf "$STAGE_TAR" -C "$SLURM_TMPDIR"
+    DATA_ROOT="$SLURM_TMPDIR/SECOND"
+else
+    echo "⚠️  pas d'archive $STAGE_TAR : lecture directe dans \$SCRATCH/SECOND"
+    DATA_ROOT="$SCRATCH/SECOND"
+fi
+echo "   $(( $(date +%s) - t0 )) s ; $(ls "$DATA_ROOT/train/T1" | wc -l) paires train, $(ls "$DATA_ROOT/test/T1" | wc -l) test"
 
 KD_ARGS=()
 if [ "$LKD_CHG" != "0" ] || [ "$LKD_SEM" != "0" ]; then
-    echo "== staging du cache du professeur (≈12 Go)"
+    echo "== staging du cache du professeur (≈12 Go, 10 gros fichiers)"
+    t0=$(date +%s)
     cp -r "$CACHE_SRC" "$SLURM_TMPDIR/kdcache"
+    echo "   $(( $(date +%s) - t0 )) s"
     KD_ARGS=(--kd-cache "$SLURM_TMPDIR/kdcache"
              --lambda-kd-change "$LKD_CHG" --kd-t-change "$KD_T_CHG"
              --lambda-kd-sem "$LKD_SEM" --kd-t-sem "$KD_T_SEM" --kd-sem-mask "$KD_MASK")
