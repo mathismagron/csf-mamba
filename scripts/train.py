@@ -13,10 +13,12 @@ from torch.utils.data import DataLoader
 
 from csf_mamba.datasets import DATASETS
 from csf_mamba.datasets.oversample import build_change_index, make_change_sampler
+from csf_mamba.datasets.teacher_cache import TeacherCacheDataset
 from csf_mamba.datasets.transforms import train_transform
 from csf_mamba.ema import ModelEMA
 from csf_mamba.evaluation.metrics import SCDEvaluator, SCDMetrics
 from csf_mamba.losses.composite import CSFMambaLoss
+from csf_mamba.losses.distill import DistillLoss
 from csf_mamba.model import CSFMamba, count_parameters
 
 
@@ -121,6 +123,19 @@ def parse_args():
                    help="Itérations de décote de l'EMA au démarrage.")
     p.add_argument("--amp", action="store_true", default=True, help="Precision mixte bf16 (défaut).")
     p.add_argument("--no-amp", dest="amp", action="store_false")
+    # --- Distillation (documentation/distillation.md). Tout à 0/vide par défaut :
+    # le chemin d'entraînement est alors celui de la campagne, à l'identique.
+    p.add_argument("--train-ids", default=None,
+                   help="Liste d'identifiants du dossier train/ à utiliser (ex. splits/SECOND/train.txt).")
+    p.add_argument("--val-ids", default=None,
+                   help="Validation sur ces identifiants du dossier train/ (ex. splits/SECOND/val.txt) "
+                        "au lieu de --val-split.")
+    p.add_argument("--kd-cache", default=None, help="Dossier du cache du professeur (meta.json, d4_*.npy).")
+    p.add_argument("--lambda-kd-change", type=float, default=0.0)
+    p.add_argument("--kd-t-change", type=float, default=1.0)
+    p.add_argument("--lambda-kd-sem", type=float, default=0.0)
+    p.add_argument("--kd-t-sem", type=float, default=2.0)
+    p.add_argument("--kd-sem-mask", default="changed", choices=["changed", "all"])
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--output", default="runs/dev")
     p.add_argument("--resume", default="auto",
@@ -135,7 +150,19 @@ def build_dataset(args, split):
         args.crop_size, rot90=args.rot90, photometric=args.photometric,
         temporal_swap=args.temporal_swap,
     ) if split == "train" else None
-    return dataset_cls(args.data_root, split=split, transform=transform)
+    ids_file = image_split = None
+    if split == "train" and args.train_ids:
+        ids_file, image_split = args.train_ids, "train"
+    elif split != "train" and args.val_ids:
+        ids_file, image_split = args.val_ids, "train"
+    if ids_file and args.dataset != "second":
+        raise SystemExit("--train-ids / --val-ids ne sont branchés que pour SECOND")
+    kw = {"ids_file": ids_file, "image_split": image_split} if ids_file else {}
+    if split == "train" and args.kd_cache:
+        # Le wrapper applique lui-même la transform et lit la vue D4 correspondante.
+        base = dataset_cls(args.data_root, split=split, transform=None, **kw)
+        return TeacherCacheDataset(base, args.kd_cache, transform=transform)
+    return dataset_cls(args.data_root, split=split, transform=transform, **kw)
 
 
 def main():
@@ -179,6 +206,16 @@ def main():
         lambda_sem_change=args.lambda_sem_change,
         lambda_lovasz=args.lambda_lovasz,
     ).to(device)
+    kd_loss = DistillLoss(args.lambda_kd_change, args.kd_t_change,
+                          args.lambda_kd_sem, args.kd_t_sem, args.kd_sem_mask).to(device)
+    if kd_loss.active and not args.kd_cache:
+        raise SystemExit("λ de distillation > 0 sans --kd-cache")
+    if args.kd_cache and not kd_loss.active:
+        raise SystemExit("--kd-cache donné mais tous les λ de distillation valent 0")
+    if kd_loss.active:
+        print(f"Distillation : changement λ={args.lambda_kd_change} T={args.kd_t_change} | "
+              f"sémantique λ={args.lambda_kd_sem} T={args.kd_t_sem} masque={args.kd_sem_mask} | "
+              f"cache {args.kd_cache}")
     optimizer = _build_optimizer(model, args)
     ema = ModelEMA(model, args.ema_decay, args.ema_warmup) if args.ema_decay > 0 else None
     if ema is not None:
@@ -266,6 +303,10 @@ def main():
             # fp32 -> « expected scalar type BFloat16 but found Float ».
             outputs = {k: _to_fp32(v) for k, v in outputs.items()}
             losses = criterion(outputs, _targets_from_batch(batch), apply_sek=apply_sek)
+            if kd_loss.active:
+                kd_terms = kd_loss(outputs, batch["kd_teacher"], batch["change"])
+                losses.update(kd_terms)
+                losses["total"] = losses["total"] + sum(kd_terms.values())
 
             # Accumulation : on divise pour que le gradient moyen soit celui du
             # batch effectif, et on ne met à jour que tous les accum_steps.

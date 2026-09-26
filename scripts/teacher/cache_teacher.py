@@ -42,34 +42,12 @@ _spec = importlib.util.spec_from_file_location("eval_perascd", HERE / "eval_pera
 ev = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ev)
 
-D4 = [(h, k) for h in (0, 1) for k in range(4)]   # index = 4*h + k
+# Convention D4 unique, partagée avec l'élève (csf_mamba.distill.d4). Le cache du
+# 26 septembre a été écrit avec une copie locale identique de ces fonctions.
+from csf_mamba.distill.d4 import D4, apply_d4, canonical_d4  # noqa: E402
+
 CHANNELS = 15                                     # 7 sem T1 + 7 sem T2 + 1 changement
 NATIVE = 128
-
-
-def apply_d4(x: torch.Tensor, h: int, k: int) -> torch.Tensor:
-    """x : (..., H, W). Flip horizontal optionnel, puis rotation de k quarts de tour."""
-    if h:
-        x = torch.flip(x, dims=[-1])
-    return torch.rot90(x, k, dims=[-2, -1]) if k else x
-
-
-def canonical_d4(h: int, v: int, k: int) -> int:
-    """Index de cache de la composition « hflip^h, vflip^v, puis rot90^k » (ordre de
-    csf_mamba.datasets.transforms). Déterminé par une sonde asymétrique, pas par une
-    table écrite à la main."""
-    probe = torch.arange(9.0).view(3, 3)
-    x = probe
-    if h:
-        x = torch.flip(x, dims=[1])
-    if v:
-        x = torch.flip(x, dims=[0])
-    if k:
-        x = torch.rot90(x, k, dims=[0, 1])
-    for i, (hh, kk) in enumerate(D4):
-        if torch.equal(apply_d4(probe, hh, kk), x):
-            return i
-    raise AssertionError("élément de D4 introuvable")
 
 
 def parse_args():

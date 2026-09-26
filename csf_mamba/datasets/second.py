@@ -63,9 +63,16 @@ def _map_semantic(index_map: np.ndarray) -> np.ndarray:
 
 
 class SECONDDataset(Dataset):
-    def __init__(self, root: str, split: str = "train", transform=None):
+    def __init__(self, root: str, split: str = "train", transform=None,
+                 ids_file: str | None = None, image_split: str | None = None):
+        """`ids_file` + `image_split` : sous-ensemble lu dans un autre dossier.
+
+        Sert au split de validation de la distillation (`splits/SECOND/val.txt`,
+        297 identifiants tirés du dossier `train/`) : SECOND n'a pas de dossier
+        `val/`. Sans ces deux arguments, le comportement est inchangé.
+        """
         root = Path(root)
-        self.root = root / split
+        self.root = root / (image_split or split)
         self.transform = transform
         self.dirs = {
             name: self.root / name
@@ -79,8 +86,10 @@ class SECONDDataset(Dataset):
                 "que les splits 'train' et 'test' (pas de 'val')."
             )
 
-        # Liste officielle du split si présente (root/<split>.txt), sinon glob.
-        listing = root / f"{split}.txt"
+        # Liste explicite, sinon liste officielle du split (root/<split>.txt), sinon glob.
+        listing = Path(ids_file) if ids_file else root / f"{split}.txt"
+        if ids_file and not listing.is_file():
+            raise FileNotFoundError(listing)
         if listing.is_file():
             self.ids = [
                 line if line.endswith(".png") else f"{line}.png"
@@ -91,6 +100,11 @@ class SECONDDataset(Dataset):
             self.ids = sorted(p.name for p in self.dirs["T1"].glob("*.png"))
         if not self.ids:
             raise RuntimeError(f"aucun échantillon trouvé pour le split '{split}'")
+        if ids_file:
+            absent = [i for i in self.ids if not (self.dirs["T1"] / i).is_file()]
+            if absent:
+                raise FileNotFoundError(f"{len(absent)} identifiants de {listing} absents de "
+                                        f"{self.dirs['T1']} (ex. {absent[:3]})")
 
     def __len__(self) -> int:
         return len(self.ids)

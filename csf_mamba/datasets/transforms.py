@@ -16,6 +16,21 @@ import random
 
 import torch
 
+# Enregistrement des tirages géométriques, pour la distillation hors ligne.
+# Si l'échantillon contient la clé AUG_KEY (tenseur long de 6 entiers, mis par
+# `csf_mamba.datasets.teacher_cache.TeacherCacheDataset`), chaque transform y
+# écrit ce qu'il a tiré : [hflip, vflip, k_rot90, swap, top, left]. Sans cette
+# clé, rien n'est écrit et le tirage aléatoire est strictement le même : les runs
+# sans KD restent reproductibles à l'identique.
+AUG_KEY = "_aug"
+AUG_HFLIP, AUG_VFLIP, AUG_ROT, AUG_SWAP, AUG_TOP, AUG_LEFT = range(6)
+
+
+def _record(sample: dict, slot: int, value: int):
+    if AUG_KEY in sample:
+        sample[AUG_KEY][slot] = int(value)
+
+
 # Champs spatiaux d'un échantillon et leur nombre de dims.
 _CHW_FIELDS = ("img_t1", "img_t2")            # (C, H, W)
 _HW_FIELDS = ("sem_t1", "sem_t2", "change", "unchanged")  # (H, W)
@@ -34,6 +49,8 @@ class RandomCrop:
             raise ValueError(f"crop {s} > image {h}x{w}")
         top = random.randint(0, h - s)
         left = random.randint(0, w - s)
+        _record(sample, AUG_TOP, top)
+        _record(sample, AUG_LEFT, left)
         for k in _CHW_FIELDS:
             sample[k] = sample[k][:, top:top + s, left:left + s].contiguous()
         for k in _HW_FIELDS:
@@ -56,8 +73,10 @@ class RandomFlip:
     def __call__(self, sample: dict) -> dict:
         if random.random() < self.p:
             self._flip(sample, dim_chw=2, dim_hw=1)  # horizontal
+            _record(sample, AUG_HFLIP, 1)
         if random.random() < self.p:
             self._flip(sample, dim_chw=1, dim_hw=0)  # vertical
+            _record(sample, AUG_VFLIP, 1)
         return sample
 
 
@@ -71,6 +90,7 @@ class RandomRot90:
 
     def __call__(self, sample: dict) -> dict:
         k = random.randint(0, 3)
+        _record(sample, AUG_ROT, k)
         if k == 0:
             return sample
         for f in _CHW_FIELDS:
@@ -133,6 +153,7 @@ class RandomTemporalSwap:
         if random.random() < self.p:
             sample["img_t1"], sample["img_t2"] = sample["img_t2"], sample["img_t1"]
             sample["sem_t1"], sample["sem_t2"] = sample["sem_t2"], sample["sem_t1"]
+            _record(sample, AUG_SWAP, 1)
             # `change` et `unchanged` sont invariants à l'ordre : rien à faire.
         return sample
 
