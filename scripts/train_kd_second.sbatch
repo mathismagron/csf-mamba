@@ -68,14 +68,22 @@ echo "$(date '+%F %T') job=$SLURM_JOB_ID commit=$(git rev-parse --short HEAD)" >
 STAGE_TAR="$SCRATCH/csf-distill/SECOND_stage.tar"
 t0=$(date +%s)
 if [ -f "$STAGE_TAR" ]; then
-    echo "== staging SECOND : extraction de $STAGE_TAR"
+    echo "== staging SECOND : extraction de $STAGE_TAR ($(stat -c '%s octets, modifié %y' "$STAGE_TAR"))"
     tar -xf "$STAGE_TAR" -C "$SLURM_TMPDIR"
     DATA_ROOT="$SLURM_TMPDIR/SECOND"
 else
     echo "⚠️  pas d'archive $STAGE_TAR : lecture directe dans \$SCRATCH/SECOND"
     DATA_ROOT="$SCRATCH/SECOND"
 fi
-echo "   $(( $(date +%s) - t0 )) s ; $(ls "$DATA_ROOT/train/T1" | wc -l) paires train, $(ls "$DATA_ROOT/test/T1" | wc -l) test"
+N_TRAIN=$(ls "$DATA_ROOT/train/T1" 2>/dev/null | wc -l)
+N_TEST=$(ls "$DATA_ROOT/test/T1" 2>/dev/null | wc -l)
+echo "   $(( $(date +%s) - t0 )) s ; $N_TRAIN paires train, $N_TEST test"
+# Garde-fou : une extraction incomplète ne doit jamais atteindre l'entraînement.
+if [ "$N_TRAIN" -ne 2968 ] || [ "$N_TEST" -ne 1694 ]; then
+    echo "⛔ SECOND incomplet dans $DATA_ROOT (attendu 2968 / 1694). Contenu :"
+    ls -la "$SLURM_TMPDIR" "$DATA_ROOT" 2>&1 | head -20
+    exit 1
+fi
 
 KD_ARGS=()
 if [ "$LKD_CHG" != "0" ] || [ "$LKD_SEM" != "0" ]; then

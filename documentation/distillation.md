@@ -246,7 +246,7 @@ Coût d'un run élève à **120 époques** : **7,7 h A100** sur 2 968 paires (3,
 | **3** | + KD **sémantique** (cache) | KL sur canaux 1..6, T ∈ {2 ; 4} × masque {changé GT ∪ professeur ; toute l'image}, 2 graines | incrément ≥ +0,36 pt sur l'étape 2, sur val | 58 |
 | **4** | + KD de **features** (en ligne) | adaptateurs 1×1 élève → 1024, cosinus après LayerNorm ; {1/8+1/16} vs {1/8+1/16+1/32}, 2 graines | incrément ≥ +0,36 pt sur l'étape 3, sur val, sinon non retenu | 50 |
 | **5** | Confirmation, convention du projet | meilleure KD logits seuls et meilleure KD logits+features, **5 graines chacune sur 2 968, 120 époques**, max SeK test + finale ; params, GMACs, latence fp32/bf16 sur A100, **mêmes conditions que la latence du README** (lot de 8, 512², médiane sur 50) | fraction d'écart comblée (S_KD − S_1)/(S_prof − S_1) avec IC 95 %, les deux tests et les deux métriques concordants | 110 |
-| **Total** | | | | **≈ 280** (255 avant la mesure du coût du professeur) |
+| **Total** | | | | **≈ 250** (durées `sacct` de septembre : ≈3,4 min/époque) |
 
 **Chemin court (~160 A100-h).** λ = 1 sans balayage à l'étape 2, un seul masque à
 l'étape 3 (toute l'image, le plus informatif), une seule variante de features. On
@@ -357,7 +357,8 @@ sbatch scripts/teacher/eval_perascd.sbatch         # 0b : ~1 h GPU (compile l'op
   - `train.py` : `--train-ids`, `--val-ids`, `--kd-cache`, `--lambda-kd-change`, `--kd-t-change`, `--lambda-kd-sem`, `--kd-t-sem`, `--kd-sem-mask` ; tout à 0 par défaut, garde-fous si λ > 0 sans cache ou cache sans λ ;
   - `scripts/train_kd_second.sbatch` : recette d'efficience figée (ligne `== config` des 7 graines), `MODE=screen|confirm`, empreinte `config.txt`, cache et SECOND copiés dans `$SLURM_TMPDIR`.
   - Tests (`tests/test_distill.py`, CPU) : transforms inchangés sans `_aug` ; sous-ensemble d'ids ; **alignement de bout en bout** avec un faux professeur « oracle » dans un cache au format réel — 200 tirages de la vraie chaîne (flips, rot90, jitter, échange) sans une erreur, et le témoin « toujours la vue 0 » échoue bien ; perte nulle et gradient nul quand l'élève reproduit le professeur. Les tests existants passent. Entraînement CPU de 2 époques avec KD : termes `kd_change` et `kd_sem` présents et sommés au total.
-- ⚠️ **Durée d'un run à revérifier.** Mes budgets supposaient 3,85 min/époque (journal, 11 sept.) ; l'en-tête de `train_second.sbatch` et le commentaire de reprise de `train.py` indiquent plutôt ~7 h 45 pour 100 époques en crops 512, soit **~4,65 min/époque**. Si c'est le cas, un run de 120 époques dure ≈9,3 h et non 7,7, et le plan passe à **≈325 A100-h**. À trancher par `sacct` sur les 7 runs de septembre avant la première vague.
+- 26 sept., **durée d'un run : tranchée par `sacct`.** Les 28 jobs `csf-second` des 7–8 septembre (lot de reprise, 200 époques, recette `lean` et variantes, validation sur le test à chaque époque) ont duré **11 h 04 à 11 h 30** pour la plupart (4 jobs à 12 h 36–12 h 43, sans doute les variantes à encodeur `tiny`), soit **≈3,4 min/époque**. Le « 7 h 45 pour 100 époques » de l'en-tête de `train_second.sbatch` datait d'une recette antérieure. Un run de 120 époques dure donc ≈6,8 h (2 968 paires) / ≈6,1 h (2 671, validation sur 297). Avec le professeur en ligne (+≈2,7 min/époque) : ≈11,6 h / ≈12,9 h. **Plan complet ≈250 A100-h.**
+- 26 sept. : `/scratch` très lent dans la journée — un `tar` des 23 310 PNG de SECOND a pris 47 min 31 s (0,4 s de calcul : attente d'E/S), et le premier run d'essai (job 4030416) a épuisé son heure dans `cp -r`. Staging désormais par archive unique (`$SCRATCH/csf-distill/SECOND_stage.tar`, 23 310 PNG vérifiés) et temps de staging journalisés.
 
 Ce que `eval_perascd.py` mesure en un passage, pour fp32, fp16 et bf16 :
 
