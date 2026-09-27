@@ -6,6 +6,7 @@ masqué. Lancer via `python -m scripts.train ...` (voir train.sbatch).
 """
 
 import argparse
+import time
 from pathlib import Path
 
 import torch
@@ -286,6 +287,12 @@ def main():
               f"best SeK {best_sek:.4f}")
 
     for epoch in range(start_epoch, args.epochs):
+        # Chronométrage (coût d'entraînement rapporté pour la KD) : n'influe sur
+        # rien d'autre ; va dans timing.csv, à part, pour ne pas changer le
+        # format de metrics.csv que lisent les scripts d'analyse.
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
+        t_epoch = time.perf_counter()
         model.train()
         optimizer.zero_grad()
         for step, batch in enumerate(train_loader):
@@ -332,8 +339,22 @@ def main():
         # valider le modèle courant et sauver l'EMA (ou l'inverse) mesurerait un
         # modèle et en livrerait un autre.
         eval_model = ema.module if ema is not None else model
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        t_train = time.perf_counter() - t_epoch
+        peak_gb = (torch.cuda.max_memory_allocated() / 2**30
+                   if torch.cuda.is_available() else 0.0)
+        t_val0 = time.perf_counter()
         metrics = validate(eval_model, val_loader, device, num_classes,
                            limit=args.limit_batches, use_amp=use_amp)
+        t_val = time.perf_counter() - t_val0
+        print(f"[time] epoch {epoch} | train {t_train:.0f} s val {t_val:.0f} s "
+              f"| pic mémoire entraînement {peak_gb:.1f} Go")
+        timing_path = out_dir / "timing.csv"
+        if not timing_path.exists():
+            timing_path.write_text("epoch,train_s,val_s,peak_train_gb\n")
+        with timing_path.open("a") as f:
+            f.write(f"{epoch},{t_train:.1f},{t_val:.1f},{peak_gb:.2f}\n")
         print(f"[val] epoch {epoch} | SeK {metrics.sek:.4f} Fscd {metrics.fscd:.4f} "
               f"mIoU {metrics.miou:.4f} OA {metrics.oa:.4f} kappa {metrics.kappa:.4f}")
 
