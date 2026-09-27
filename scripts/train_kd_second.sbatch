@@ -60,19 +60,20 @@ cd "$REPO"
 echo "== commit $(git rev-parse --short HEAD) ($(git status --porcelain | wc -l) fichiers modifiés) | job $SLURM_JOB_ID"
 echo "$(date '+%F %T') job=$SLURM_JOB_ID commit=$(git rev-parse --short HEAD)" >> "$OUT/slurm_jobs.txt"
 
-# Staging par UNE archive : `cp -r` de ~33 000 petits fichiers depuis /scratch a
-# bloqué un job entier le 26 septembre (job 4030416, 1 h sans finir). Archive à
-# créer une fois, sur un nœud de connexion :
-#   tar -cf $SCRATCH/csf-distill/SECOND_stage.tar -C $SCRATCH --exclude='*_COLORED' SECOND
-# Sans archive, lecture directe dans /scratch (même résultat, plus lent).
-STAGE_TAR="$SCRATCH/csf-distill/SECOND_stage.tar"
+# Staging depuis SECOND.zip, l'archive d'origine (Zenodo 15479555, 3,84 Go) dont
+# $SCRATCH/SECOND a été extrait. Deux incidents du 26 septembre motivent ce choix :
+# `cp -r` des ~33 000 petits fichiers a bloqué un job 1 h (4030416), et une archive
+# tar recréée à partir d'eux a été retrouvée tronquée à 16 Mo (4039676). Un seul gros
+# fichier se lit bien même quand /scratch est lent, et `unzip` vérifie le CRC de
+# chaque fichier : une corruption fait échouer le job au lieu de passer en silence.
+SECOND_ZIP="$SCRATCH/SECOND.zip"
 t0=$(date +%s)
-if [ -f "$STAGE_TAR" ]; then
-    echo "== staging SECOND : extraction de $STAGE_TAR ($(stat -c '%s octets, modifié %y' "$STAGE_TAR"))"
-    tar -xf "$STAGE_TAR" -C "$SLURM_TMPDIR"
+if [ -f "$SECOND_ZIP" ]; then
+    echo "== staging SECOND : unzip de $SECOND_ZIP ($(stat -c '%s octets, modifié %y' "$SECOND_ZIP"))"
+    unzip -q "$SECOND_ZIP" -x '*_COLORED/*' -d "$SLURM_TMPDIR"
     DATA_ROOT="$SLURM_TMPDIR/SECOND"
 else
-    echo "⚠️  pas d'archive $STAGE_TAR : lecture directe dans \$SCRATCH/SECOND"
+    echo "⚠️  pas de $SECOND_ZIP : lecture directe dans \$SCRATCH/SECOND"
     DATA_ROOT="$SCRATCH/SECOND"
 fi
 N_TRAIN=$(ls "$DATA_ROOT/train/T1" 2>/dev/null | wc -l)
