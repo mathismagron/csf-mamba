@@ -232,9 +232,14 @@ même découpage.
 
 ## 4. Plan de travail
 
-Coût d'un run élève à **120 époques** : **7,7 h A100** sur 2 968 paires (3,85 min/époque mesurées sur Narval),
-**6,9 h** sur 2 671. KD en cache +5 % ; KD de features en ligne +40 % (≈10,8 h sur 2 968). Professeur en avant seul : ~1,3 TMAC par paire
-(blocs ViT : 1,20 TMAC, estimé), ~35 ms/paire estimées sur A100.
+Coût d'un run élève à **120 époques**, **mesuré sur la vague 1 (27 sept.)** : **4,7–5,1 h A100** en criblage
+(2 671 paires, val de 297 : ≈135–143 s d'entraînement + 8 s de val par époque) ; **KD en cache : aucun surcoût
+mesurable**. Confirmation (2 968 paires, val = test de 1 694) : ≈154 s + ≈40 s par époque → **≈6,5 h** (estimé).
+KD de features en ligne : le professeur fp16 passe 16,3 paires/s (étape 0, lot de 8) → ≈+165 s par époque de
+2 671 paires, soit **≈10,5–11,5 h** par run de criblage — près du walltime de 12 h (reprise automatique sur
+`last.pt`, ou `--time=24:00:00`). Professeur en avant seul : **1,51 TMAC** par paire (mesuré, étape 0).
+*(Les chiffres 7,7 h / 6,9 h / +5 % / +40 % des versions précédentes de ce paragraphe étaient des estimations
+antérieures aux mesures ; les colonnes A100-h du tableau ci-dessous sont donc des majorants pour les étapes 1–3.)*
 
 | Étape | Objectif | Livrable | Critère de réussite | A100-h |
 |---|---|---|---|---:|
@@ -273,7 +278,7 @@ suivantes deviennent douteuses — c'est une porte de décision.
 | Features encodeur, 4 échelles × 1024 canaux × 2 dates | 89 Mo | 2,1 To | ≈ +5 h A100 |
 
 Générer le cache coûte ~15 min de GPU. **Logits : hors ligne. Features : en ligne**
-(+40 % sur le run, ~10,8 h A100 au lieu de 7,7 à 120 époques).
+(≈ +110 % sur un run de criblage d'après les mesures : ≈10,5–11,5 h au lieu de ≈4,9 h ; cf. §4).
 
 - **D4** : 8 variantes pré-calculées → cohérence exacte, pas seulement approchée.
 - **Échange temporel** : échanger predA ↔ predB du cache ; le changement est symétrique. Exact.
@@ -371,6 +376,12 @@ sbatch scripts/teacher/eval_perascd.sbatch         # 0b : ~1 h GPU (compile l'op
   | λ_chg = 2 | 25,45 ± 0,21 | **+1,83** | 0,010 | 25,31 | **+2,06** | 0,001 |
 
   Réponse **monotone en λ** ; les trois bras passent le critère (+0,36 pt). Le témoin plafonne vers l'époque 60 puis décline ; les bras KD montent encore à l'époque 120 (max aux époques 91–119) : l'écart grandit avec l'entraînement. **Deux réserves :** (1) le meilleur λ est au bord de la grille → prolonger à λ ∈ {4 ; 8} ; (2) le gain peut venir du seul ajout d'une BCE de poids λ sur le logit de changement, ou de cibles aux bords adoucis, plutôt que du savoir du professeur → **contrôles** `KD_TGT=gt` (vérité brute) et `KD_TGT=gt_smooth` (vérité moyennée à 128² puis suréchantillonnée comme le professeur), même λ = 2. Biais connu du criblage : le professeur a été entraîné sur les 2 968 paires, val comprise ; ses sorties sur les 2 671 images d'entraînement peuvent porter un peu de ce qu'il a appris sur la val, ce qui favorise légèrement la KD face aux contrôles **sur la val seulement** (le test, lui, est inconnu du professeur). Si `gt_smooth` arrive à moins de ~0,5 pt de la KD sur val, le contrôle entre dans la confirmation sur test.
+- 27 sept., **revue avant la vague 2.**
+  - **Non-régression du chemin sans KD (critère de l'étape 1) : vérifiée à l'octet près.** Même entraînement CPU (3 époques, seed 1, EMA, rot90, jitter, échange temporel, accumulation) avec le code d'avant la distillation (commit `ab8b1fe`) et le code actuel : logs de pertes, `metrics.csv`, `best.pt` (132 tenseurs), `last.pt` (modèle + EMA) **identiques** ; l'ancien code rejoué deux fois est lui-même reproductible. Limite : encodeur `conv` / backend `ref` sur CPU — les noyaux Mamba GPU ne sont pas touchés par les modifications.
+  - **Appariement par graine confirmé** : à graine égale, les 4 bras de la vague 1 ont exactement la même perte au pas 0 (seed 1 : ce_bcd 0,6778, ce_sem 1,8326 ; seed 2 : 0,5492, 2,0659) — même initialisation, même premier lot, mêmes tirages d'augmentation. Écart λ = 2 − témoin par graine : +1,90 (s1) et +1,77 (s2) pt sur le max.
+  - Aucun `nan`, aucune trace d'erreur, aucune reprise dans les 8 logs.
+  - Le cache est indexé **par identifiant** (`ids.txt`), pas par position : le sous-ensemble 2 671 lit les bonnes lignes.
+  - Seuil +0,36 pt : il avait été calculé pour 5 graines sur le **test** (σ 0,18) ; sur la val à 2 graines, σ poolé vaut 0,40. Au criblage c'est un seuil de tri, pas un test de conclusion.
 
 Ce que `eval_perascd.py` mesure en un passage, pour fp32, fp16 et bf16 :
 
