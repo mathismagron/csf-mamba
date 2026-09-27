@@ -137,6 +137,9 @@ def parse_args():
     p.add_argument("--lambda-kd-sem", type=float, default=0.0)
     p.add_argument("--kd-t-sem", type=float, default=2.0)
     p.add_argument("--kd-sem-mask", default="changed", choices=["changed", "all"])
+    p.add_argument("--kd-change-target", default="teacher", choices=["teacher", "gt", "gt_smooth"],
+                   help="Contrôles : cible du terme de changement remplacée par la vérité "
+                        "(gt) ou la vérité lissée à la résolution du professeur (gt_smooth).")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--output", default="runs/dev")
     p.add_argument("--resume", default="auto",
@@ -208,13 +211,15 @@ def main():
         lambda_lovasz=args.lambda_lovasz,
     ).to(device)
     kd_loss = DistillLoss(args.lambda_kd_change, args.kd_t_change,
-                          args.lambda_kd_sem, args.kd_t_sem, args.kd_sem_mask).to(device)
+                          args.lambda_kd_sem, args.kd_t_sem, args.kd_sem_mask,
+                          change_target=args.kd_change_target).to(device)
     if kd_loss.active and not args.kd_cache:
         raise SystemExit("λ de distillation > 0 sans --kd-cache")
     if args.kd_cache and not kd_loss.active:
         raise SystemExit("--kd-cache donné mais tous les λ de distillation valent 0")
     if kd_loss.active:
-        print(f"Distillation : changement λ={args.lambda_kd_change} T={args.kd_t_change} | "
+        print(f"Distillation : changement λ={args.lambda_kd_change} T={args.kd_t_change} "
+              f"cible={args.kd_change_target} | "
               f"sémantique λ={args.lambda_kd_sem} T={args.kd_t_sem} masque={args.kd_sem_mask} | "
               f"cache {args.kd_cache}")
     optimizer = _build_optimizer(model, args)

@@ -165,7 +165,37 @@ def test_distill_loss_zero_at_match():
     assert t["kd_change"] > 0.1 and t["kd_sem"] > 0.1
 
 
+def test_change_target_controls():
+    """Contrôles `gt` / `gt_smooth` : la cible ne dépend plus du professeur, et
+    `teacher` reste le comportement par défaut, à l'identique."""
+    torch.manual_seed(1)
+    change = torch.zeros(2, TILE, TILE, dtype=torch.long)
+    change[:, 8:24, 4:20] = 1                       # un carré : bords nets
+    teacher_a = torch.randn(2, 15, NATIVE, NATIVE)
+    teacher_b = torch.randn(2, 15, NATIVE, NATIVE)
+    d = torch.randn(2, TILE, TILE)
+    out = {"bcd": torch.stack([torch.zeros_like(d), d], 1)}
+    ref = DistillLoss(1.0)(out, teacher_a, change)["kd_change"]
+    assert torch.equal(ref, DistillLoss(1.0, change_target="teacher")(out, teacher_a, change)["kd_change"])
+    for tgt in ("gt", "gt_smooth"):
+        la = DistillLoss(1.0, change_target=tgt)(out, teacher_a, change)["kd_change"]
+        lb = DistillLoss(1.0, change_target=tgt)(out, teacher_b, change)["kd_change"]
+        assert torch.equal(la, lb), tgt             # indépendant du professeur
+    # gt : BCE brute sur la vérité (entropie nulle)
+    exp = torch.nn.functional.binary_cross_entropy_with_logits(d, change.float())
+    got = DistillLoss(2.0, change_target="gt")(out, teacher_a, change)["kd_change"]
+    assert torch.allclose(got, 2.0 * exp, atol=1e-6)
+    # gt_smooth : dans [0, 1], égale à la vérité loin des bords, fractionnaire sur les bords
+    loss = DistillLoss(1.0, change_target="gt_smooth")
+    p = loss._change_target(None, teacher_a, change, (TILE, TILE))
+    assert p.min() >= 0 and p.max() <= 1
+    assert torch.all(p[:, 14:18, 10:14] == 1) and torch.all(p[:, 0:2, 26:] == 0)
+    frac = ((p > 0.01) & (p < 0.99)).float().mean()
+    assert 0 < frac < 0.5, float(frac)
+
+
 if __name__ == "__main__":
     for f in (test_transforms_unchanged_without_aug_key, test_second_ids_subset,
-              test_cache_alignment_end_to_end, test_distill_loss_zero_at_match):
+              test_cache_alignment_end_to_end, test_distill_loss_zero_at_match,
+              test_change_target_controls):
         f(); print("OK", f.__name__)

@@ -19,11 +19,14 @@
 #   SEED=1 TAG=witness sbatch --export=ALL,SEED,TAG scripts/train_kd_second.sbatch
 #   # KD du changement (étape 2)
 #   SEED=1 LKD_CHG=1 TAG=kdchg-l1 sbatch --export=ALL,SEED,LKD_CHG,TAG scripts/train_kd_second.sbatch
+#   # contrôle : même terme, cible = vérité lissée (gt_smooth) ou brute (gt)
+#   SEED=1 LKD_CHG=2 KD_TGT=gt_smooth TAG=ctl-gtsmooth-l2 sbatch --export=ALL,SEED,LKD_CHG,KD_TGT,TAG scripts/train_kd_second.sbatch
 #   # + KD sémantique (étape 3)
 #   SEED=1 LKD_CHG=1 LKD_SEM=1 KD_T_SEM=2 KD_MASK=all TAG=kdsem-t2-all \
 #       sbatch --export=ALL,SEED,LKD_CHG,LKD_SEM,KD_T_SEM,KD_MASK,TAG scripts/train_kd_second.sbatch
 #
-# Durée : 120 époques ≈ 8–10 h (à confirmer par sacct sur les runs de septembre).
+# Durée mesurée (vague 1, 27 sept.) : 120 époques en MODE=screen = 4 h 44 – 5 h 07
+# (≈135–143 s d'entraînement + 8 s de val par époque ; cache KD sans surcoût mesurable).
 # Reprise automatique sur last.pt : si le walltime tombe, resoumettre la même ligne.
 set -euo pipefail
 
@@ -35,6 +38,7 @@ KD_T_CHG="${KD_T_CHG:-1}"      # température KD changement
 LKD_SEM="${LKD_SEM:-0}"        # λ KD sémantique
 KD_T_SEM="${KD_T_SEM:-2}"      # température KD sémantique
 KD_MASK="${KD_MASK:-changed}"  # changed | all
+KD_TGT="${KD_TGT:-teacher}"    # cible du terme de changement : teacher | gt | gt_smooth (contrôles)
 TAG="${TAG:?donner un TAG explicite (witness, kdchg-l1, ...)}"
 
 REPO="$HOME/csf-mamba"
@@ -45,6 +49,11 @@ mkdir -p "$OUT"
 # Recette d'efficience, figée : ligne `== config` des 7 graines de référence.
 RECIPE="weight=1 dice=0 lovasz=0 crop=512 batch=2 x accum=4 enc=vmamba_mini dec=dw fusion=concat cga=1 mcasf=1 up=dysample core=chess deep=0 sek=0 sc=0.1 fft=[0,1] lr=constant rot90=1 photo=0.2 tswap=0.5 ema=0.9998"
 CONF="$RECIPE seed=$SEED epochs=$EPOCHS mode=$MODE kd_chg=$LKD_CHG t_chg=$KD_T_CHG kd_sem=$LKD_SEM t_sem=$KD_T_SEM mask=$KD_MASK"
+# Ajouté seulement hors défaut : les config.txt de la vague 1 restent valides.
+if [ "$KD_TGT" != "teacher" ]; then
+    [ "$LKD_CHG" != "0" ] || { echo "⛔ KD_TGT=$KD_TGT sans LKD_CHG"; exit 1; }
+    CONF="$CONF tgt=$KD_TGT"
+fi
 echo "== config : $CONF -> $OUT =="
 STAMP="$OUT/config.txt"
 if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" != "$CONF" ]; then
@@ -94,7 +103,8 @@ if [ "$LKD_CHG" != "0" ] || [ "$LKD_SEM" != "0" ]; then
     echo "   $(( $(date +%s) - t0 )) s"
     KD_ARGS=(--kd-cache "$SLURM_TMPDIR/kdcache"
              --lambda-kd-change "$LKD_CHG" --kd-t-change "$KD_T_CHG"
-             --lambda-kd-sem "$LKD_SEM" --kd-t-sem "$KD_T_SEM" --kd-sem-mask "$KD_MASK")
+             --lambda-kd-sem "$LKD_SEM" --kd-t-sem "$KD_T_SEM" --kd-sem-mask "$KD_MASK"
+             --kd-change-target "$KD_TGT")
 fi
 
 case "$MODE" in

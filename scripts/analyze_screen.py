@@ -31,7 +31,7 @@ from scipy import stats
 
 RUN_RE = re.compile(r"^screen_(?P<tag>.+)-s(?P<seed>\d+)$")
 # Champs de config.txt qui ont le droit de différer d'un run à l'autre.
-FREE_KEYS = {"seed", "kd_chg", "t_chg", "kd_sem", "t_sem", "mask"}
+FREE_KEYS = {"seed", "kd_chg", "t_chg", "kd_sem", "t_sem", "mask", "tgt"}
 CRITERION_PT = 0.36          # plan §4 : Δ ≥ +0,36 pt contre le témoin, sur val
 PT = 100.0                   # SeK en points
 
