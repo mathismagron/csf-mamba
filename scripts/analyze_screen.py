@@ -15,6 +15,7 @@ Lit les dossiers `screen_<tag>-s<seed>/` rapatriés de
                  runs complets).
 
     python scripts/analyze_screen.py logs/screen_w1/runs --out logs/screen_w1/analyse
+    python scripts/analyze_screen.py logs/screen_w{1,2,3}/runs --compare-to kdchg-l8 --out logs/screen_w3/analyse_all
 
 Rien ici ne lit le test : c'est le criblage (documentation/distillation.md §3).
 """
@@ -97,15 +98,23 @@ def pooled_test(groups: dict[str, np.ndarray], a: str, b: str):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("runs_dir", type=Path)
+    ap.add_argument("runs_dir", type=Path, nargs="+",
+                    help="un ou plusieurs dossiers contenant des screen_<tag>-s<seed>/ (vagues)")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--epochs", type=int, default=120)
     ap.add_argument("--witness", default="witness", help="tag du témoin sans KD")
+    ap.add_argument("--compare-to", default=None,
+                    help="tag d'un second repère (p. ex. kdchg-l8) : incréments appariés par graine "
+                         "et test à variance poolée contre lui -> increments.csv")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
     infos, curves, configs = [], {}, {}
-    for d in sorted(p for p in args.runs_dir.iterdir() if p.is_dir()):
+    dirs = sorted((p for r in args.runs_dir for p in r.iterdir() if p.is_dir()), key=lambda p: p.name)
+    dup = sorted({d.name for d in dirs if [e.name for e in dirs].count(d.name) > 1})
+    if dup:
+        raise SystemExit(f"runs présents dans plusieurs dossiers : {dup}")
+    for d in dirs:
         mt = RUN_RE.match(d.name)
         if not mt or mt["tag"] == "smoke" or not (d / "metrics.csv").exists():
             continue
@@ -173,12 +182,37 @@ def main():
                              for t, d in zip(arms.tag, arms.max_sek_delta)]
     arms.to_csv(args.out / "arms.csv", index=False, float_format="%.4f")
 
+    # Incréments contre un second repère (étape 3 : + KD sémantique vs KD du changement seul).
+    incr = None
+    if args.compare_to:
+        if args.compare_to not in tags:
+            raise SystemExit(f"repère '{args.compare_to}' absent (tags : {tags})")
+        rows = []
+        ref = runs[runs.tag == args.compare_to].set_index("seed")
+        for t in order:
+            if t in (args.witness, args.compare_to):
+                continue
+            x = runs[runs.tag == t].set_index("seed")
+            row = {"tag": t, "vs": args.compare_to}
+            for k in ("max_sek", "final_sek", "last10_sek"):
+                groups = {u: runs.loc[runs.tag == u, k].to_numpy() * PT for u in order}
+                row[f"{k}_incr"] = groups[t].mean() - groups[args.compare_to].mean()
+                _, p, _, _ = pooled_test(groups, t, args.compare_to)
+                row[f"{k}_pooled_p"] = p
+                common = sorted(set(x.index) & set(ref.index))
+                row[f"{k}_per_seed"] = " ; ".join(
+                    f"s{s}:{(x.loc[s, k] - ref.loc[s, k]) * PT:+.2f}" for s in common)
+            rows.append(row)
+        incr = pd.DataFrame(rows)
+        incr.to_csv(args.out / "increments.csv", index=False, float_format="%.4f")
+
     # Figure de travail (pas une figure d'article).
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(12, 4.2), constrained_layout=True)
-    colors = dict(zip(order, plt.cm.tab10.colors))
+    pal = plt.cm.tab10.colors if len(order) <= 10 else plt.cm.tab20.colors
+    colors = {t: pal[i % len(pal)] for i, t in enumerate(order)}
     wc = pd.concat([curves[n].set_index("epoch").sek for n in runs[runs.tag == args.witness].run],
                    axis=1).mean(1) * PT
     for t in order:
@@ -203,10 +237,11 @@ def main():
     fig.savefig(args.out / "curves.png", dpi=150)
 
     summary = {
-        "runs_dir": str(args.runs_dir), "epochs": args.epochs, "witness": args.witness,
+        "runs_dir": [str(r) for r in args.runs_dir], "compare_to": args.compare_to, "epochs": args.epochs, "witness": args.witness,
         "n_runs": len(runs), "incomplete_runs": incomplete, "config_issues": cfg_issues,
         "criterion_pt": CRITERION_PT,
         "arms": json.loads(arms.to_json(orient="records")),
+        "increments": json.loads(incr.to_json(orient="records")) if incr is not None else None,
     }
     (args.out / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False))
 
@@ -215,6 +250,9 @@ def main():
             "max_sek_pooled_p", "final_sek_mean", "final_sek_delta", "final_sek_pooled_p",
             "meancurve_max", "meancurve_epoch", "criterion_met"]
     print(arms[[c for c in cols if c in arms]].round(3).to_string(index=False))
+    if incr is not None:
+        print(f"\nincréments contre {args.compare_to} :")
+        print(incr.round(3).to_string(index=False))
     if incomplete:
         print("runs incomplets :", incomplete)
     if cfg_issues:

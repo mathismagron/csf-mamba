@@ -398,6 +398,21 @@ sbatch scripts/teacher/eval_perascd.sbatch         # 0b : ~1 h GPU (compile l'op
   **Lecture.** (1) **Les deux contrôles n'apportent rien** : ni une BCE supplémentaire de poids 2 sur la vérité, ni des cibles aux bords adoucis comme celles du professeur. Ils accélèrent le début (≈ +0,5 pt vers l'époque 15–20) puis passent sous le témoin après l'époque 50 : même surapprentissage tardif que lui. **Le gain vient donc du contenu des cibles du professeur**, pas de la forme ni du poids de la perte. Le biais « le professeur a vu la val » ne peut pas expliquer un écart de ≈ 1,9 pt entre KD et contrôles au même λ, mais la confirmation sur test reste nécessaire. (2) **Plateau probable à partir de λ = 2** : 1,83 / 1,92 / 2,33 pour λ = 2 / 4 / 8, écarts entre eux dans le bruit (erreur-type d'une moyenne de bras ≈ 0,24) ; λ = 8 a la meilleure moyenne mais la plus grande dispersion entre graines. (3) Avec KD, SeK finale ≈ max : la KD supprime le déclin tardif du témoin.
 
   **Décision (règle du criblage : meilleur max moyen sur val) : λ_chg = 8** comme base de l'étape 3. λ = 16 ajouté à la vague 3 pour savoir si le plateau est atteint (le meilleur λ est encore au bord de la grille).
+- 28 sept., **vague 3 (étape 3 + λ = 16) : 10/10 COMPLETED** (jobs 4150297–4150307, commit 8de169a — doc seule depuis bf164d4 ; 4 h 49 – 4 h 54 par run, ≈48 A100-h). Logs propres, `Distillation :` conforme à chaque config, pas 0 identique au témoin de même graine. Analyse des 26 runs : `python scripts/analyze_screen.py logs/screen_w{1,2,3}/runs --compare-to kdchg-l8 --out logs/screen_w3/analyse_all` (le script accepte désormais plusieurs dossiers et un second repère). σ poolé 0,29 (max), df = 13. SeK val max (pt), incrément contre λ_chg = 8 seul (25,95) :
+
+  | bras | max | Δ vs témoin | incrément vs λ_chg = 8 (s1 ; s2) | p | incr. finale | p |
+  |---|---:|---:|---|---:|---:|---:|
+  | λ_chg = 16 | 25,88 | +2,26 | −0,07 (−0,35 ; +0,21) | 0,81 | +0,03 | 0,91 |
+  | + sém. T = 2, masque changé | 26,70 | +3,09 | +0,75 (+0,38 ; +1,12) | 0,021 | +0,90 | 0,008 |
+  | + sém. T = 2, toute l'image | **26,75** | **+3,13** | **+0,80** (+0,56 ; +1,04) | 0,015 | +0,87 | 0,010 |
+  | + sém. T = 4, masque changé | 26,46 | +2,85 | +0,51 (+0,45 ; +0,58) | 0,095 | +0,67 | 0,038 |
+  | + sém. T = 4, toute l'image | 26,40 | +2,79 | +0,45 (+0,04 ; +0,86) | 0,14 | +0,50 | 0,11 |
+
+  **Lecture.** (1) **Plateau de λ_chg confirmé** : 16 ≈ 8 (−0,07 pt, écart entre graines de 16 : 0,01 pt). (2) **La KD sémantique ajoute ≈ +0,8 pt à T = 2** (critère +0,36 franchi pour les deux masques, les deux graines positives, sur max et finale) ; T = 4 fait moins bien (+0,45–0,51). (3) **Masque changé ≈ toute l'image** à T = 2 (0,05 pt d'écart, dans le bruit) : inclure les zones non-changées, où le professeur n'a jamais été supervisé en sémantique, ne nuit pas. Fscd suit : 66,29 (tout) / 66,44 (changé) contre 65,49 pour λ_chg = 8 seul. (4) Rien ne plafonne encore à 120 époques (max aux époques 91–119).
+
+  **Décision (même règle) : configuration « KD logits » = λ_chg = 8, λ_sem = 1, T_sem = 2, masque `all`.** À noter pour l'article : `changed` est équivalent sur la val ; le choix est dicté par la règle pré-enregistrée, pas par un écart significatif.
+
+  **Prudence avant le test.** Sur la val, le témoin fait 23,61 et la meilleure KD 26,75. Si l'écart se transposait tel quel au test (témoin 23,90), l'élève dépasserait le professeur (26,11) : c'est possible — l'élève voit 8 vues D4 du professeur et la vérité — mais le biais « professeur entraîné sur la val » joue ici dans le sens favorable. Seule la confirmation sur test le dira.
 
 Ce que `eval_perascd.py` mesure en un passage, pour fp32, fp16 et bf16 :
 
