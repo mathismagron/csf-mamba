@@ -24,6 +24,6 @@ export PYTHONPATH="$SCRATCH/csf-distill/msda_site${PYTHONPATH:+:$PYTHONPATH}"
 cd "$REPO"
 echo "== commit $(git rev-parse --short HEAD) ($(git status --porcelain | wc -l) fichiers modifiés) | job $SLURM_JOB_ID"
 nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu --format=csv,noheader
-python -c "import MultiScaleDeformableAttention as m; print('MSDA :', m.__file__)"
+python -c "import torch, MultiScaleDeformableAttention as m; print('MSDA :', m.__file__)"
 python -u -m scripts.measure_efficiency --teacher-root "$PERASCD" --teacher-ckpt "$TCKPT" --out "$OUT"
 echo "== résultats : $OUT"
