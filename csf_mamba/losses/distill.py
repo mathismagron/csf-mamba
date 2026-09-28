@@ -95,3 +95,47 @@ class DistillLoss(nn.Module):
                 total = total + (kl * mask).sum() / denom
             terms["kd_sem"] = self.lambda_sem * T * T * total / 2
         return terms
+
+
+def _channel_layer_norm(x: torch.Tensor) -> torch.Tensor:
+    """LayerNorm sans paramètres sur la dimension des canaux, pixel par pixel."""
+    mu = x.mean(1, keepdim=True)
+    var = x.var(1, keepdim=True, unbiased=False)
+    return (x - mu) / torch.sqrt(var + 1e-5)
+
+
+class FeatureDistillLoss(nn.Module):
+    """KD de features (étape 4) : pour chaque étage retenu et chaque date,
+    1 − cos( LN(A_i · f_élève), LN(f_professeur) ), moyennée sur les pixels.
+
+    * A_i : convolution 1×1 C_élève -> C_professeur, **hors du modèle** : les
+      adaptateurs sont jetés à l'inférence, l'élève garde ses 16,48 M paramètres ;
+      ils sont entraînés avec lui (groupe d'optimiseur à part) et sauvés dans last.pt.
+    * LN sans paramètres sur les canaux, des deux côtés : le cosinus devient une
+      corrélation de Pearson entre canaux, insensible à l'échelle et au biais propres
+      aux features du ViT-G (normes très différentes d'un étage à l'autre).
+    * Étages 0..3 = 1/4, 1/8, 1/16, 1/32 ; mêmes tailles spatiales chez les deux
+      modèles (vérifié ; sinon l'élève est ramené à la taille du professeur).
+    """
+
+    def __init__(self, student_channels, stages, teacher_dim: int = 1024, weight: float = 1.0):
+        super().__init__()
+        self.stages = tuple(int(s) for s in stages)
+        if not self.stages or any(s not in range(len(student_channels)) for s in self.stages):
+            raise ValueError(f"étages invalides : {stages}")
+        self.weight = weight
+        self.adapters = nn.ModuleDict({
+            str(s): nn.Conv2d(student_channels[s], teacher_dim, kernel_size=1)
+            for s in self.stages})
+
+    def forward(self, enc_t1, enc_t2, teach_t1, teach_t2) -> dict:
+        terms = []
+        for s in self.stages:
+            for fs, ft in ((enc_t1[s], teach_t1[s]), (enc_t2[s], teach_t2[s])):
+                z = self.adapters[str(s)](fs.float())
+                if z.shape[-2:] != ft.shape[-2:]:
+                    z = F.interpolate(z, size=ft.shape[-2:], mode="bilinear", align_corners=False)
+                cos = F.cosine_similarity(_channel_layer_norm(z),
+                                          _channel_layer_norm(ft.float()), dim=1, eps=1e-6)
+                terms.append((1 - cos).mean())
+        return {"kd_feat": self.weight * torch.stack(terms).mean()}

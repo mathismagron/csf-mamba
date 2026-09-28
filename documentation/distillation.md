@@ -412,6 +412,16 @@ sbatch scripts/teacher/eval_perascd.sbatch         # 0b : ~1 h GPU (compile l'op
 
   **Décision (même règle) : configuration « KD logits » = λ_chg = 8, λ_sem = 1, T_sem = 2, masque `all`.** À noter pour l'article : `changed` est équivalent sur la val ; le choix est dicté par la règle pré-enregistrée, pas par un écart significatif.
 
+  **Ordre retenu (28 sept.)** : confirmation sur test de la KD logits **tout de suite** (10 runs `MODE=confirm`, graines 1–5 : `kdchg-l8` pour l'ablation et `kdlogits` = config retenue), code de l'étape 4 écrit pendant qu'ils tournent ; la config features, si elle est retenue, sera confirmée dans une vague à part. Analyse : `scripts/analyze_confirm.py` (baseline = 7 graines de référence tronquées à 120 époques ; Welch, apparié sur les graines communes, IC 95 %, fraction d'écart comblée avec le professeur à 26,1079 sous notre protocole). Vérifié sur la baseline réelle : 23,899 ± 0,149 (max), 23,646 ± 0,218 (finale).
+
+- 28 sept., **code de l'étape 4 (KD de features, professeur en ligne)** :
+  - `csf_mamba/distill/online_teacher.py` : `OnlineTeacherEncoder`, encodeur seul du professeur (DINOv2 ViT-G/16 + ViT-Adapter, décodeur jeté), même chargement que l'étape 0 (strict, renommage `cagm`), autocast fp16, normalisation PerA appliquée aux images **augmentées de l'élève** (aucune correspondance de vue à gérer), deux dates en un passage, toujours en `eval`.
+  - `FeatureDistillLoss` (`csf_mamba/losses/distill.py`) : adaptateur 1×1 par étage (hors modèle : l'élève garde 16,48 M paramètres ; groupe d'optimiseur à part ; sauvé dans `last.pt`), 1 − cos après LayerNorm sans paramètres sur les canaux, moyenne sur étages × dates.
+  - `CSFMamba.return_encoder_feats` (défaut False) expose les 4 étages de l'encodeur ; `train.py` : `--lambda-kd-feat`, `--kd-feat-stages`, `--teacher-root`, `--teacher-ckpt`, `--teacher-arch`, `--teacher-msda` ; sbatch : `LKD_FEAT`, `KD_FEAT_STAGES`, MSDA compilé dans le job (dossier local, venv partagé intact).
+  - Tests CPU (`tests/test_distill_feat.py`) : perte nulle quand le professeur égale la sortie de l'adaptateur, invariante à échelle/biais du professeur, ≈ 1 pour des features indépendantes, gradients vers l'élève et les adaptateurs, pas vers les étages non distillés ; drapeau du modèle sans effet sur les autres sorties ; professeur ViT-B aléatoire : 4 échelles aux tailles de l'élève, fp16, sans gradient. Entraînement CPU de bout en bout (logits + features, 2 époques, puis reprise) : `kd_feat` présent et sommé.
+  - **Non-régression refaite après ces modifications** : entraînement sans KD toujours identique à l'octet près au commit `ab8b1fe` (logs, `metrics.csv`, `best.pt`, `last.pt`).
+  - Reste à mesurer sur Narval (essai de 2 époques) : compilation MSDA dans le venv de l'élève, durée d'une époque, mémoire avec ViT-G + élève sur A100 40 Go.
+
   **Prudence avant le test.** Sur la val, le témoin fait 23,61 et la meilleure KD 26,75. Si l'écart se transposait tel quel au test (témoin 23,90), l'élève dépasserait le professeur (26,11) : c'est possible — l'élève voit 8 vues D4 du professeur et la vérité — mais le biais « professeur entraîné sur la val » joue ici dans le sens favorable. Seule la confirmation sur test le dira.
 
 Ce que `eval_perascd.py` mesure en un passage, pour fp32, fp16 et bf16 :

@@ -19,7 +19,7 @@ from csf_mamba.datasets.transforms import train_transform
 from csf_mamba.ema import ModelEMA
 from csf_mamba.evaluation.metrics import SCDEvaluator, SCDMetrics
 from csf_mamba.losses.composite import CSFMambaLoss
-from csf_mamba.losses.distill import DistillLoss
+from csf_mamba.losses.distill import DistillLoss, FeatureDistillLoss
 from csf_mamba.model import CSFMamba, count_parameters
 
 
@@ -140,6 +140,14 @@ def parse_args():
     p.add_argument("--kd-change-target", default="teacher", choices=["teacher", "gt", "gt_smooth"],
                    help="Contrôles : cible du terme de changement remplacée par la vérité "
                         "(gt) ou la vérité lissée à la résolution du professeur (gt_smooth).")
+    # Étape 4 : KD de features, professeur en ligne (encodeur seul).
+    p.add_argument("--lambda-kd-feat", type=float, default=0.0)
+    p.add_argument("--kd-feat-stages", default="1,2",
+                   help="Étages 0..3 (1/4, 1/8, 1/16, 1/32) distillés, séparés par des virgules.")
+    p.add_argument("--teacher-root", default=None, help="Code legacy de PerASCD (third_party/PerASCD).")
+    p.add_argument("--teacher-ckpt", default=None, help="Checkpoint publié ('none' : poids aléatoires, tests).")
+    p.add_argument("--teacher-arch", default="ViT-G/16/1024", choices=["ViT-G/16/1024", "ViT-B/16"])
+    p.add_argument("--teacher-msda", default="auto", choices=["auto", "cuda", "pytorch"])
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--output", default="runs/dev")
     p.add_argument("--resume", default="auto",
@@ -216,13 +224,31 @@ def main():
     if kd_loss.active and not args.kd_cache:
         raise SystemExit("λ de distillation > 0 sans --kd-cache")
     if args.kd_cache and not kd_loss.active:
-        raise SystemExit("--kd-cache donné mais tous les λ de distillation valent 0")
+        raise SystemExit("--kd-cache donné mais tous les λ de distillation des logits valent 0")
+    teacher = feat_loss = None
+    if args.lambda_kd_feat > 0:
+        if not (args.teacher_root and args.teacher_ckpt):
+            raise SystemExit("λ_feat > 0 sans --teacher-root / --teacher-ckpt")
+        from csf_mamba.distill.online_teacher import OnlineTeacherEncoder
+        teacher = OnlineTeacherEncoder(args.teacher_root, args.teacher_ckpt, arch=args.teacher_arch,
+                                       msda=args.teacher_msda).to(device)
+        stages = tuple(int(x) for x in args.kd_feat_stages.split(",") if x.strip())
+        feat_loss = FeatureDistillLoss(model.encoder.channels, stages, teacher.dim,
+                                       args.lambda_kd_feat).to(device)
+        model.return_encoder_feats = True
+        n_ad = sum(p.numel() for p in feat_loss.parameters())
+        print(f"KD de features : λ={args.lambda_kd_feat} étages={stages} | professeur en ligne "
+              f"{teacher.info} | adaptateurs {n_ad} paramètres (hors modèle)")
     if kd_loss.active:
         print(f"Distillation : changement λ={args.lambda_kd_change} T={args.kd_t_change} "
               f"cible={args.kd_change_target} | "
               f"sémantique λ={args.lambda_kd_sem} T={args.kd_t_sem} masque={args.kd_sem_mask} | "
               f"cache {args.kd_cache}")
     optimizer = _build_optimizer(model, args)
+    if feat_loss is not None:
+        # Groupe à part, mêmes hyperparamètres que le groupe par défaut ; ajouté
+        # AVANT le scheduler et la reprise, pour que leurs états s'appliquent aussi.
+        optimizer.add_param_group({"params": list(feat_loss.parameters())})
     ema = ModelEMA(model, args.ema_decay, args.ema_warmup) if args.ema_decay > 0 else None
     if ema is not None:
         print(f"EMA active : decay {args.ema_decay}, warmup {args.ema_warmup} itérations")
@@ -266,6 +292,10 @@ def main():
     if resume_path and resume_path.exists():
         ckpt = torch.load(resume_path, map_location=device)
         model.load_state_dict(ckpt["model"])
+        if feat_loss is not None:
+            if "kd_feat" not in ckpt:
+                raise SystemExit(f"⛔ {resume_path} n'a pas d'adaptateurs de KD de features.")
+            feat_loss.load_state_dict(ckpt["kd_feat"])
         optimizer.load_state_dict(ckpt["optimizer"])
         scheduler.load_state_dict(ckpt["scheduler"])
         start_epoch = ckpt["epoch"] + 1
@@ -317,6 +347,11 @@ def main():
             losses = criterion(outputs, _targets_from_batch(batch), apply_sek=apply_sek)
             if kd_loss.active:
                 kd_terms = kd_loss(outputs, batch["kd_teacher"], batch["change"])
+                losses.update(kd_terms)
+                losses["total"] = losses["total"] + sum(kd_terms.values())
+            if feat_loss is not None:
+                t1_feats, t2_feats = teacher(batch["img_t1"], batch["img_t2"])
+                kd_terms = feat_loss(outputs["enc_t1"], outputs["enc_t2"], t1_feats, t2_feats)
                 losses.update(kd_terms)
                 losses["total"] = losses["total"] + sum(kd_terms.values())
 
@@ -379,6 +414,8 @@ def main():
         }
         if ema is not None:
             ckpt["ema"] = ema.state_dict()
+        if feat_loss is not None:
+            ckpt["kd_feat"] = feat_loss.state_dict()
         if metrics.sek > best_sek:
             best_sek = metrics.sek
             ckpt["best_sek"] = best_sek

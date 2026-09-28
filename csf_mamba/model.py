@@ -101,6 +101,7 @@ class CSFMamba(nn.Module):
     def forward(self, img_t1: torch.Tensor, img_t2: torch.Tensor) -> dict:
         feats_t1 = self.encoder(img_t1)
         feats_t2 = self.encoder(img_t2)
+        enc_t1, enc_t2 = feats_t1, feats_t2
 
         # Attention bi-temporelle avant la fusion (liste vide par défaut).
         if self.attn_stages:
@@ -118,7 +119,7 @@ class CSFMamba(nn.Module):
         bcd = self.binary_decoder(fused)
         scd = self.semantic_decoder(bcd["features"], bcd["change_maps"])
 
-        return {
+        out = {
             "bcd": bcd["y_bcd"],
             "change_maps": bcd["change_maps"],
             "sem_t1": scd["sem_t1"],
@@ -126,6 +127,12 @@ class CSFMamba(nn.Module):
             "feat_t1": scd["feat_t1"],
             "feat_t2": scd["feat_t2"],
         }
+        # KD de features (étape 4) : sorties brutes des 4 étages de l'encodeur, avant
+        # l'attention bi-temporelle optionnelle. Désactivé par défaut : sorties et
+        # calcul inchangés pour tout le reste.
+        if getattr(self, "return_encoder_feats", False):
+            out["enc_t1"], out["enc_t2"] = list(enc_t1), list(enc_t2)
+        return out
 
 
 def count_parameters(model: nn.Module) -> dict:
