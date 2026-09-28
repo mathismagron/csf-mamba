@@ -382,6 +382,22 @@ sbatch scripts/teacher/eval_perascd.sbatch         # 0b : ~1 h GPU (compile l'op
   - Aucun `nan`, aucune trace d'erreur, aucune reprise dans les 8 logs.
   - Le cache est indexé **par identifiant** (`ids.txt`), pas par position : le sous-ensemble 2 671 lit les bonnes lignes.
   - Seuil +0,36 pt : il avait été calculé pour 5 graines sur le **test** (σ 0,18) ; sur la val à 2 graines, σ poolé vaut 0,40. Au criblage c'est un seuil de tri, pas un test de conclusion.
+- 28 sept., **vague 2 : 8/8 COMPLETED** (jobs 4110404–4110433, commit 51205c5 — seule la doc diffère de bf164d4 ; 4 h 50 – 4 h 55 par run, ≈39 A100-h). Logs propres (pas de `nan`, pas de reprise), `cible=` conforme, perte au pas 0 identique au témoin de même graine. Analyse jointe des 16 runs, un seul témoin : `logs/screen_w2/analyse_all/`. SeK val (pt), σ poolé 0,34 (max) / 0,35 (finale), df = 8 :
+
+  | bras | max | Δ max | Δ par graine (s1 ; s2) | p | Δ finale | p |
+  |---|---:|---:|---|---:|---:|---:|
+  | témoin | 23,61 | — | — | — | — | — |
+  | contrôle `gt`, λ = 2 | 23,65 | +0,04 | +0,20 ; −0,13 | 0,92 | −0,48 | 0,21 |
+  | contrôle `gt_smooth`, λ = 2 | 23,59 | −0,02 | +0,20 ; −0,24 | 0,95 | −0,19 | 0,59 |
+  | KD λ = 0,5 | 24,20 | +0,59 | +0,41 ; +0,76 | 0,12 | +0,76 | 0,06 |
+  | KD λ = 1 | 24,86 | +1,25 | +1,14 ; +1,36 | 0,006 | +1,41 | 0,004 |
+  | KD λ = 2 | 25,45 | +1,83 | +1,90 ; +1,77 | 0,001 | +2,06 | < 0,001 |
+  | KD λ = 4 | 25,53 | +1,92 | +1,89 ; +1,95 | < 0,001 | +2,23 | < 0,001 |
+  | KD λ = 8 | **25,95** | **+2,33** | +2,83 ; +1,84 | < 0,001 | **+2,53** | < 0,001 |
+
+  **Lecture.** (1) **Les deux contrôles n'apportent rien** : ni une BCE supplémentaire de poids 2 sur la vérité, ni des cibles aux bords adoucis comme celles du professeur. Ils accélèrent le début (≈ +0,5 pt vers l'époque 15–20) puis passent sous le témoin après l'époque 50 : même surapprentissage tardif que lui. **Le gain vient donc du contenu des cibles du professeur**, pas de la forme ni du poids de la perte. Le biais « le professeur a vu la val » ne peut pas expliquer un écart de ≈ 1,9 pt entre KD et contrôles au même λ, mais la confirmation sur test reste nécessaire. (2) **Plateau probable à partir de λ = 2** : 1,83 / 1,92 / 2,33 pour λ = 2 / 4 / 8, écarts entre eux dans le bruit (erreur-type d'une moyenne de bras ≈ 0,24) ; λ = 8 a la meilleure moyenne mais la plus grande dispersion entre graines. (3) Avec KD, SeK finale ≈ max : la KD supprime le déclin tardif du témoin.
+
+  **Décision (règle du criblage : meilleur max moyen sur val) : λ_chg = 8** comme base de l'étape 3. λ = 16 ajouté à la vague 3 pour savoir si le plateau est atteint (le meilleur λ est encore au bord de la grille).
 
 Ce que `eval_perascd.py` mesure en un passage, pour fp32, fp16 et bf16 :
 
