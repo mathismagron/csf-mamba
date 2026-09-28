@@ -24,9 +24,11 @@
 #   # + KD sémantique (étape 3)
 #   SEED=1 LKD_CHG=1 LKD_SEM=1 KD_T_SEM=2 KD_MASK=all TAG=kdsem-t2-all \
 #       sbatch --export=ALL,SEED,LKD_CHG,LKD_SEM,KD_T_SEM,KD_MASK,TAG scripts/train_kd_second.sbatch
-#   # + KD de features, professeur en ligne (étape 4) : walltime à allonger
+#   # + KD de features, professeur en ligne (étape 4) : ≈11 h en criblage (330 s/époque,
+#   # job 4176343) -> walltime allongé ; compiler d'abord MSDA une fois :
+#   #   sbatch scripts/teacher/build_msda_student.sbatch
 #   SEED=1 LKD_CHG=8 LKD_SEM=1 KD_T_SEM=2 KD_MASK=all LKD_FEAT=1 KD_FEAT_STAGES=1,2 TAG=kdfeat-s12 \
-#       sbatch --time=24:00:00 --export=ALL,SEED,LKD_CHG,LKD_SEM,KD_T_SEM,KD_MASK,LKD_FEAT,KD_FEAT_STAGES,TAG \
+#       sbatch --time=16:00:00 --export=ALL,SEED,LKD_CHG,LKD_SEM,KD_T_SEM,KD_MASK,LKD_FEAT,KD_FEAT_STAGES,TAG \
 #       scripts/train_kd_second.sbatch
 #
 # Durée mesurée (vague 1, 27 sept.) : 120 époques en MODE=screen = 4 h 44 – 5 h 07
@@ -121,16 +123,22 @@ if [ "$LKD_FEAT" != "0" ]; then
     PERASCD="$REPO/third_party/PerASCD"
     TCKPT="$SCRATCH/csf-distill/teacher/ckpt/PerAChain_40e_mIoU74.33_Sek26.11_Fscd66.41_OA88.70.pth"
     [ -d "$PERASCD/models" ] && [ -f "$TCKPT" ] || { echo "⛔ professeur absent : $PERASCD / $TCKPT"; exit 1; }
-    # Opérateur MSDA compilé dans le job, dans un dossier local au job (≈5 min) :
-    # le venv partagé de l'élève n'est pas modifié, et deux jobs simultanés ne
-    # compilent jamais au même endroit.
-    echo "== opérateur MultiScaleDeformableAttention (venv élève, local au job)"
+    # Opérateur MSDA : build partagé de scripts/teacher/build_msda_student.sbatch
+    # s'il s'importe, sinon compilé dans le job, dans un dossier local (≈12 min) —
+    # le venv partagé de l'élève n'est jamais modifié.
+    echo "== opérateur MultiScaleDeformableAttention (venv élève)"
     t0=$(date +%s)
-    BUILD="$SLURM_TMPDIR/msda_src"; SITE="$SLURM_TMPDIR/msda_site"
-    cp -r "$PERASCD/models/pera_layers/vit_adapter_layers/ops" "$BUILD"
-    rm -rf "$BUILD/build" "$BUILD/dist" "$BUILD"/*.egg-info
-    ( cd "$BUILD" && TORCH_CUDA_ARCH_LIST="8.0" MAX_JOBS=8 \
-        pip install -q --no-index --no-build-isolation --no-deps --target "$SITE" . )
+    SITE="$SCRATCH/csf-distill/msda_site"
+    if PYTHONPATH="$SITE" python -c "import torch, MultiScaleDeformableAttention" 2>/dev/null; then
+        echo "   build partagé : $(head -1 "$SITE/BUILD_INFO.txt" 2>/dev/null)"
+    else
+        echo "   pas de build partagé utilisable : compilation dans le job"
+        BUILD="$SLURM_TMPDIR/msda_src"; SITE="$SLURM_TMPDIR/msda_site"
+        cp -r "$PERASCD/models/pera_layers/vit_adapter_layers/ops" "$BUILD"
+        rm -rf "$BUILD/build" "$BUILD/dist" "$BUILD"/*.egg-info
+        ( cd "$BUILD" && TORCH_CUDA_ARCH_LIST="8.0" MAX_JOBS=12 \
+            pip install -q --no-index --no-build-isolation --no-deps --target "$SITE" . )
+    fi
     export PYTHONPATH="$SITE${PYTHONPATH:+:$PYTHONPATH}"
     python -c "import torch, MultiScaleDeformableAttention as m; print('   compilé :', m.__file__)"
     echo "   $(( $(date +%s) - t0 )) s ; PerASCD $(git -C "$PERASCD" rev-parse --short HEAD)"

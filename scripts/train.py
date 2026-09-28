@@ -6,6 +6,7 @@ masqué. Lancer via `python -m scripts.train ...` (voir train.sbatch).
 """
 
 import argparse
+import random
 import time
 from pathlib import Path
 
@@ -230,12 +231,18 @@ def main():
         if not (args.teacher_root and args.teacher_ckpt):
             raise SystemExit("λ_feat > 0 sans --teacher-root / --teacher-ckpt")
         from csf_mamba.distill.online_teacher import OnlineTeacherEncoder
+        # Construire le professeur (initialisation aléatoire avant chargement) et les
+        # adaptateurs consomme les générateurs aléatoires ; sans restauration, l'ordre
+        # des données et les tirages d'augmentation différeraient des autres bras de
+        # même graine (appariement perdu : pas 0 à 0,7222 au lieu de 0,6778, job 4176343).
+        rng_state = _save_rng()
         teacher = OnlineTeacherEncoder(args.teacher_root, args.teacher_ckpt, arch=args.teacher_arch,
                                        msda=args.teacher_msda).to(device)
         stages = tuple(int(x) for x in args.kd_feat_stages.split(",") if x.strip())
         feat_loss = FeatureDistillLoss(model.encoder.channels, stages, teacher.dim,
                                        args.lambda_kd_feat).to(device)
         model.return_encoder_feats = True
+        _restore_rng(rng_state)
         n_ad = sum(p.numel() for p in feat_loss.parameters())
         print(f"KD de features : λ={args.lambda_kd_feat} étages={stages} | professeur en ligne "
               f"{teacher.info} | adaptateurs {n_ad} paramètres (hors modèle)")
@@ -471,6 +478,22 @@ def _build_optimizer(model, args):
         print(f"  groupe « {g['name']} » : {len(g['params'])} tenseurs, "
               f"{n_par / 1e6:.2f} M params, lr {g['lr']:.2e}, wd {g['weight_decay']}")
     return torch.optim.AdamW(groupes, lr=args.lr, weight_decay=0.01)
+
+
+def _save_rng():
+    import numpy as np
+    return {"torch": torch.get_rng_state(), "python": random.getstate(),
+            "numpy": np.random.get_state(),
+            "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None}
+
+
+def _restore_rng(state):
+    import numpy as np
+    torch.set_rng_state(state["torch"])
+    random.setstate(state["python"])
+    np.random.set_state(state["numpy"])
+    if state["cuda"] is not None:
+        torch.cuda.set_rng_state_all(state["cuda"])
 
 
 def _to_fp32(v):
