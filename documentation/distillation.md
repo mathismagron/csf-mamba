@@ -424,6 +424,22 @@ sbatch scripts/teacher/eval_perascd.sbatch         # 0b : ~1 h GPU (compile l'op
 - 28 sept., **essai de bout en bout de la KD de features** (job 4176343, commit 4ff0e36, criblage, 2 époques, logits retenus + features aux étages 1/8, 1/16, 1/32, λ_feat = 1) : MSDA compilé dans le venv de l'élève (**717 s**) ; professeur chargé strictement (6 clés `cagm` renommées, époque 40), encodeur seul **539,1 M** paramètres ; adaptateurs 1,38 M (hors modèle) ; `kd_feat` 1,00 → 0,74 en 2 époques. **330 s d'entraînement + 8 s de val par époque** (contre ≈139 s sans features : ×2,4), **pic 17,4 Go** → 120 époques ≈ 11,3 h avec la compilation : trop près du walltime de 12 h, runs de features lancés avec `--time=16:00:00`.
   - **Défaut trouvé et corrigé : appariement perdu.** Perte au pas 0 = 0,7222 au lieu de 0,6778 pour tous les runs seed 1 : construire le professeur (initialisation aléatoire avant chargement) et les adaptateurs consommait le générateur aléatoire, donc changeait l'ordre des données et les augmentations. `train.py` sauve et restaure désormais les états torch / python / numpy / CUDA autour de cette construction ; vérifié en CPU (pas 0 identique avec et sans features) ; sans KD toujours identique à `ab8b1fe`.
   - **Compilation MSDA mutualisée** : `scripts/teacher/build_msda_student.sbatch` (une fois, remplacement atomique dans `$SCRATCH/csf-distill/msda_site`) ; le sbatch d'entraînement l'importe, ou recompile localement si le build partagé manque.
+  - **Efficience élève / professeur, même job, même A100** (job 4181178, commit 945879a, `scripts/measure_efficiency.py`, 512², chauffe 10, médiane de 50 ; JSON `checks/efficiency_4181178.json`) :
+
+    | | élève (point d'efficience) | professeur PerASCD | rapport |
+    |---|---:|---:|---:|
+    | paramètres | 16,48 M | 548,17 M | 33,3× |
+    | GMACs / paire, compteur aten (torch.utils.flop_counter, sans extensions CUDA) | 29,48 | 1 509,74 | **51,2×** |
+    | GMACs / paire, fvcore (convention du projet) | 31,42 | échec du traçage JIT (interpolation bicubique) | — |
+    | latence lot 8, fp32 | 129,4 ms (61,8 paires/s) | 1 613,4 ms (5,0) | 12,5× |
+    | latence lot 8, bf16 | 113,7 ms (70,4) | 561,1 ms (14,3) | 4,9× |
+    | latence lot 8, fp16 | 112,6 ms (71,1) | 487,1 ms (16,4) | 4,3× |
+    | latence lot 1, fp32 | 26,3 ms | 268,5 ms | 10,2× |
+    | latence lot 1, bf16 | 30,2 ms | 125,6 ms | 4,2× |
+    | mémoire crête lot 8 fp32 / bf16 | 1,96 / 1,82 Go | 25,09 / 26,09 Go | 12,8× / 14,3× |
+    | mémoire crête lot 1 fp32 / bf16 | 0,31 / 0,31 Go | 5,27 / 6,29 Go | 17,0× / 20,3× |
+
+    Lecture : (1) **le rapport de calcul à compteur égal est 51×** (et non « ≈48× », qui mélangeait deux compteurs) ; le compteur aten ignore le scan sélectif de l'élève (31,42 − 29,48 ≈ 1,9 GMACs, ~6 %) et l'opérateur déformable du professeur : les deux omissions vont dans le même sens et sont petites. (2) L'élève reproduit **exactement** la latence du README (129 / 114 ms, 10 sept.) : protocole stable. (3) L'avantage en latence (4–12×) est bien plus faible que l'avantage en calcul (51×) : le professeur profite des tensor cores en demi-précision (fp32 → fp16 : ÷3,3), l'élève, limité par les accès mémoire, presque pas (÷1,15) ; au lot 1, bf16 est même plus lent que fp32 chez l'élève (30,2 contre 26,3 ms). À rapporter tel quel : c'est la latence qui compte pour le déploiement, et elle ne suit pas les GMACs.
   - **Criblage de l'étape 4 (décidé le 28 sept.)**, au-dessus de la config logits retenue, repère `kdsem-l8-t2-all` (vague 3, même graines) : étages {1/8, 1/16} et {1/8, 1/16, 1/32} à λ_feat = 1, plus {1/8, 1/16} à λ_feat = 4 — ajouté parce qu'à λ = 1 le terme pèse ≈ 0,8 contre ≈ 5 pour la perte totale, et qu'un « pas de gain » à ce seul poids ne conclurait rien. 2 graines, 6 runs, ≈ 68 A100-h. Même règle : meilleur max moyen sur val, incrément ≥ +0,36 pt.
 
   **Prudence avant le test.** Sur la val, le témoin fait 23,61 et la meilleure KD 26,75. Si l'écart se transposait tel quel au test (témoin 23,90), l'élève dépasserait le professeur (26,11) : c'est possible — l'élève voit 8 vues D4 du professeur et la vérité — mais le biais « professeur entraîné sur la val » joue ici dans le sens favorable. Seule la confirmation sur test le dira.
