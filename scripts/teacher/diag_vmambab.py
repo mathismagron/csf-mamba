@@ -24,6 +24,9 @@ de `train_Encoders.py`) :
             `datasets/RS_ST.py`, classes `Data` / `Data_test`) ;
   imagenet  moyenne/écart-type ImageNet sur [0, 1] (prétraining VMamba) ;
   raw       images [0, 1] sans normalisation.
+  dsstats   moyenne/écart-type commentés dans DataPerAAUG (l. 548-549), sur [0, 1].
+
+Job 4263233 (256 paires) : pera 22.744, pertime 23.144, imagenet 23.858, raw 10.275.
 
     python scripts/teacher/diag_vmambab.py --perascd-root third_party/PerASCD \\
         --checkpoint .../vmambaB_42e_...pth --data-root $SLURM_TMPDIR/SECOND --pairs 256 --out diag.json
@@ -98,6 +101,9 @@ def main():
                     torch.tensor([111.07, 114.04, 118.18]) / 255, torch.tensor([49.41, 47.01, 47.94]) / 255),
         "imagenet": (torch.tensor([0.485, 0.456, 0.406]), torch.tensor([0.229, 0.224, 0.225])) * 2,
         "raw": (torch.zeros(3), torch.ones(3)) * 2,
+        # troisième jeu, commenté dans DataPerAAUG (RS_ST.py l. 548-549)
+        "dsstats": (torch.tensor([0.4182007312774658, 0.4214799106121063, 0.3991275727748871]),
+                    torch.tensor([0.28774282336235046, 0.27541765570640564, 0.2764017581939697])) * 2,
     }
     real_forward = ev.forward
     report["norms"] = {}
