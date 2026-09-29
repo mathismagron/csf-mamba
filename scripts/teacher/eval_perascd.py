@@ -50,6 +50,21 @@ from csf_mamba.evaluation.metrics import SCDEvaluator, metrics_from_hist  # noqa
 NUM_CLASSES = 7                      # 0 = non-changé, 1..6 = classes réelles
 PERA_MEAN = (0.3585, 0.3741, 0.3155)  # legacy/datasets/RS_ST.py, DataPerAAUG
 PERA_STD = (0.1483, 0.1283, 0.1198)
+# Le professeur VMamba-B a été entraîné en normalisation ImageNet (sur [0, 1]), pas PerA :
+# sous PerA il tombe à 23,73 SeK ; sous ImageNet il redonne exactement les valeurs de son
+# checkpoint (25,314 / 65,614 / 74,014 ; diag_vmambab.py --norms, job 4263826).
+IMAGENET_MEAN = (0.485, 0.456, 0.406)
+IMAGENET_STD = (0.229, 0.224, 0.225)
+NORM_BY_ARCH = {"ViT-G/16/1024": ("pera", PERA_MEAN, PERA_STD), "ViT-B/16": ("pera", PERA_MEAN, PERA_STD),
+                "vmambaB": ("imagenet", IMAGENET_MEAN, IMAGENET_STD)}
+# normalisation active, fixée par build_teacher() selon l'architecture
+NORM = {"name": "pera", "mean": PERA_MEAN, "std": PERA_STD}
+
+
+def set_normalization(arch):
+    name, mean, std = NORM_BY_ARCH[arch]
+    NORM.update(name=name, mean=mean, std=std)
+    return dict(NORM)
 # Valeurs du journal TensorBoard publié, époque 40 (celle du checkpoint).
 PUBLISHED = {"sek": 0.261087, "fscd": 0.664138}
 # Professeur VMamba-B publié par les mêmes auteurs (vmambaB_42e_mIoU74.01_Sek25.31_Fscd65.61_OA88.37.pth) :
@@ -121,7 +136,9 @@ class NativeOutput(torch.nn.Module):
 
 def build_teacher(PerASCD, root: Path, arch: str, checkpoint: str):
     """-> (modèle, infos checkpoint). Sorties (changement, sém. A, sém. B) à 512 ;
-    `model.output_size = 128` donne la résolution native (cache)."""
+    `model.output_size = 128` donne la résolution native (cache). Fixe aussi la
+    normalisation d'entrée propre à l'architecture (NORM, utilisée par forward())."""
+    set_normalization(arch)
     if arch == "vmambaB":
         # `models/Encoders.py` (branche legacy) importe `models.SatMAE_temporal`, absent
         # du dépôt publié et utilisé seulement par l'encodeur SatMAE : module factice.
@@ -151,7 +168,7 @@ def build_teacher(PerASCD, root: Path, arch: str, checkpoint: str):
         model = PerASCD(in_channels=3, num_classes=NUM_CLASSES, input_size=448, output_size=512,
                         arch=arch, droppath=0.0, pretrained_pera_path=None)
         target = model
-    info = {"path": checkpoint, "arch": arch}
+    info = {"path": checkpoint, "arch": arch, "normalization": dict(NORM)}
     if checkpoint.lower() != "none":
         ckpt = torch.load(checkpoint, map_location="cpu", weights_only=False)
         state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
@@ -224,8 +241,8 @@ class SecondRaw(Dataset):
 
 
 def normalize(x):
-    m = torch.tensor(PERA_MEAN, device=x.device).view(1, 3, 1, 1)
-    s = torch.tensor(PERA_STD, device=x.device).view(1, 3, 1, 1)
+    m = torch.tensor(NORM["mean"], device=x.device).view(1, 3, 1, 1)
+    s = torch.tensor(NORM["std"], device=x.device).view(1, 3, 1, 1)
     return (x - m) / s
 
 
@@ -390,7 +407,7 @@ def main():
     report = {
         "step": 0, "date": time.strftime("%Y-%m-%d %H:%M:%S"), "host": platform.node(),
         "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
-        "torch": torch.__version__, "cuda": torch.version.cuda, "arch": args.arch,
+        "torch": torch.__version__, "cuda": torch.version.cuda, "arch": args.arch, "normalization": dict(NORM),
         "params_M": round(n_params / 1e6, 2), "checkpoint": ckpt_info,
         "msda": {"compiled_available": compiled, "used": "pytorch" if _MSDA.use_pytorch else "cuda"},
         "n_pairs": len(loader.dataset), "limit": args.limit, "published": PUBLISHED_BY_ARCH[args.arch], "results": {},

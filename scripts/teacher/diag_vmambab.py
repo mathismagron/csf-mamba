@@ -112,10 +112,10 @@ def main():
         ma, sa, mb, sb = (t.view(1, 3, 1, 1).cuda() for t in NORMS[name])
 
         def fwd(model_, a, b, prec, device, ma=ma, sa=sa, mb=mb, sb=sb):
-            # ev.forward normalise en PerA : on lui passe des images dont la
-            # normalisation PerA redonne exactement la normalisation testée.
-            pm = torch.tensor(ev.PERA_MEAN, device=a.device).view(1, 3, 1, 1)
-            ps = torch.tensor(ev.PERA_STD, device=a.device).view(1, 3, 1, 1)
+            # ev.forward applique ev.NORM : on lui passe des images dont cette
+            # normalisation redonne exactement la normalisation testée.
+            pm = torch.tensor(ev.NORM["mean"], device=a.device).view(1, 3, 1, 1)
+            ps = torch.tensor(ev.NORM["std"], device=a.device).view(1, 3, 1, 1)
             a2 = (a - ma) / sa * ps + pm
             b2 = (b - mb) / sb * ps + pm
             return real_forward(model_, a2, b2, prec, device)

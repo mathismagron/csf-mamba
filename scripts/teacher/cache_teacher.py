@@ -163,7 +163,7 @@ def main():
     meta = {
         "created": time.strftime("%Y-%m-%d %H:%M:%S"), "split": args.split, "n_pairs": n,
         "arch": args.arch, "precision": args.precision, "msda": "pytorch" if ev._MSDA.use_pytorch else "cuda",
-        "checkpoint": meta_ckpt, "normalization": {"mean": ev.PERA_MEAN, "std": ev.PERA_STD},
+        "checkpoint": meta_ckpt, "normalization": dict(ev.NORM),
         "layout": {"shape": [n, CHANNELS, NATIVE, NATIVE], "dtype": "float16",
                    "channels": {"sem_t1_logits": [0, 7], "sem_t2_logits": [7, 14], "change_logit": [14, 15]},
                    "class_0": "non-changé : jamais cible de la CE du professeur, à exclure de la KL",
