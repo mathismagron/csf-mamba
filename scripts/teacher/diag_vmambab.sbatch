@@ -22,5 +22,5 @@ pip list 2>/dev/null | grep -i -E "^(mamba|causal|triton|torch |timm)" || true
 python -c "import torch, selective_scan_cuda as s; print('selective_scan_cuda :', s.__file__)"
 unzip -q "$SCRATCH/SECOND.zip" -x '*_COLORED/*' -d "$SLURM_TMPDIR"
 python -u scripts/teacher/diag_vmambab.py --perascd-root "$PERASCD" --checkpoint "$CKPT" \
-    --data-root "$SLURM_TMPDIR/SECOND" --pairs 256 \
+    --data-root "$SLURM_TMPDIR/SECOND" --pairs 256 ${DIAG_ARGS:-} \
     --out "$SCRATCH/csf-distill/checks/diag_vmambab_${SLURM_JOB_ID}.json"
