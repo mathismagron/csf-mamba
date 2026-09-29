@@ -116,7 +116,7 @@ def main():
              "delta", "ci95_lo", "ci95_hi", "welch_p", "paired_delta_mean", "paired_p",
              "gap_closed", "gap_closed_lo", "gap_closed_hi"]
     res = res[front + [c for c in res.columns if c not in front]]
-    res.to_csv(args.out / "confirm.csv", index=False, float_format="%.4f")
+    res.to_csv(args.out / "confirm.csv", index=False, float_format="%.6g")   # p-valeurs petites : pas d'arrondi à 4 décimales
     (args.out / "summary.json").write_text(json.dumps({
         "epochs": args.epochs, "teacher_sek": args.teacher_sek, "incomplete_runs": incomplete,
         "results": json.loads(res.to_json(orient="records"))}, indent=2, ensure_ascii=False))
