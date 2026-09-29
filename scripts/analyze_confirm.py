@@ -90,6 +90,9 @@ def main():
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--epochs", type=int, default=120)
     ap.add_argument("--teacher-sek", type=float, default=TEACHER_SEK)
+    ap.add_argument("--teacher-sek-for", action="append", default=[], metavar="TAG=SEK",
+                    help="professeur propre à un bras (p. ex. kdlogits-vmb=25.31) : sert à la "
+                         "fraction d'écart comblé de ce bras")
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
@@ -101,15 +104,16 @@ def main():
     runs.to_csv(args.out / "runs.csv", index=False, float_format="%.4f")
     incomplete = runs.loc[~runs.complete, ["run", "n_epochs"]].to_dict("records")
 
+    per_tag = {k: float(v) for k, v in (x.split("=", 1) for x in args.teacher_sek_for)}
     rows = []
     b = runs[runs.tag == "baseline"]
     for tag in sorted(set(runs.tag) - {"baseline"}):
         k = runs[runs.tag == tag]
         for metric in ("max_sek", "final_sek", "fscd_at_max", "miou_at_max"):
-            teacher = args.teacher_sek if metric in ("max_sek", "final_sek") else np.nan
+            teacher = per_tag.get(tag, args.teacher_sek) if metric in ("max_sek", "final_sek") else np.nan
             r = compare(k[metric].to_numpy(), b[metric].to_numpy(),
                         dict(zip(k.seed, k[metric])), dict(zip(b.seed, b[metric])), teacher)
-            r.update(tag=tag, metric=metric)
+            r.update(tag=tag, metric=metric, teacher_sek=teacher)
             rows.append(r)
     res = pd.DataFrame(rows)
     front = ["tag", "metric", "n_kd", "kd_mean", "kd_sd", "n_base", "base_mean", "base_sd",

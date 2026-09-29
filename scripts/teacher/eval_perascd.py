@@ -52,6 +52,11 @@ PERA_MEAN = (0.3585, 0.3741, 0.3155)  # legacy/datasets/RS_ST.py, DataPerAAUG
 PERA_STD = (0.1483, 0.1283, 0.1198)
 # Valeurs du journal TensorBoard publié, époque 40 (celle du checkpoint).
 PUBLISHED = {"sek": 0.261087, "fscd": 0.664138}
+# Professeur VMamba-B publié par les mêmes auteurs (vmambaB_42e_mIoU74.01_Sek25.31_Fscd65.61_OA88.37.pth) :
+# valeurs du nom de fichier, arrondies à 0,01 pt.
+PUBLISHED_BY_ARCH = {"ViT-G/16/1024": PUBLISHED, "ViT-B/16": PUBLISHED,
+                     "vmambaB": {"sek": 0.2531, "fscd": 0.6561}}
+ARCHS = ["ViT-G/16/1024", "ViT-B/16", "vmambaB"]
 TOL_PUBLISHED = 0.0005               # ± 0,05 pt
 TOL_CODES = 1e-4
 
@@ -62,7 +67,7 @@ def parse_args():
     p.add_argument("--checkpoint", required=True, help="chemin du .pth, ou 'none' (test)")
     p.add_argument("--data-root", required=True, help="SECOND au format ChangeMamba")
     p.add_argument("--split", default="test")
-    p.add_argument("--arch", default="ViT-G/16/1024", choices=["ViT-G/16/1024", "ViT-B/16"])
+    p.add_argument("--arch", default="ViT-G/16/1024", choices=ARCHS)
     p.add_argument("--precisions", default="fp32,fp16,bf16")
     p.add_argument("--msda", default="auto", choices=["auto", "cuda", "pytorch"])
     p.add_argument("--check-msda", action="store_true",
@@ -93,6 +98,74 @@ class _MSDA:
             return cls.core_pytorch(value, shapes_list, sampling_locations, attention_weights)
         return cls.cuda_fn.apply(value, shapes, level_start, sampling_locations,
                                  attention_weights, im2col)
+
+
+class NativeOutput(torch.nn.Module):
+    """Réseau `build_net` de leur dépôt (encodeurs non-PerA) construit à la résolution
+    native de son décodeur (output_size=128), suréchantillonné ici vers
+    `self.output_size` — exactement l'interpolation finale de leur forward (bilinéaire,
+    align_corners=False), mais réglable comme `PerASCD.output_size` pour le cache."""
+
+    def __init__(self, net, output_size=512):
+        super().__init__()
+        self.net, self.output_size = net, output_size
+
+    def forward(self, a, b):
+        outs = self.net(a, b)
+        if outs[0].shape[-1] == self.output_size:
+            return outs
+        size = (self.output_size, self.output_size)
+        return tuple(torch.nn.functional.interpolate(o, size, mode="bilinear", align_corners=False)
+                     for o in outs)
+
+
+def build_teacher(PerASCD, root: Path, arch: str, checkpoint: str):
+    """-> (modèle, infos checkpoint). Sorties (changement, sém. A, sém. B) à 512 ;
+    `model.output_size = 128` donne la résolution native (cache)."""
+    if arch == "vmambaB":
+        # `models/Encoders.py` (branche legacy) importe `models.SatMAE_temporal`, absent
+        # du dépôt publié et utilisé seulement par l'encodeur SatMAE : module factice.
+        if "models.SatMAE_temporal" not in sys.modules:
+            stub = types.ModuleType("models.SatMAE_temporal")
+
+            def _absent(*a, **k):
+                raise RuntimeError("SatMAE_temporal absent du dépôt publié")
+            stub.get_1d_sincos_pos_embed_from_grid_torch = stub.mae_vit_large_patch16 = _absent
+            sys.modules["models.SatMAE_temporal"] = stub
+        from models.Encoders import build_net
+        # build_net charge des poids ImageNet depuis un chemin de leur machine
+        # (/data2/...) avant qu'on charge le checkpoint SCD : on neutralise ce seul appel.
+        real_load = torch.load
+
+        def _load(path, *a, **k):
+            if str(path).startswith("/data2/"):
+                return {"model": {}}
+            return real_load(path, *a, **k)
+        torch.load = _load
+        try:
+            model = NativeOutput(build_net("vmambaB", NUM_CLASSES, output_size=128, drop_rate=0.0))
+        finally:
+            torch.load = real_load
+        target = model.net
+    else:
+        model = PerASCD(in_channels=3, num_classes=NUM_CLASSES, input_size=448, output_size=512,
+                        arch=arch, droppath=0.0, pretrained_pera_path=None)
+        target = model
+    info = {"path": checkpoint, "arch": arch}
+    if checkpoint.lower() != "none":
+        ckpt = torch.load(checkpoint, map_location="cpu", weights_only=False)
+        state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
+        state = {k.removeprefix("module."): v for k, v in state.items()}
+        state, renamed = rename_cagm_keys(state, target.state_dict())
+        target.load_state_dict(state, strict=True)          # lève au moindre écart
+        info["renamed_keys"] = renamed
+        info.update({k: (float(v) if isinstance(v, (float, np.floating)) else v)
+                     for k, v in ckpt.items() if k in ("epoch", "Fscd", "Sek", "mIoU")})
+        info["tensors"] = len(state)
+        del ckpt, state
+    else:
+        info["warning"] = "poids aléatoires : test de plomberie uniquement"
+    return model, info
 
 
 def import_legacy(root: Path, msda_mode: str):
@@ -308,22 +381,7 @@ def main():
     device = args.device
     PerASCD, legacy_eval, get_hist, compiled = import_legacy(Path(args.perascd_root).resolve(), args.msda)
 
-    model = PerASCD(in_channels=3, num_classes=NUM_CLASSES, input_size=448, output_size=512,
-                    arch=args.arch, droppath=0.0, pretrained_pera_path=None)
-    ckpt_info = {"path": args.checkpoint}
-    if args.checkpoint.lower() != "none":
-        ckpt = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
-        state = ckpt["model"] if isinstance(ckpt, dict) and "model" in ckpt else ckpt
-        state = {k.removeprefix("module."): v for k, v in state.items()}
-        state, renamed = rename_cagm_keys(state, model.state_dict())
-        model.load_state_dict(state, strict=True)          # lève au moindre écart
-        ckpt_info["renamed_keys"] = renamed
-        ckpt_info.update({k: (float(v) if isinstance(v, (float, np.floating)) else v)
-                          for k, v in ckpt.items() if k in ("epoch", "Fscd", "Sek", "mIoU")})
-        ckpt_info["tensors"] = len(state)
-        del ckpt, state
-    else:
-        ckpt_info["warning"] = "poids aléatoires : test de plomberie uniquement"
+    model, ckpt_info = build_teacher(PerASCD, Path(args.perascd_root).resolve(), args.arch, args.checkpoint)
     model = model.to(device).eval()
     n_params = sum(p.numel() for p in model.parameters())
 
@@ -335,12 +393,12 @@ def main():
         "torch": torch.__version__, "cuda": torch.version.cuda, "arch": args.arch,
         "params_M": round(n_params / 1e6, 2), "checkpoint": ckpt_info,
         "msda": {"compiled_available": compiled, "used": "pytorch" if _MSDA.use_pytorch else "cuda"},
-        "n_pairs": len(loader.dataset), "limit": args.limit, "published": PUBLISHED, "results": {},
+        "n_pairs": len(loader.dataset), "limit": args.limit, "published": PUBLISHED_BY_ARCH[args.arch], "results": {},
     }
     print(f"{report['params_M']} M paramètres | opérateur déformable : {report['msda']['used']} | "
           f"{len(loader.dataset)} paires")
 
-    if args.check_msda and compiled and device.startswith("cuda"):
+    if args.check_msda and compiled and device.startswith("cuda") and args.arch != "vmambaB":
         report["msda"]["agreement_fp32"] = msda_agreement(model, loader, device)
         print("accord CUDA / PyTorch :", report["msda"]["agreement_fp32"])
 
@@ -360,8 +418,8 @@ def main():
     fp32 = report["results"].get("fp32")
     if fp32 is not None and args.limit is None and args.checkpoint.lower() != "none":
         report["criteria"] = {
-            "sek_matches_published": abs(fp32["legacy"]["sek"] - PUBLISHED["sek"]) <= TOL_PUBLISHED,
-            "fscd_matches_published": abs(fp32["legacy"]["fscd"] - PUBLISHED["fscd"]) <= TOL_PUBLISHED,
+            "sek_matches_published": abs(fp32["legacy"]["sek"] - PUBLISHED_BY_ARCH[args.arch]["sek"]) <= TOL_PUBLISHED,
+            "fscd_matches_published": abs(fp32["legacy"]["fscd"] - PUBLISHED_BY_ARCH[args.arch]["fscd"]) <= TOL_PUBLISHED,
             "codes_agree": fp32["max_code_gap"] < TOL_CODES,
             "class_order_identity": fp32["permutation"]["identity_optimal"],
         }

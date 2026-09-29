@@ -57,7 +57,7 @@ def parse_args():
     p.add_argument("--data-root", required=True)
     p.add_argument("--split", default="train")
     p.add_argument("--out-dir", required=True)
-    p.add_argument("--arch", default="ViT-G/16/1024", choices=["ViT-G/16/1024", "ViT-B/16"])
+    p.add_argument("--arch", default="ViT-G/16/1024", choices=ev.ARCHS)
     p.add_argument("--precision", default="fp16", choices=["fp32", "fp16", "bf16"])
     p.add_argument("--msda", default="auto", choices=["auto", "cuda", "pytorch"])
     p.add_argument("--batch-size", type=int, default=8)
@@ -87,18 +87,12 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     PerASCD, legacy_eval, get_hist, compiled = ev.import_legacy(Path(args.perascd_root).resolve(), args.msda)
 
-    model = PerASCD(in_channels=3, num_classes=ev.NUM_CLASSES, input_size=448, output_size=512,
-                    arch=args.arch, droppath=0.0, pretrained_pera_path=None)
-    meta_ckpt = {"path": args.checkpoint}
+    model, info = ev.build_teacher(PerASCD, Path(args.perascd_root).resolve(), args.arch, args.checkpoint)
+    meta_ckpt = {"path": args.checkpoint, "arch": args.arch}
     if args.checkpoint.lower() != "none":
-        ckpt = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
-        state = {k.removeprefix("module."): v for k, v in ckpt["model"].items()}
-        state, renamed = ev.rename_cagm_keys(state, model.state_dict())
-        model.load_state_dict(state, strict=True)
         cp = Path(args.checkpoint)
-        meta_ckpt.update({"epoch": ckpt.get("epoch"), "renamed_keys": len(renamed),
+        meta_ckpt.update({"epoch": info.get("epoch"), "renamed_keys": len(info.get("renamed_keys", [])),
                           "sha256": sha256_of(cp, cp.parent.parent / "SHA256SUMS")})
-        del ckpt, state
     model = model.to(device).eval()
 
     ds = ev.SecondRaw(args.data_root, args.split)

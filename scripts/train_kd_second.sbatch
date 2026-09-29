@@ -24,6 +24,9 @@
 #   # + KD sémantique (étape 3)
 #   SEED=1 LKD_CHG=1 LKD_SEM=1 KD_T_SEM=2 KD_MASK=all TAG=kdsem-t2-all \
 #       sbatch --export=ALL,SEED,LKD_CHG,LKD_SEM,KD_T_SEM,KD_MASK,TAG scripts/train_kd_second.sbatch
+#   # même recette, professeur VMamba-B (cache : scripts/teacher/vmambab.sbatch)
+#   MODE=confirm SEED=1 LKD_CHG=8 LKD_SEM=1 KD_T_SEM=2 KD_MASK=all KD_TEACHER=vmambab TAG=kdlogits-vmb \
+#       sbatch --export=ALL,MODE,SEED,LKD_CHG,LKD_SEM,KD_T_SEM,KD_MASK,KD_TEACHER,TAG scripts/train_kd_second.sbatch
 #   # + KD de features, professeur en ligne (étape 4) : ≈11 h en criblage (330 s/époque,
 #   # job 4176343) -> walltime allongé ; compiler d'abord MSDA une fois :
 #   #   sbatch scripts/teacher/build_msda_student.sbatch
@@ -47,10 +50,15 @@ KD_MASK="${KD_MASK:-changed}"  # changed | all
 KD_TGT="${KD_TGT:-teacher}"    # cible du terme de changement : teacher | gt | gt_smooth (contrôles)
 LKD_FEAT="${LKD_FEAT:-0}"      # λ KD de features (professeur en ligne)
 KD_FEAT_STAGES="${KD_FEAT_STAGES:-1,2}"  # étages 0..3 = 1/4, 1/8, 1/16, 1/32
+KD_TEACHER="${KD_TEACHER:-perascd}"      # cache des logits : perascd (ViT-G, 548 M) | vmambab (≈113 M)
 TAG="${TAG:?donner un TAG explicite (witness, kdchg-l1, ...)}"
 
 REPO="$HOME/csf-mamba"
-CACHE_SRC="$SCRATCH/csf-distill/cache/perascd_second_train"
+case "$KD_TEACHER" in
+    perascd) CACHE_SRC="$SCRATCH/csf-distill/cache/perascd_second_train" ;;
+    vmambab) CACHE_SRC="$SCRATCH/csf-distill/cache/vmambab_second_train" ;;
+    *) echo "⛔ KD_TEACHER inconnu : $KD_TEACHER"; exit 1 ;;
+esac
 OUT="$SCRATCH/csf-distill/runs/${MODE}_${TAG}-s${SEED}"
 mkdir -p "$OUT"
 
@@ -64,6 +72,11 @@ if [ "$KD_TGT" != "teacher" ]; then
 fi
 if [ "$LKD_FEAT" != "0" ]; then
     CONF="$CONF kd_feat=$LKD_FEAT feat_stages=$KD_FEAT_STAGES"
+fi
+if [ "$KD_TEACHER" != "perascd" ]; then
+    [ "$LKD_CHG" != "0" ] || [ "$LKD_SEM" != "0" ] || { echo "⛔ KD_TEACHER=$KD_TEACHER sans λ de logits"; exit 1; }
+    [ "$LKD_FEAT" = "0" ] || { echo "⛔ la KD de features n'existe que pour le professeur PerASCD"; exit 1; }
+    CONF="$CONF teacher=$KD_TEACHER"
 fi
 echo "== config : $CONF -> $OUT =="
 STAMP="$OUT/config.txt"
