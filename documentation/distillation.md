@@ -530,6 +530,33 @@ Figure : `logs/final_tables/distillation_two_teachers.{png,pdf}` ; table `logs/f
 - 30 sept., **vérification passée** (Narval, nœud de connexion) : archive 1 612 898 211 o, sha256 `9dc42679859d0ec5fe02045055063205cdad50fbe002910b9372f0ad96e1a0c0` ; 1431/477/477, aucune erreur ; label1 > 0 ⇔ label2 > 0 partout ; les 9 transitions observées sont exactement les 9 publiées. Changement : 19,47 % (train), 17,64 % (val), 18,11 % (test) — proche des 20 % de SECOND, donc le réglage sans compensation de déséquilibre (weight=1 dice=0) est gardé.
 - Professeur : PerASCD ViT-G Landsat non publié (leur chemin commenté : `PerAChain_22e_mIoU86.59_Sek53.83_Fscd86.43_OA95.21.pth`). Demande au mail aux auteurs ; décision à la réponse. En attendant : baseline élève, 5 graines.
 
+### Prolongation à 200 époques de la KD complète (30 sept., extension annoncée comme telle)
+
+Décidée APRÈS avoir vu que les bras KD montaient encore à l'époque 119 (pente 90–119 : +0,06 pt / 10 ép., p = 0,009) : c'est un second regard, rapporté à côté du budget pré-enregistré de 120 époques, qui reste le résultat principal. Reprise de `last.pt` (époque 120, step 44 520) des 5 graines `confirm_kdlogits`, jobs 4294285–4294289, 4 h 20 chacun (≈ 21,7 A100-h) ; `last.pt` ne porte pas l'état du générateur aléatoire, donc suite statistiquement équivalente mais pas identique à l'octet à un run de 200 époques d'un seul tenant. Préfixe 0–119 vérifié identique aux runs d'origine.
+
+| | SeK max | SeK finale |
+|---|---|---|
+| KD complète, 120 ép. | 26,20 ± 0,11 | 26,20 ± 0,11 |
+| KD complète, 200 ép. | **26,32 ± 0,11** (max aux époques 143–196) | 26,27 ± 0,12 |
+| baseline, 200 ép. (n=7) | 23,90 ± 0,15 (inchangé : max avant l'époque 100 sur les 7 graines) | 23,30 ± 0,10 |
+
+- Gain de la prolongation, apparié : +0,12 pt sur le max (p = 0,008), +0,07 sur la finale (p = 0,13). **Plateau** atteint : pente 150–179 −0,01, 170–199 +0,00 pt / 10 ép.
+- Face au professeur (26,11) : max **+0,22 [+0,08 ; +0,35], p = 0,01** ; finale +0,16 [+0,01 ; +0,31], p = 0,04. À 200 époques l'élève dépasse le professeur de peu mais significativement — à écrire avec la réserve du second regard.
+- Gain KD à 200 époques contre la baseline à 200 époques : +2,43 [2,26 ; 2,59] (max), +2,96 [2,81 ; 3,12] (finale).
+- Tables : `logs/e200_landsat/analyse/kdlogits_e200_runs.csv`.
+
+### Landsat : baseline de l'élève, 250 époques (30 sept.)
+
+Jobs 4290685, 4290687–4290690 (5 graines, 5,8 h chacun, 4,2 Go). Staging vérifié : 1431/477/477, 178 pas/époque.
+
+| | val max | test au meilleur val | Fscd | mIoU |
+|---|---|---|---|---|
+| élève sans KD (n=5) | 58,31 ± 0,12 | **59,85 ± 0,15** | 88,95 | 88,78 |
+
+- ⚠️ **Sous-entraîné** : le meilleur val tombe à l'époque 249 (la dernière) sur les 5 graines ; pente val encore +0,46 pt / 10 ép. sur 200–249 (+0,61 sur 150–199). Transposer le budget en pas depuis SECOND ne suffit pas sur ce jeu.
+- Repères publiés (splits pas forcément identiques : la littérature cite souvent 1455/485/485) : PerASCD **65,21** (article, arXiv 2602.13780) ; DBTANet 65,72 ; Mamba-FCS 60,26 ; SCanNet 60,53. L'écart élève → professeur publié est donc d'environ 5 pt : beaucoup de marge pour la KD, si on obtient un professeur.
+- Suite proposée : prolonger la baseline jusqu'au plateau, le budget étant décidé sur la courbe de **val** uniquement (le test ne décide rien), puis utiliser le même budget pour les bras KD.
+
 ## 5. Risques qui pourraient invalider la comparaison
 
 1. **Réglage sur le test.** Avec 12 à 18 configurations criblées, choisir λ/T/masque sur le test gonflerait le gain de KD. Parade : criblage sur val, confirmation sur test (§3). Le plus grave des risques listés.
