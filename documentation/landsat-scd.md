@@ -9,6 +9,18 @@ troisième terrain est ce qui manque.
 donc directe. *(Correction d'une erreur antérieure : je l'avais attribué à
 ChangeMamba, qui ne le traite pas.)*
 
+
+> **30 sept. — les blocages du §3bis sont levés par la version PerASCD.** Les auteurs de
+> PerASCD publient `LandsatSCD512.zip` (HF `SathShen/PerASCD-datasets`, 1 612 898 211 o) :
+> variantes augmentées retirées (`rm_aug_samples.py`), transitions converties en deux
+> cartes par date avec la table publiée (`MCDlabel_to_SCDlabel.py` :
+> `MAP_A = [0,1,1,2,2,2,3,3,4,4]`, `MAP_B = [0,2,3,1,3,4,1,2,1,2]`), splits
+> train/val/test = 1431/477/477 sans nom commun (1431 + 477 = 1908 : les chiffres de la
+> littérature). Format `im1/im2/label1/label2`, 512×512, indices 0..4. C'est cette
+> version qu'utilise l'étude de distillation (`csf_mamba/datasets/landsat_perascd.py`,
+> `scripts/{download,check}_landsat_perascd.*`, `scripts/train_kd_landsat.sbatch`) : elle
+> rend nos chiffres comparables à ceux de PerASCD. Le reste de ce document décrit le dump
+> figshare brut et la voie Mamba-FCS.
 ---
 
 ## 1. Le jeu

@@ -45,6 +45,10 @@ def parse_args():
                    help="Raffinement des décodeurs : depthwise (référence) ou 3x3 complet.")
     p.add_argument("--backend", default="auto", choices=["auto", "mamba", "ref"])
     p.add_argument("--val-split", default="val")
+    p.add_argument("--test-split", default=None,
+                   help="Split évalué en plus à chaque époque, sans rôle dans la sélection "
+                        "(best.pt suit --val-split) : metrics_<split>.csv. Ex. Landsat : "
+                        "sélection sur val, rapport sur test.")
     p.add_argument("--epochs", type=int, default=100)
     p.add_argument("--limit-batches", type=int, default=None,
                    help="Plafonne le nb de batches train/val par époque (run de test).")
@@ -280,6 +284,15 @@ def main():
         shuffle=False, num_workers=4, pin_memory=True,
     )
 
+    test_loader = None
+    if args.test_split:
+        if args.test_split == args.val_split:
+            raise SystemExit("--test-split identique à --val-split")
+        test_loader = DataLoader(
+            build_dataset(args, args.test_split), batch_size=args.batch_size,
+            shuffle=False, num_workers=4, pin_memory=True,
+        )
+
     micro_per_epoch = args.limit_batches or len(train_loader)
     steps_per_epoch = max(1, micro_per_epoch // args.accum_steps)
     total_iters = args.epochs * steps_per_epoch
@@ -412,6 +425,18 @@ def main():
         with csv_path.open("a") as f:
             f.write(f"{epoch},{metrics.sek:.5f},{metrics.fscd:.5f},"
                     f"{metrics.miou:.5f},{metrics.oa:.5f},{metrics.kappa:.5f}\n")
+        if test_loader is not None:
+            t_test0 = time.perf_counter()
+            mt = validate(eval_model, test_loader, device, num_classes,
+                          limit=args.limit_batches, use_amp=use_amp)
+            print(f"[{args.test_split}] epoch {epoch} | SeK {mt.sek:.4f} Fscd {mt.fscd:.4f} "
+                  f"mIoU {mt.miou:.4f} | {time.perf_counter() - t_test0:.0f} s")
+            test_csv = out_dir / f"metrics_{args.test_split}.csv"
+            if not test_csv.exists():
+                test_csv.write_text("epoch,sek,fscd,miou,oa,kappa\n")
+            with test_csv.open("a") as f:
+                f.write(f"{epoch},{mt.sek:.5f},{mt.fscd:.5f},"
+                        f"{mt.miou:.5f},{mt.oa:.5f},{mt.kappa:.5f}\n")
 
         # Checkpoint complet (reprise possible) écrasé à chaque époque.
         ckpt = {

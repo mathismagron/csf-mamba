@@ -503,6 +503,32 @@ déformable, soit bien plus que les blocs ViT seuls (212). Mon estimation de
 ~1,3 TMAC pour le ViT-G ne comptait que ses blocs : le vrai coût est plus élevé,
 et le surcoût de la KD en ligne (+40 %) est à recalculer sur la mesure de l'étape 0.
 
+### Résultat : deux professeurs, même élève, même recette (30 sept.)
+
+Professeur VMamba-B (113,0 M, 352,9 GMACs aten ; test fp32 **25,314** reproduit, normalisation ImageNet ; bf16 25,312, fp16 23,659 ; latence lot 8 : 504,6 ms fp32, 187,4 bf16, 182,4 fp16 — job 4265829, autre nœud que la mesure élève 4181178, donc non comparable à l'unité près). Cache ≈ 25 min (2,0 paires/s × 8 vues), accord D4 avec la vue identité ≈ 0,975. 5 runs `kdlogits-vmb` (jobs 4265830–4265834, 6,4 h chacun, 4,2 GB ; λ_chg 8, λ_sem 1, T_sem 2, masque all), analyse `analyze_confirm.py` contre la même baseline de 7 graines (`logs/confirm_vmb/analyse/`).
+
+| bras | SeK max | SeK finale | Fscd | mIoU | vs professeur |
+|---|---|---|---|---|---|
+| sans KD (n=7) | 23,90 ± 0,15 | 23,65 | 64,42 | 73,23 | — |
+| KD ← VMamba-B 113 M (n=5) | **25,69 ± 0,18** | 25,69 | 65,73 | 74,38 | **+0,38** [0,16 ; 0,59], p = 0,009 |
+| KD ← ViT-G 548 M (n=5) | **26,20 ± 0,11** | 26,20 | 66,29 | 74,57 | +0,09 [−0,04 ; 0,23], p = 0,13 |
+
+- Gain VMamba-B sur la baseline : +1,79 [1,57 ; 2,01] (Welch), écart professeur − élève comblé à 127 % [111 ; 142] : **l'élève dépasse significativement son professeur** (moyenne et finale, +0,37 à +0,38).
+- **ViT-G − VMamba-B, apparié par graine : +0,51 [0,27 ; 0,76] SeK, p = 0,004** (5/5 graines positives, de +0,24 à +0,70) ; Fscd +0,56 (p = 0,002), mIoU +0,19 (p = 0,014). Les professeurs diffèrent de 0,79 pt : 64 % de l'écart entre professeurs se retrouve chez l'élève.
+- Pas d'effet « écart de capacité » défavorable entre ces deux professeurs : le plus gros (33× l'élève, contre 6,9×) donne le meilleur élève. Le gain de KD n'est pas plafonné par la taille du professeur, il suit sa qualité ; le petit professeur est dépassé parce que l'élève combine ses cibles avec la vérité terrain.
+- KD complète depuis VMamba-B ≈ KD changement seule depuis ViT-G (25,69 contre 25,59, apparié +0,10, p = 0,02).
+- Coût : cache VMamba-B 36 min au total (évaluation comprise) ; entraînement identique (le cache est hors ligne). Total étude : 5 × 6,4 h + 0,6 h ≈ 32,6 A100-h.
+- Réserve : deux professeurs seulement, d'architectures différentes (ViT vs Mamba) : on ne sépare pas taille et famille. Formulation honnête : « un professeur plus fort donne un élève plus fort, même à 33× la taille de l'élève ».
+
+Figure : `logs/final_tables/distillation_two_teachers.{png,pdf}` ; table `logs/final_tables/two_teachers.csv`.
+
+### Deuxième jeu : Landsat-SCD, version PerASCD (30 sept., code écrit)
+
+- Données : `LandsatSCD512.zip` des auteurs (train/val/test 1431/477/477, 5 canaux sémantiques). Dataloader `landsat_perascd`, vérification `scripts/check_landsat_perascd.py` (comptes, noms, formats, label1 > 0 ⇔ label2 > 0, pas de transition X → X, table des transitions observées contre la table publiée), tests `tests/test_landsat_perascd.py`.
+- Protocole : entraînement sur train, **best.pt sur val**, test évalué à chaque époque sans rôle dans la sélection (`--test-split test` → `metrics_test.csv`). Rapport : test au meilleur val + test final. Budget en pas : 250 époques = 44 500 pas (SECOND : 44 520).
+- ⚠️ `--test-split` crée un DataLoader de plus par époque, qui consomme le générateur aléatoire global : les runs Landsat ne sont pas comparables graine à graine avec un run qui n'évaluerait pas le test. Tous les runs Landsat l'activent, donc l'appariement par graine entre bras reste valide.
+- Professeur : PerASCD ViT-G Landsat non publié (leur chemin commenté : `PerAChain_22e_mIoU86.59_Sek53.83_Fscd86.43_OA95.21.pth`). Demande au mail aux auteurs ; décision à la réponse. En attendant : baseline élève, 5 graines.
+
 ## 5. Risques qui pourraient invalider la comparaison
 
 1. **Réglage sur le test.** Avec 12 à 18 configurations criblées, choisir λ/T/masque sur le test gonflerait le gain de KD. Parade : criblage sur val, confirmation sur test (§3). Le plus grave des risques listés.
