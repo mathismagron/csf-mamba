@@ -431,7 +431,153 @@ est inchangé à l'octet près — `tests/test_hybride.py` le vérifie.
 
 ---
 
-## 10. Utilisation
+## 10. Distillation d'un modèle de fondation dans le point d'efficience (septembre 2026)
+
+**En une phrase.** En distillant les sorties de **PerASCD** (548 M paramètres,
+meilleur SeK publié sur SECOND : 0,2611) dans le point d'efficience (16,48 M),
+l'élève atteint **SeK 0,2620 ± 0,0011** sur le test de SECOND (5 graines). Il
+**égale le professeur**, avec **33 fois moins de paramètres, 51 fois moins de
+calcul et 12,5 fois moins de latence**.
+
+**Ce qu'on fait.** Le professeur est le checkpoint publié par ses auteurs
+(ViT-G/16 pré-entraîné PerA + ViT-Adapter + CG-Decoder). Sous notre protocole, il
+redonne exactement son score publié : SeK 0,2611, Fscd 0,6641. On calcule **une
+seule fois** ses sorties sur les 2 968 paires d'entraînement, sous les 8
+transformations D4 que produisent nos augmentations. On entraîne ensuite
+l'élève, sans rien changer à sa recette (120 époques), avec deux termes de plus
+dans la loss :
+
+- **KD du changement** : la probabilité de changement du professeur sert de cible
+  souple (λ = 8) ;
+- **KD sémantique** : ses distributions de classes, à température T = 2, sur tous
+  les pixels (λ = 1).
+
+La distillation est **hors ligne** : le coût d'entraînement de l'élève ne change
+pas (≈ 6,4 h A100 par run), et le professeur n'intervient jamais à l'inférence.
+
+**Comment les réglages ont été choisis, sans regarder le test.** Un criblage a
+été pré-enregistré sur un découpage interne de l'entraînement : 2 671 paires pour
+entraîner, 297 pour valider, 2 graines par bras. Il a fixé dans l'ordre λ du
+changement, puis le terme sémantique, puis la KD de features, chaque fois par la
+règle écrite d'avance (meilleure moyenne en validation). La configuration retenue
+a ensuite été **confirmée une seule fois sur le test**, avec 5 graines, contre la
+baseline de 7 graines du §2 tronquée aux mêmes 120 époques.
+
+### Résultats sur le test de SECOND
+
+| | SeK (max) | SeK (dernière époque) | Fscd | mIoU |
+|---|---:|---:|---:|---:|
+| élève sans KD (n = 7) | 0,2390 ± 0,0015 | 0,2365 | 0,6442 | 0,7323 |
+| + KD du changement (n = 5) | 0,2559 ± 0,0013 | 0,2557 | 0,6562 | 0,7437 |
+| **+ KD du changement et sémantique (n = 5)** | **0,2620 ± 0,0011** | **0,2620** | **0,6629** | **0,7457** |
+| professeur PerASCD, 548 M (checkpoint publié) | 0,2611 | — | 0,6641 | 0,7433 |
+
+- **Gain sur la baseline : +0,0230**, IC 95 % [+0,0213 ; +0,0247]. La
+  distillation comble **104 %** de l'écart entre élève et professeur.
+- **Face au professeur : +0,0009**, IC 95 % [−0,0004 ; +0,0023], p = 0,13. On peut
+  écrire que l'élève *égale* le professeur ; on ne peut **pas** écrire qu'il le
+  *dépasse*.
+- **Le terme sémantique apporte à lui seul +0,0061** (apparié par graine,
+  p = 0,0009).
+- **Aucun des deux gains ne tient à la sélection d'époque sur le test.** La
+  dernière époque, qui ne sélectionne rien, donne le même chiffre (0,2620), et les
+  maxima tombent aux époques 108 à 119.
+
+![Confirmation sur le test](documentation/distillation_confirm_test.png)
+
+### Le coût, mesuré sur le même A100
+
+| | élève (16,48 M) | professeur (548,17 M) | rapport |
+|---|---:|---:|---:|
+| GMACs par paire | 29,5 | 1 509,7 | **51×** |
+| latence, lot de 8, fp32 | 129 ms | 1 613 ms | **12,5×** |
+| latence, lot de 8, bf16 / fp16 | 114 / 113 ms | 561 / 487 ms | 4,9× / 4,3× |
+| latence, lot de 1, fp32 | 26 ms | 269 ms | 10,2× |
+| pic mémoire, lot de 8, fp32 | 1,96 Go | 25,09 Go | 12,8× |
+
+GMACs mesurés avec le compteur aten ; il ne compte pas l'opérateur déformable du
+professeur, qui est donc un peu sous-estimé. En demi-précision, le rapport de
+latence tombe à 4–5× : le professeur y gagne beaucoup (1 613 → 487 ms), l'élève peu
+(129 → 113 ms).
+
+### Ce qui ne marche pas, et les contrôles
+
+- **Ce n'est pas un effet de régularisation.** À λ égal, remplacer les cibles du
+  professeur par la vérité terrain, brute ou lissée, **ne rapporte rien**
+  (validation : 0,2365 et 0,2359, contre 0,2361 pour le témoin). Le gain vient de
+  ce que le professeur sait.
+- **La KD de features n'est pas retenue.** Aligner les features intermédiaires sur
+  celles du professeur, par-dessus la KD des sorties, donne de −0,0045 à +0,0012
+  en validation. Elle coûte en plus 2,3 fois le temps d'entraînement (11 h par
+  run) et 17,4 Go de mémoire, car le professeur doit alors tourner en ligne.
+
+### Deux professeurs, même élève
+
+Les mêmes auteurs publient un second professeur, plus petit : VMamba-B +
+CG-Decoder (113 M, SeK 0,2531).
+
+**Il faut une correction pour le reproduire.** Ce checkpoint a été entraîné en
+normalisation ImageNet, alors que le script d'évaluation publié normalise avec
+les statistiques PerA. Avec celles-ci, on obtient 0,2373. Avec ImageNet, on
+retrouve **exactement** les valeurs enregistrées dans le checkpoint (0,25314). Le
+point sera signalé aux auteurs.
+
+On a ensuite distillé ce professeur avec la même recette, sur 5 graines :
+
+| professeur | SeK du professeur | élève distillé | élève − professeur |
+|---|---:|---:|---:|
+| VMamba-B, 113 M | 0,2531 | 0,2569 ± 0,0018 | **+0,0038** (p = 0,009) |
+| PerASCD ViT-G, 548 M | 0,2611 | 0,2620 ± 0,0011 | +0,0009 (p = 0,13) |
+
+- **Avec le petit professeur, l'élève le dépasse nettement.** Il combine les
+  cibles du professeur avec la vérité terrain.
+- **Un professeur plus fort donne un élève plus fort.** À graines appariées, le
+  professeur ViT-G fait mieux de **+0,0051** [+0,0027 ; +0,0076] (p = 0,004, 5
+  graines sur 5).
+- **Pas de pénalité due à l'écart de capacité.** Le professeur 33 fois plus gros
+  que l'élève donne le meilleur résultat.
+- **Réserve :** les deux professeurs diffèrent aussi d'architecture (ViT contre
+  Mamba). On ne peut pas en tirer de loi d'échelle.
+
+![Deux professeurs](documentation/distillation_two_teachers.png)
+
+### Place dans l'état de l'art
+
+Sur SECOND, le meilleur SeK publié est celui de PerASCD (0,2611). Avant lui, le
+meilleur était celui de Mamba-FCS (0,2550 ; 189,54 M paramètres, 263 GMACs).
+L'élève distillé atteint **le niveau de l'état de l'art avec 16,48 M paramètres**,
+soit **3 % de la taille de PerASCD et 9 % de celle de Mamba-FCS**. L'énoncé
+publiable est : *la précision d'un modèle de fondation au coût d'un modèle
+embarqué*.
+
+### Réserves à connaître
+
+1. **Un seul jeu de données.** Un gain de distillation mesuré sur SECOND seul
+   reste un énoncé sur SECOND. **Landsat-SCD est en cours.** On utilise la version
+   prétraitée des auteurs de PerASCD, vérifiée fichier par fichier (1 431 / 477 /
+   477 paires, split de validation réel). La baseline de l'élève tourne.
+   Le professeur Landsat de PerASCD n'est pas publié : il faudra l'obtenir des
+   auteurs ou le réentraîner.
+2. **Licence des poids du professeur.** Le code PerASCD est sous licence MIT,
+   mais aucune licence n'accompagne les checkpoints. Un mail aux auteurs est prêt,
+   **à valider par les encadrants avant l'envoi**. Il demande la licence, le
+   checkpoint Landsat, et signale le problème de normalisation.
+3. **Convention du « max ».** Comme partout dans ce projet, le SeK principal est le
+   maximum sur les époques, lu sur le test. La dernière époque est donnée à côté.
+   Pour la distillation, les deux coïncident à 0,0001 près.
+4. **Coût total de l'étude :** ≈ 292 h A100 (48 entraînements), plus environ 5 h
+   de vérifications.
+
+**Pour aller plus loin :** `documentation/distillation.md` contient le plan
+pré-enregistré, le journal daté de chaque vague, tous les chiffres et les
+diagnostics. Les tables finales sont dans `logs/final_tables/`. Le code tient dans
+`scripts/train.py` (options `--kd-*`), `csf_mamba/losses/distill.py`,
+`scripts/teacher/` (évaluation et cache du professeur),
+`scripts/train_kd_second.sbatch` et `scripts/train_kd_landsat.sbatch`.
+
+---
+
+## 11. Utilisation
 
 **Marche à suivre complète — installation, entraînement, évaluation, pièges :
 `RUN.md`.**
