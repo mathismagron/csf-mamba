@@ -543,12 +543,45 @@ On a ensuite distillé ce professeur avec la même recette, sur 5 graines :
 
 ### Place dans l'état de l'art
 
-Sur SECOND, le meilleur SeK publié est celui de PerASCD (0,2611). Avant lui, le
-meilleur était celui de Mamba-FCS (0,2550 ; 189,54 M paramètres, 263 GMACs).
-L'élève distillé atteint **le niveau de l'état de l'art avec 16,48 M paramètres**,
-soit **3 % de la taille de PerASCD et 9 % de celle de Mamba-FCS**. L'énoncé
-publiable est : *la précision d'un modèle de fondation au coût d'un modèle
-embarqué*.
+SECOND, split officiel, trié par SeK. Les lignes du §2 sont reprises à
+l'identique.
+
+| Modèle | Params | GMACs | **SeK** | Origine des chiffres |
+|---|---:|---:|---:|---|
+| **CSF-Mamba efficience + KD de PerASCD** | **16,48 M** | **31,42** | **0,2620 ± 0,0011** | mesuré, n = 5 |
+| PerASCD (ViT-G PerA + ViT-Adapter + CG-Decoder) | 548,17 M | ≥ 1 509,7 ¹ | 0,2611 | article PerASCD ; checkpoint reproduit par nous à l'identique |
+| **CSF-Mamba efficience + KD de VMamba-B** | **16,48 M** | **31,42** | **0,2569 ± 0,0018** | mesuré, n = 5 |
+| Mamba-FCS | 189,54 M | 263,15 | 0,2550 | article Mamba-FCS, table VI |
+| VMamba-B + CG-Decoder (auteurs de PerASCD) | 113,01 M | ≥ 352,9 ¹ | 0,2531 | checkpoint publié, reproduit (normalisation ImageNet) |
+| CSF-Mamba performance, sans KD | 32,58 M | 58,06 | 0,2485 | mesuré, n = 6 |
+| CSF-Mamba efficience, sans KD | 16,48 M | 31,42 | 0,2390 ± 0,0015 | mesuré, n = 7 |
+| MambaSCD-Tiny, leur checkpoint publié | 37,13 M | 115,44 | 0,2334 | mesuré par nous, même code |
+| MambaSCD-Base | 89,99 M | 211,55 | 0,2292 | article ChangeMamba |
+| MambaSCD-Tiny | 21,51 M | 73,42 | 0,2208 | article ChangeMamba |
+
+¹ Compteur aten, parce que fvcore échoue sur ces deux modèles. Il ne compte ni
+l'opérateur déformable de PerASCD ni le scan sélectif de VMamba-B : ce sont des
+bornes basses. Sur l'élève, le compteur aten donne 29,48 contre 31,42 pour fvcore.
+Le rapport élève/professeur (51×) se calcule compteur aten contre compteur aten.
+
+**Ce que la table montre, lu en pourcentages :**
+
+| élève distillé (16,48 M) | SeK | params | calcul |
+|---|---:|---:|---:|
+| vs PerASCD (meilleur publié) | 100,3 % | 3,0 % | ≈ 2 % |
+| vs Mamba-FCS (meilleur avant PerASCD) | 102,7 % | 8,7 % | 11,9 % |
+| vs MambaSCD-Base | 114,3 % | 18,3 % | 14,9 % |
+
+L'élève distillé atteint **le niveau de l'état de l'art**. Il **égale** PerASCD
+sans le dépasser significativement (écart +0,0009, IC 95 % [−0,0004 ; +0,0023]),
+et dépasse tous les autres modèles de la table, avec 3 % des paramètres de PerASCD.
+Distillé depuis VMamba-B, un professeur plus faible, il dépasse encore Mamba-FCS.
+L'énoncé publiable est : *la précision d'un modèle de fondation au coût d'un
+modèle embarqué*.
+
+D'autres modèles récents publient un SeK sur SECOND, par exemple GSTM-SCD (0,2418)
+et DBTANet (0,2412). Ils ne figurent pas dans la table, faute de paramètres et de
+GMACs vérifiés.
 
 ### Réserves à connaître
 
