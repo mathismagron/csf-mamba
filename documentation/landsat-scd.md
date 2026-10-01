@@ -12,8 +12,9 @@ ChangeMamba, qui ne le traite pas.)*
 
 > **⛔ 1er oct. — fuite train → test.** Les 2 385 paires ne couvrent que **12 emplacements**
 > (indice `_<k>` des noms), chacun sous ~200 couples d'années. Avec un split aléatoire, les deux
-> images de chaque paire de test figurent à l'identique dans l'entraînement (vérifié pixel pour
-> pixel). Détail et conséquences : `distillation.md`, section « Landsat : la baseline à 600 époques ».
+> années de chaque paire de test figurent dans l'entraînement au même indice (compté sur les noms ;
+> vérifié sur les pixels pour une paire, vérification complète : `scripts/verify_landsat_leakage.py`).
+> Détail et conséquences : `distillation.md`, section « Landsat : la baseline à 600 époques ».
 > Tout split de ce jeu doit être **disjoint par emplacement**.
 
 > **30 sept. — les blocages du §3bis sont levés par la version PerASCD.** Les auteurs de
