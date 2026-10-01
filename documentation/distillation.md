@@ -557,6 +557,27 @@ Jobs 4290685, 4290687–4290690 (5 graines, 5,8 h chacun, 4,2 Go). Staging véri
 - Repères publiés (splits pas forcément identiques : la littérature cite souvent 1455/485/485) : PerASCD **65,21** (article, arXiv 2602.13780) ; DBTANet 65,72 ; Mamba-FCS 60,26 ; SCanNet 60,53. L'écart élève → professeur publié est donc d'environ 5 pt : beaucoup de marge pour la KD, si on obtient un professeur.
 - Suite proposée : prolonger la baseline jusqu'au plateau, le budget étant décidé sur la courbe de **val** uniquement (le test ne décide rien), puis utiliser le même budget pour les bras KD.
 
+### ⛔ Landsat : la baseline à 600 époques révèle une fuite train → test du split (1er oct.)
+
+Prolongation 250 → 600 époques des 5 graines (reprise de `last.pt`, préfixe 0–249 vérifié identique). Règle de budget écrite avant : première fenêtre de 50 époques avec pente val < 0,05 pt / 10 ép., plafond 600. **Plateau jamais atteint** : pente val 0,89 (100–149), 0,46 (200–249), 0,31 (350–399), 0,20 (500–549), **0,18 (550–599)**. Meilleur val à l'époque 599 pour les 5 graines. Test au meilleur val : **69,42 ± 0,17** (Fscd 92,27, mIoU 91,89, OA 97,33), contre 59,85 à 250 époques — **au-dessus de tous les chiffres publiés** (PerASCD 65,21, DBTANet 65,72) pour un élève de 16,5 M sans distillation.
+
+Un modèle de 16,5 M qui monte encore de 0,2 pt / 10 ép. après 600 époques et dépasse l'état de l'art de 4 pt appelait un contrôle. **Cause trouvée dans les noms de fichiers et vérifiée sur les pixels** (index de `LandsatSCD512.zip` lu à distance) :
+
+- les 2 385 paires portent seulement **12 indices de tuile** (`From<a>To<b>_<k>`, k ∈ {00…32}, 12 valeurs) : **12 emplacements**, chacun vu sous ~200 couples d'années (9 à 12 tuiles par couple d'années) ;
+- le split aléatoire 60/20/20 de `split_train_val.py` met les 12 emplacements dans les trois splits ;
+- **les 477 paires de test ont leurs DEUX images présentes à l'identique dans l'entraînement** (même emplacement, même année, dans une autre paire) : p. ex. `test/im1/From1990To1994_00` = `train/im1/From1990To1993_00`, et `test/im2/From1990To1994_00` = `train/im1/From1994To2002_00`, pixel pour pixel ; sur les pixels changés des deux, la classe à T1 concorde à 100 %.
+
+Le test mesure donc la **mémorisation de 12 emplacements**, ce qui explique une courbe qui monte sans fin. Tous les chiffres publiés sur ce découpage (et sans doute sur les découpages aléatoires 1455/485/485 de la littérature, construits de la même façon sur les mêmes 2 425 paires) partagent la fuite.
+
+Conséquences :
+1. **Landsat, split aléatoire, ne peut pas servir de test de généralisation** pour la distillation ; un professeur entraîné sur ce split (celui des auteurs compris) a vu les images du test.
+2. Voies honnêtes : (a) split **disjoint par emplacement** (12 groupes → validation croisée par groupes, p. ex. 4 plis de 3 emplacements), non comparable à la littérature mais propre ; (b) un autre deuxième jeu (Hi-UCD est déjà branché dans le dépôt).
+3. La fuite est en soi un résultat à signaler (dans le papier et aux auteurs).
+
+Contrôle sur SECOND (même méthode, hash des pixels) : 5 936 images d'entraînement, 3 388 de test, **aucun doublon exact** entre splits. (Un recouvrement spatial partiel sans doublon exact n'est pas testé par ce contrôle.)
+
+Tables : `logs/landsat_e600/analyse/` (à générer), runs `logs/landsat_e600/`.
+
 ## 5. Risques qui pourraient invalider la comparaison
 
 1. **Réglage sur le test.** Avec 12 à 18 configurations criblées, choisir λ/T/masque sur le test gonflerait le gain de KD. Parade : criblage sur val, confirmation sur test (§3). Le plus grave des risques listés.

@@ -10,6 +10,12 @@ donc directe. *(Correction d'une erreur antérieure : je l'avais attribué à
 ChangeMamba, qui ne le traite pas.)*
 
 
+> **⛔ 1er oct. — fuite train → test.** Les 2 385 paires ne couvrent que **12 emplacements**
+> (indice `_<k>` des noms), chacun sous ~200 couples d'années. Avec un split aléatoire, les deux
+> images de chaque paire de test figurent à l'identique dans l'entraînement (vérifié pixel pour
+> pixel). Détail et conséquences : `distillation.md`, section « Landsat : la baseline à 600 époques ».
+> Tout split de ce jeu doit être **disjoint par emplacement**.
+
 > **30 sept. — les blocages du §3bis sont levés par la version PerASCD.** Les auteurs de
 > PerASCD publient `LandsatSCD512.zip` (HF `SathShen/PerASCD-datasets`, 1 612 898 211 o) :
 > variantes augmentées retirées (`rm_aug_samples.py`), transitions converties en deux
