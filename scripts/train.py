@@ -136,6 +136,8 @@ def parse_args():
     p.add_argument("--val-ids", default=None,
                    help="Validation sur ces identifiants du dossier train/ (ex. splits/SECOND/val.txt) "
                         "au lieu de --val-split.")
+    p.add_argument("--test-ids", default=None,
+                   help="Liste d'identifiants pour --test-split (landsat_perascd : '<split>/<nom>').")
     p.add_argument("--kd-cache", default=None, help="Dossier du cache du professeur (meta.json, d4_*.npy).")
     p.add_argument("--lambda-kd-change", type=float, default=0.0)
     p.add_argument("--kd-t-change", type=float, default=1.0)
@@ -168,13 +170,22 @@ def build_dataset(args, split):
         temporal_swap=args.temporal_swap,
     ) if split == "train" else None
     ids_file = image_split = None
-    if split == "train" and args.train_ids:
-        ids_file, image_split = args.train_ids, "train"
-    elif split != "train" and args.val_ids:
-        ids_file, image_split = args.val_ids, "train"
-    if ids_file and args.dataset != "second":
-        raise SystemExit("--train-ids / --val-ids ne sont branchés que pour SECOND")
-    kw = {"ids_file": ids_file, "image_split": image_split} if ids_file else {}
+    if args.dataset == "landsat_perascd":
+        # Plis disjoints par emplacement : chaque liste porte ses propres '<split>/<nom>'.
+        ids_file = {"train": args.train_ids, args.val_split: args.val_ids}.get(split)
+        if split == args.test_split:
+            ids_file = args.test_ids
+        kw = {"ids_file": ids_file} if ids_file else {}
+    else:
+        if split == "train" and args.train_ids:
+            ids_file, image_split = args.train_ids, "train"
+        elif split != "train" and args.val_ids:
+            ids_file, image_split = args.val_ids, "train"
+        if ids_file and args.dataset != "second":
+            raise SystemExit("--train-ids / --val-ids ne sont branchés que pour SECOND et landsat_perascd")
+        if args.test_ids:
+            raise SystemExit("--test-ids n'est branché que pour landsat_perascd")
+        kw = {"ids_file": ids_file, "image_split": image_split} if ids_file else {}
     if split == "train" and args.kd_cache:
         # Le wrapper applique lui-même la transform et lit la vue D4 correspondante.
         base = dataset_cls(args.data_root, split=split, transform=None, **kw)
@@ -264,6 +275,12 @@ def main():
     if ema is not None:
         print(f"EMA active : decay {args.ema_decay}, warmup {args.ema_warmup} itérations")
 
+    if args.dataset == "landsat_perascd" and (args.train_ids or args.val_ids or args.test_ids):
+        from csf_mamba.datasets.landsat_perascd import assert_location_disjoint
+        lists = {n: [l.strip() for l in Path(f).read_text().splitlines() if l.strip()]
+                 for n, f in (("train", args.train_ids), ("val", args.val_ids), ("test", args.test_ids)) if f}
+        locs = assert_location_disjoint(**lists)
+        print("emplacements par split : " + " | ".join(f"{n} {sorted(v)}" for n, v in locs.items()))
     train_set = build_dataset(args, "train")
     # Sur-échantillonnage des tuiles avec changement (cf. datasets/oversample.py).
     # La VALIDATION reste uniforme : les métriques restent honnêtes.

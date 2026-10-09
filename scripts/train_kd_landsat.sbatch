@@ -28,6 +28,12 @@
 #   # KD (quand un cache professeur Landsat existe) :
 #   SEED=1 LKD_CHG=8 LKD_SEM=1 KD_T_SEM=2 KD_MASK=all KD_TEACHER=perascd TAG=kdlogits \
 #       sbatch --export=ALL,SEED,LKD_CHG,LKD_SEM,KD_T_SEM,KD_MASK,KD_TEACHER,TAG scripts/train_kd_landsat.sbatch
+#
+# ⛔ Le split d'origine (sans FOLD) FUIT : 12 emplacements, 333 images, toutes les images de
+# test présentes dans l'entraînement (scripts/verify_landsat_leakage.py). Il ne sert plus que
+# de référence. Les runs de l'étude utilisent FOLD=0..3 (splits/LandsatSCD_loc, disjoints par
+# emplacement) ; sortie landsat_f<F>_<TAG>-s<SEED>, cache <teacher>_landsat_f<F>_train.
+#   FOLD=0 SEED=1 EPOCHS=600 TAG=pilot sbatch --time=14:00:00 --export=ALL,FOLD,SEED,EPOCHS,TAG scripts/train_kd_landsat.sbatch
 # Reprise automatique sur last.pt : si le walltime tombe, resoumettre la même ligne.
 set -euo pipefail
 
@@ -38,18 +44,31 @@ KD_T_CHG="${KD_T_CHG:-1}"
 LKD_SEM="${LKD_SEM:-0}"
 KD_T_SEM="${KD_T_SEM:-2}"
 KD_MASK="${KD_MASK:-changed}"
-KD_TEACHER="${KD_TEACHER:-perascd}"   # cache : $SCRATCH/csf-distill/cache/<teacher>_landsat_train
+KD_TEACHER="${KD_TEACHER:-perascd}"   # cache : $SCRATCH/csf-distill/cache/<teacher>_landsat[_f<F>]_train
+FOLD="${FOLD:-}"                       # 0..3 : pli disjoint par emplacement ; vide = split d'origine (fuit)
 TAG="${TAG:?donner un TAG explicite (base, kdlogits, ...)}"
 
 REPO="$HOME/csf-mamba"
-OUT="$SCRATCH/csf-distill/runs/landsat_${TAG}-s${SEED}"
+if [ -n "$FOLD" ]; then
+    case "$FOLD" in 0|1|2|3) ;; *) echo "⛔ FOLD doit valoir 0..3"; exit 1 ;; esac
+    FD="$REPO/splits/LandsatSCD_loc/fold$FOLD"
+    [ -f "$FD/train.txt" ] || { echo "⛔ $FD absent"; exit 1; }
+    OUT="$SCRATCH/csf-distill/runs/landsat_f${FOLD}_${TAG}-s${SEED}"
+    IDS_ARGS=(--train-ids "$FD/train.txt" --val-ids "$FD/val.txt" --test-ids "$FD/test.txt")
+    CACHE_NAME="${KD_TEACHER}_landsat_f${FOLD}_train"
+else
+    OUT="$SCRATCH/csf-distill/runs/landsat_${TAG}-s${SEED}"
+    IDS_ARGS=()
+    CACHE_NAME="${KD_TEACHER}_landsat_train"
+fi
 mkdir -p "$OUT"
 
 RECIPE="weight=1 dice=0 lovasz=0 crop=512 batch=2 x accum=4 enc=vmamba_mini dec=dw fusion=concat cga=1 mcasf=1 up=dysample core=chess deep=0 sek=0 sc=0.1 fft=[0,1] lr=constant rot90=1 photo=0.2 tswap=0.5 ema=0.9998"
 CONF="dataset=landsat_perascd $RECIPE seed=$SEED epochs=$EPOCHS select=val report=test"
+if [ -n "$FOLD" ]; then CONF="$CONF fold=$FOLD split=location"; fi
 KD_ARGS=()
 if [ "$LKD_CHG" != "0" ] || [ "$LKD_SEM" != "0" ]; then
-    CACHE_SRC="$SCRATCH/csf-distill/cache/${KD_TEACHER}_landsat_train"
+    CACHE_SRC="$SCRATCH/csf-distill/cache/$CACHE_NAME"
     [ -f "$CACHE_SRC/meta.json" ] || { echo "⛔ cache professeur absent : $CACHE_SRC"; exit 1; }
     CONF="$CONF kd_chg=$LKD_CHG t_chg=$KD_T_CHG kd_sem=$LKD_SEM t_sem=$KD_T_SEM mask=$KD_MASK teacher=$KD_TEACHER"
 fi
@@ -89,7 +108,7 @@ if [ -n "${CACHE_SRC:-}" ]; then
 fi
 
 python -m scripts.train \
-    --data-root "$DATA_ROOT" --dataset landsat_perascd --val-split val --test-split test \
+    --data-root "$DATA_ROOT" --dataset landsat_perascd --val-split val --test-split test "${IDS_ARGS[@]}" \
     --encoder vmamba_mini --encoder-pretrained "$SCRATCH/pretrained_weight/vssm_tiny_0230_ckpt_epoch_262.pth" \
     --decoder-refine dw --core chess --fusion concat --upsample dysample --backend mamba \
     --crop-size 512 --batch-size 2 --accum-steps 4 \

@@ -29,8 +29,17 @@ from torch.utils.data import Dataset
 from ..distill.d4 import D4, canonical_d4
 from .transforms import AUG_HFLIP, AUG_KEY, AUG_LEFT, AUG_ROT, AUG_SWAP, AUG_TOP, AUG_VFLIP
 
-CHANNELS = 15
+CHANNELS = 15          # SECOND : 7 classes par date (0 = non-changé) -> 7 + 7 + 1
 SEM_T1, SEM_T2, CHANGE = slice(0, 7), slice(7, 14), slice(14, 15)
+
+
+def layout_slices(n_channels: int):
+    """Canaux du cache pour C classes par date : sém. T1 [0, C), sém. T2 [C, 2C), changement
+    2C. SECOND : C = 7 (15 canaux) ; Landsat-SCD : C = 5 (11 canaux)."""
+    if n_channels < 3 or n_channels % 2 == 0:
+        raise ValueError(f"{n_channels} canaux : attendu 2C + 1")
+    c = (n_channels - 1) // 2
+    return slice(0, c), slice(c, 2 * c), slice(2 * c, 2 * c + 1)
 
 
 class TeacherCacheDataset(Dataset):
@@ -42,8 +51,9 @@ class TeacherCacheDataset(Dataset):
         self.dir = Path(cache_dir)
         self.meta = json.loads((self.dir / "meta.json").read_text())
         lay = self.meta["layout"]
-        if lay["shape"][1] != CHANNELS or lay["dtype"] != "float16":
+        if lay["dtype"] != "float16":
             raise ValueError(f"cache inattendu : {lay}")
+        self.slices = layout_slices(lay["shape"][1])
         if [tuple(e) for e in self.meta["d4"]["elements_hflip_then_rot90k"]] != D4:
             raise ValueError("la convention D4 du cache diffère de csf_mamba.distill.d4")
         self.native = lay["shape"][2]
@@ -82,8 +92,9 @@ class TeacherCacheDataset(Dataset):
             raise ValueError(f"crop partiel (top={int(aug[AUG_TOP])}, left={int(aug[AUG_LEFT])}, "
                              f"tuile {tile}) : le cache couvre la tuile entière de {4 * self.native}")
         g = canonical_d4(int(aug[AUG_HFLIP]), int(aug[AUG_VFLIP]), int(aug[AUG_ROT]))
-        t = torch.from_numpy(np.array(self._open()[g][self.row[name]]))     # copie (15, n, n)
+        t = torch.from_numpy(np.array(self._open()[g][self.row[name]]))     # copie (2C+1, n, n)
         if aug[AUG_SWAP]:
-            t = torch.cat([t[SEM_T2], t[SEM_T1], t[CHANGE]], dim=0)
+            s1, s2, ch = self.slices
+            t = torch.cat([t[s2], t[s1], t[ch]], dim=0)
         sample["kd_teacher"] = t
         return sample

@@ -567,6 +567,18 @@ Un modèle de 16,5 M qui monte encore de 0,2 pt / 10 ép. après 600 époques et
 - le split aléatoire 60/20/20 de `split_train_val.py` met les 12 emplacements dans les trois splits ;
 - **d'après les noms**, les 477 paires de test ont leurs deux années présentes dans l'entraînement au même indice k. **Vérifié sur les pixels pour une seule paire** : `test/im1/From1990To1994_00` = `train/im1/From1990To1993_00` et `test/im2/From1990To1994_00` = `train/im1/From1994To2002_00`, à l'identique ; sur les 665 pixels annotés dans les deux paires, la classe à T1 concorde à 100 %. *(Correction du même jour : une première version de cette entrée disait « vérifié pixel pour pixel » pour les 477 paires, ce qui était faux. La vérification complète, indépendante des noms, est `scripts/verify_landsat_leakage.py` : doublons exacts par hash, hypothèse k = emplacement, cohérence des labels, et oracle de recherche sans modèle.)*
 
+**Vérification complète, indépendante des noms** (`scripts/verify_landsat_leakage.py`, Narval, 1er oct., `$SCRATCH/csf-distill/checks/landsat_leakage.json`) :
+
+| contrôle | résultat |
+|---|---|
+| images distinctes (hash des pixels) sur 2 × 2 385 = 4 770 emplacements d'image | **333** seulement |
+| paires val / test dont les DEUX images existent à l'identique dans l'entraînement | **477 / 477** et **477 / 477** |
+| groupes (k, année) ne contenant qu'une image distincte | 333 / 333 ; aucune image partagée entre deux k la même année → **k = emplacement, confirmé** |
+| cohérence des classes à (k, année) fixés, sur 198 829 642 pixels annotés en commun | **100 %**, 0 conflit |
+| **oracle sans modèle** (classes recopiées de l'entraînement au même emplacement et à la même année) | **SeK 77,87**, Fscd 95,04, mIoU 94,25 ; 90,8 % des pixels changés du test ont leurs deux classes connues par l'entraînement |
+
+Le jeu est donc construit à partir de **333 cartes annotées** (12 emplacements × ~28 années), et ses 2 385 paires sont des combinaisons de ces cartes. Une table de correspondance, sans aucun apprentissage, bat de 12 pt le meilleur chiffre publié (PerASCD 65,21, DBTANet 65,72) et notre élève à 600 époques (69,42).
+
 Le test mesure donc la **mémorisation de 12 emplacements**, ce qui explique une courbe qui monte sans fin. Tous les chiffres publiés sur ce découpage (et sans doute sur les découpages aléatoires 1455/485/485 de la littérature, construits de la même façon sur les mêmes 2 425 paires) partagent la fuite.
 
 Conséquences :
@@ -577,6 +589,13 @@ Conséquences :
 Contrôle sur SECOND (même méthode, hash des pixels) : 5 936 images d'entraînement, 3 388 de test, **aucun doublon exact** entre splits. (Un recouvrement spatial partiel sans doublon exact n'est pas testé par ce contrôle.)
 
 Tables : `logs/landsat_e600/analyse/` (à générer), runs `logs/landsat_e600/`.
+
+### Landsat, protocole disjoint par emplacement : code prêt (9 oct.)
+
+- Plis : `scripts/make_landsat_location_folds.py` → `splits/LandsatSCD_loc/fold{0..3}` (recherche exhaustive des 15 400 partitions en 4 groupes de 3 emplacements, équilibre des transitions et du taux de changement ; val = 1 emplacement par pli). Tests : f0 {00, 02, 20} 580 paires, f1 {01, 21, 30} 593, f2 {10, 12, 22} 606, f3 {11, 31, 32} 606 ; taux de changement du test 0,184–0,191 (global 0,188). `train.py` refuse de démarrer si un emplacement est dans deux splits.
+- Professeur : PerASCD ViT-G réentraîné par pli (`scripts/teacher/train_teacher_landsat.py`, recette legacy ; sélection sur la SeK de val du pli, et non sur le test comme chez eux ; vérifie que les poids PerA sont réellement chargés). Repli VMamba-B si le ViT-G ne tient pas sur 40 Go ou dépasse ≈ 15 A100-h par pli. Lanceur `scripts/teacher/teacher_landsat.sbatch` (MODE=feas|train|cache ; le cache exige que le professeur batte l'élève pilote sur la val du pli).
+- Cache et KD généralisés à C classes (11 canaux pour Landsat) ; `train_kd_landsat.sbatch` prend `FOLD`. 55 tests passent ; tests CPU de bout en bout (entraînement 1 époque, cache, lecture + loss KD à 5 classes) passés.
+- Ordre : poids PerA → faisabilité (pli 0) → pilote élève 600 époques (pli 0, règle de budget sur val) → professeur pli 0 + garde-fou → plis 1–3 → 4 plis × (3 graines sans KD + 3 avec KD).
 
 ## 5. Risques qui pourraient invalider la comparaison
 

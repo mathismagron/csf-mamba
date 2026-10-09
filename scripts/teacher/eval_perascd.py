@@ -61,6 +61,14 @@ NORM_BY_ARCH = {"ViT-G/16/1024": ("pera", PERA_MEAN, PERA_STD), "ViT-B/16": ("pe
 NORM = {"name": "pera", "mean": PERA_MEAN, "std": PERA_STD}
 
 
+def set_num_classes(n: int):
+    """7 pour SECOND (défaut), 5 pour Landsat-SCD. Lu par build_teacher(), evaluate(),
+    permutation_check() et cache_teacher.py via `ev.NUM_CLASSES`."""
+    global NUM_CLASSES
+    NUM_CLASSES = int(n)
+    return NUM_CLASSES
+
+
 def set_normalization(arch):
     name, mean, std = NORM_BY_ARCH[arch]
     NORM.update(name=name, mean=mean, std=std)
@@ -238,6 +246,36 @@ class SecondRaw(Dataset):
         return {"img_a": self._img("T1", n), "img_b": self._img("T2", n),
                 "lbl_a": self._lbl("GT_T1", n), "lbl_b": self._lbl("GT_T2", n),
                 "cd": (self._lbl("GT_CD", n) > 0).long()}
+
+
+class LandsatRaw(Dataset):
+    """LandsatSCD512, paires `<split>/<nom>` d'un pli (splits/LandsatSCD_loc/fold*/…).
+    Même sortie que SecondRaw ; changement = label1 > 0, comme PerASCD. `ids` porte les
+    identifiants complets `<split>/<nom>`, ceux que relit TeacherCacheDataset."""
+
+    def __init__(self, root, ids_file):
+        self.root = Path(root)
+        self.ids = [l.strip() for l in Path(ids_file).read_text().splitlines() if l.strip()]
+
+    def __len__(self):
+        return len(self.ids)
+
+    def _img(self, f, ident):
+        split, name = ident.split("/")
+        a = np.asarray(Image.open(self.root / split / f / name).convert("RGB"), dtype=np.float32) / 255.0
+        return torch.from_numpy(a).permute(2, 0, 1)
+
+    def _lbl(self, f, ident):
+        split, name = ident.split("/")
+        a = np.asarray(Image.open(self.root / split / f / name))
+        assert a.ndim == 2 and a.max() < NUM_CLASSES, f"{f}/{ident}"
+        return torch.from_numpy(a.astype(np.int64))
+
+    def __getitem__(self, i):
+        n = self.ids[i]
+        la = self._lbl("label1", n)
+        return {"img_a": self._img("im1", n), "img_b": self._img("im2", n),
+                "lbl_a": la, "lbl_b": self._lbl("label2", n), "cd": (la > 0).long()}
 
 
 def normalize(x):

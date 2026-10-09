@@ -46,7 +46,7 @@ _spec.loader.exec_module(ev)
 # 26 septembre a été écrit avec une copie locale identique de ces fonctions.
 from csf_mamba.distill.d4 import D4, apply_d4, canonical_d4  # noqa: E402
 
-CHANNELS = 15                                     # 7 sem T1 + 7 sem T2 + 1 changement
+CHANNELS = 15                                     # SECOND : 7 sem T1 + 7 sem T2 + 1 changement (2C + 1)
 NATIVE = 128
 
 
@@ -64,6 +64,8 @@ def parse_args():
     p.add_argument("--workers", type=int, default=6)
     p.add_argument("--limit", type=int, default=None, help="nb de lots (test rapide)")
     p.add_argument("--device", default="cuda")
+    p.add_argument("--dataset", default="second", choices=["second", "landsat_perascd"])
+    p.add_argument("--ids-file", default=None, help="landsat_perascd : liste '<split>/<nom>' du pli (train.txt)")
     return p.parse_args()
 
 
@@ -85,6 +87,12 @@ def main():
     device = args.device
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    if args.dataset == "landsat_perascd":
+        if not args.ids_file:
+            raise SystemExit("--ids-file requis pour landsat_perascd")
+        ev.set_num_classes(5)
+    C = ev.NUM_CLASSES
+    chans = 2 * C + 1
     PerASCD, legacy_eval, get_hist, compiled = ev.import_legacy(Path(args.perascd_root).resolve(), args.msda)
 
     model, info = ev.build_teacher(PerASCD, Path(args.perascd_root).resolve(), args.arch, args.checkpoint)
@@ -95,13 +103,14 @@ def main():
                           "sha256": sha256_of(cp, cp.parent.parent / "SHA256SUMS")})
     model = model.to(device).eval()
 
-    ds = ev.SecondRaw(args.data_root, args.split)
+    ds = (ev.LandsatRaw(args.data_root, args.ids_file) if args.dataset == "landsat_perascd"
+          else ev.SecondRaw(args.data_root, args.split))
     n = len(ds) if args.limit is None else min(len(ds), args.limit * args.batch_size)
     loader = DataLoader(ds, batch_size=args.batch_size, shuffle=False, num_workers=args.workers,
                         pin_memory=device.startswith("cuda"))
     (out / "ids.txt").write_text("\n".join(ds.ids[:n]) + "\n")
     maps = [np.lib.format.open_memmap(out / f"d4_{i}.npy", mode="w+", dtype=np.float16,
-                                      shape=(n, CHANNELS, NATIVE, NATIVE)) for i in range(len(D4))]
+                                      shape=(n, chans, NATIVE, NATIVE)) for i in range(len(D4))]
 
     # Contrôle 1 : la sortie native est bien en 128 et son suréchantillonnage redonne
     # exactement la sortie 512 du modèle.
@@ -129,26 +138,26 @@ def main():
         ident = None
         for gi, (h, k) in enumerate(D4):
             ch, sa, sb = ev.forward(model, apply_d4(a, h, k), apply_d4(b, h, k), args.precision, device)
-            blob = torch.cat([sa, sb, ch], dim=1)                     # (m, 15, 128, 128)
+            blob = torch.cat([sa, sb, ch], dim=1)                     # (m, 2C+1, 128, 128)
             maps[gi][done:done + m] = blob.half().cpu().numpy()
             if gi == 0:
                 ident = blob
             else:
                 ref = apply_d4(ident, h, k)                           # g·T(x)
-                c_ref, c_g = ref[:, 14] > 0, blob[:, 14] > 0
+                c_ref, c_g = ref[:, 2 * C] > 0, blob[:, 2 * C] > 0
                 e = equi[gi]
                 e["change_agree"] += float((c_ref == c_g).float().sum())
                 e["pix"] += c_ref.numel()
                 both = c_ref & c_g
-                for s in (slice(0, 7), slice(7, 14)):
+                for s in (slice(0, C), slice(C, 2 * C)):
                     e["sem_agree_changed"] += float(((ref[:, s].argmax(1) == blob[:, s].argmax(1)) & both).sum())
                 e["pix_changed"] += 2 * int(both.sum())
         # SeK train à partir de ce qui vient d'être ÉCRIT (fp16), suréchantillonné
         # comme le fera la KD : contrôle de bout en bout du cache.
         rd = torch.from_numpy(np.asarray(maps[0][done:done + m])).to(device).float()
         rd = F.interpolate(rd, (512, 512), mode="bilinear", align_corners=False)
-        cm = (rd[:, 14] > 0).long()
-        pa, pb = (rd[:, :7].argmax(1) * cm).cpu().numpy(), (rd[:, 7:14].argmax(1) * cm).cpu().numpy()
+        cm = (rd[:, 2 * C] > 0).long()
+        pa, pb = (rd[:, :C].argmax(1) * cm).cpu().numpy(), (rd[:, C:2 * C].argmax(1) * cm).cpu().numpy()
         la, lb = batch["lbl_a"][:m].numpy(), batch["lbl_b"][:m].numpy()
         for i in range(m):
             hist += get_hist(pa[i], la[i], ev.NUM_CLASSES) + get_hist(pb[i], lb[i], ev.NUM_CLASSES)
@@ -162,10 +171,11 @@ def main():
     fscd, miou, sek = legacy_eval(hist)
     meta = {
         "created": time.strftime("%Y-%m-%d %H:%M:%S"), "split": args.split, "n_pairs": n,
+        "dataset": args.dataset, "ids_file": args.ids_file, "num_classes": C,
         "arch": args.arch, "precision": args.precision, "msda": "pytorch" if ev._MSDA.use_pytorch else "cuda",
         "checkpoint": meta_ckpt, "normalization": dict(ev.NORM),
-        "layout": {"shape": [n, CHANNELS, NATIVE, NATIVE], "dtype": "float16",
-                   "channels": {"sem_t1_logits": [0, 7], "sem_t2_logits": [7, 14], "change_logit": [14, 15]},
+        "layout": {"shape": [n, chans, NATIVE, NATIVE], "dtype": "float16",
+                   "channels": {"sem_t1_logits": [0, C], "sem_t2_logits": [C, 2 * C], "change_logit": [2 * C, 2 * C + 1]},
                    "class_0": "non-changé : jamais cible de la CE du professeur, à exclure de la KL",
                    "upsample_to_512": "bilinear, align_corners=False (celui du professeur)"},
         "d4": {"files": [f"d4_{i}.npy" for i in range(len(D4))], "elements_hflip_then_rot90k": D4,

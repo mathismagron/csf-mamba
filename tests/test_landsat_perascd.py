@@ -58,7 +58,7 @@ def test_sample(root):
 
 def test_mismatched_folders(root):
     (root / "train" / "label2" / "From1990To1993_train00.png").unlink()
-    with pytest.raises(RuntimeError):
+    with pytest.raises(FileNotFoundError):
         LandsatPerASCDDataset(str(root), "train")
 
 
@@ -68,7 +68,7 @@ def test_bad_index(root):
     _write_pair(root / "train", "bad.png", rng, l1, l1)
     ds = LandsatPerASCDDataset(str(root), "train")
     with pytest.raises(ValueError):
-        ds[ds.ids.index("bad.png")]
+        ds[ds.ids.index("train/bad.png")]
 
 
 def _check(root):
@@ -96,3 +96,41 @@ def test_check_detects_disagreement_and_self_transition(root, monkeypatch, capsy
     assert e.value.code == 1
     out = capsys.readouterr().out
     assert "divergent" in out and "elle-même" in out and "attendues" not in out
+
+
+# --- plis disjoints par emplacement
+
+def _pool(tmp_path):
+    rng = np.random.default_rng(3)
+    for split, names in (("train", ["From1990To1993_00.png", "From1990To1994_01.png"]),
+                         ("val", ["From1993To1996_00.png", "From1992To1997_02.png"]),
+                         ("test", ["From1994To1999_02.png", "From1996To1999_03.png"])):
+        for n in names:
+            _write_pair(tmp_path / split, n, rng)
+    return tmp_path
+
+
+def test_fold_lists_read_across_split_dirs(tmp_path):
+    root = _pool(tmp_path)
+    lst = tmp_path / "fold_train.txt"
+    lst.write_text("train/From1990To1993_00.png\nval/From1993To1996_00.png\n")
+    ds = LandsatPerASCDDataset(str(root), "train", ids_file=str(lst))
+    assert ds.ids == ["train/From1990To1993_00.png", "val/From1993To1996_00.png"]
+    assert ds[1]["img_t1"].shape == (3, 512, 512)
+
+
+def test_fold_list_rejects_bare_names(tmp_path):
+    root = _pool(tmp_path)
+    lst = tmp_path / "bad.txt"; lst.write_text("From1990To1993_00.png\n")
+    with pytest.raises(ValueError):
+        LandsatPerASCDDataset(str(root), "train", ids_file=str(lst))
+
+
+def test_location_guard():
+    from csf_mamba.datasets.landsat_perascd import assert_location_disjoint, location_of
+    assert location_of("val/From1993To1996_07.png") == "07"
+    ok = assert_location_disjoint(train=["train/From1990To1993_00.png"], test=["test/From1994To1999_02.png"])
+    assert ok == {"train": {"00"}, "test": {"02"}}
+    with pytest.raises(RuntimeError, match="fuite"):
+        # même emplacement 00, années différentes : c'est exactement la fuite du split d'origine
+        assert_location_disjoint(train=["train/From1990To1993_00.png"], test=["test/From1993To1996_00.png"])

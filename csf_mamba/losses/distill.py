@@ -55,7 +55,7 @@ class DistillLoss(nn.Module):
 
     def _change_target(self, tz, teacher, change_gt, size):
         if self.change_target == "teacher":
-            return torch.sigmoid(tz[:, 14] / self.t_change)
+            return torch.sigmoid(tz[:, tz.shape[1] - 1] / self.t_change)
         gt = change_gt.float()
         if gt.shape[-2:] != size:
             gt = F.interpolate(gt[:, None], size=size, mode="nearest")[:, 0]
@@ -72,6 +72,12 @@ class DistillLoss(nn.Module):
     def forward(self, outputs: dict, teacher: torch.Tensor, change_gt: torch.Tensor) -> dict:
         size = outputs["bcd"].shape[-2:]
         tz = F.interpolate(teacher.float(), size=size, mode="bilinear", align_corners=False)
+        # 2C + 1 canaux : C classes par date (0 = non-changé), puis le logit de changement.
+        # SECOND : C = 7 (canal 14) ; Landsat-SCD : C = 5 (canal 10).
+        C = (tz.shape[1] - 1) // 2
+        ch = 2 * C
+        if "sem_t1" in outputs and outputs["sem_t1"].shape[1] != C:
+            raise ValueError(f"professeur à {C} classes, élève à {outputs['sem_t1'].shape[1]}")
         terms = {}
         if self.lambda_change > 0:
             T = self.t_change
@@ -83,14 +89,14 @@ class DistillLoss(nn.Module):
         if self.lambda_sem > 0:
             T = self.t_sem
             if self.sem_mask == "all":
-                mask = torch.ones_like(tz[:, 14])
+                mask = torch.ones_like(tz[:, ch])
             else:
-                mask = ((change_gt == 1) | (tz[:, 14] > 0)).float()
+                mask = ((change_gt == 1) | (tz[:, ch] > 0)).float()
             denom = mask.sum().clamp(min=1.0)
             total = 0.0
-            for key, sl in (("sem_t1", slice(1, 7)), ("sem_t2", slice(8, 14))):
+            for key, sl in (("sem_t1", slice(1, C)), ("sem_t2", slice(C + 1, 2 * C))):
                 logq = F.log_softmax(tz[:, sl] / T, dim=1)
-                logp = F.log_softmax(outputs[key][:, 1:7] / T, dim=1)
+                logp = F.log_softmax(outputs[key][:, 1:C] / T, dim=1)
                 kl = (logq.exp() * (logq - logp)).sum(1)
                 total = total + (kl * mask).sum() / denom
             terms["kd_sem"] = self.lambda_sem * T * T * total / 2
