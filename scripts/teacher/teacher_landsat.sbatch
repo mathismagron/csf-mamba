@@ -8,7 +8,7 @@
 #SBATCH --output=logs/lsat-teacher-%j.out
 #
 # Professeur Landsat-SCD par pli disjoint par emplacement (splits/LandsatSCD_loc/fold<F>).
-#   ARCH=vitg (PerASCD ViT-G/16 PerA, 548 M ; défaut) | vmambab (VMamba-B + CG-Decoder, repli)
+#   TEACHER=vitg (PerASCD ViT-G/16 PerA, 548 M ; défaut) | vmambab (VMamba-B + CG-Decoder, repli)
 #   MODE=feas  : 40 micro-itérations -> pic mémoire, s/itération, durée projetée (feasibility.json)
 #   MODE=train : 50 époques, best.pt sur la SeK de val du pli, test enregistré ; reprise sur last.pt
 #   MODE=cache : logits du best.pt sur le train du pli (8 vues D4, calcul fp32, stockage fp16)
@@ -24,18 +24,20 @@ set -euo pipefail
 
 FOLD="${FOLD:?FOLD=0..3}"
 MODE="${MODE:?MODE=feas|train|cache}"
-ARCH="${ARCH:-vitg}"
+# ⚠️ pas « ARCH » : l'environnement des grappes Alliance définit déjà ARCH (architecture
+# CPU), que --export=ALL transmet au job — d'où l'échec du job 5113078.
+TEACHER="${TEACHER:-vitg}"
 case "$FOLD" in 0|1|2|3) ;; *) echo "⛔ FOLD doit valoir 0..3"; exit 1 ;; esac
-case "$ARCH" in
+case "$TEACHER" in
     vitg)    ARCH_PY="ViT-G/16/1024"; PRE="${PERA_WEIGHTS:-}"; TNAME=perascd ;;
     vmambab) ARCH_PY="vmambaB"; PRE="${VMB_WEIGHTS:-$SCRATCH/pretrained_weight/vssm_base_0229_ckpt_epoch_237.pth}"; TNAME=vmambab ;;
-    *) echo "⛔ ARCH doit valoir vitg ou vmambab"; exit 1 ;;
+    *) echo "⛔ TEACHER doit valoir vitg ou vmambab (reçu : $TEACHER)"; exit 1 ;;
 esac
 
 REPO="$HOME/csf-mamba"
 PERASCD="$REPO/third_party/PerASCD"
 FD="$REPO/splits/LandsatSCD_loc/fold$FOLD"
-OUT="$SCRATCH/csf-distill/teachers/landsat_${ARCH}_f${FOLD}"
+OUT="$SCRATCH/csf-distill/teachers/landsat_${TEACHER}_f${FOLD}"
 CACHE="$SCRATCH/csf-distill/cache/${TNAME}_landsat_f${FOLD}_train"
 [ -f "$FD/train.txt" ] || { echo "⛔ $FD absent"; exit 1; }
 [ -d "$PERASCD/models" ] || { echo "⛔ PerASCD legacy absent : $PERASCD"; exit 1; }
@@ -50,7 +52,7 @@ echo "$(date '+%F %T') mode=$MODE job=$SLURM_JOB_ID commit=$(git rev-parse --sho
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
 # Opérateur déformable de ViT-Adapter : build partagé (scripts/teacher/build_msda_student.sbatch).
-if [ "$ARCH" = vitg ]; then
+if [ "$TEACHER" = vitg ]; then
     SITE="$SCRATCH/csf-distill/msda_site"
     export PYTHONPATH="$SITE${PYTHONPATH:+:$PYTHONPATH}"
     python -c "import torch, MultiScaleDeformableAttention as m; print('   MSDA :', m.__file__)" \
@@ -87,7 +89,7 @@ if not sek > gate:
 EOF
     python scripts/teacher/cache_teacher.py --perascd-root "$PERASCD" --checkpoint "$OUT/best.pt" \
         --arch "$ARCH_PY" --dataset landsat_perascd --ids-file "$FD/train.txt" --data-root "$DATA" \
-        --split train --precision fp32 --batch-size 8 --out-dir "$CACHE" --msda "$([ "$ARCH" = vitg ] && echo cuda || echo auto)"
+        --split train --precision fp32 --batch-size 8 --out-dir "$CACHE" --msda "$([ "$TEACHER" = vitg ] && echo cuda || echo auto)"
     (cd "$CACHE" && sha256sum d4_*.npy ids.txt meta.json > SHA256SUMS)
     du -sh "$CACHE"
     ;;
