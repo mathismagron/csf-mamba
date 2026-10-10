@@ -88,6 +88,9 @@ def parse_args():
     p.add_argument("--device", default="cuda")
     p.add_argument("--allow-pytorch-msda", action="store_true", help="test CPU de plomberie uniquement")
     p.add_argument("--limit-pairs", type=int, default=None, help="test : n premières paires de chaque liste")
+    p.add_argument("--grad-ckpt", default="auto", choices=["auto", "on", "off"],
+                   help="recalcul des activations des blocs ViT au backward (auto : on pour ViT-G). "
+                        "Même calcul, même aléa (état RNG rejoué), mémoire réduite, ≈ +30 %% de temps.")
     return p.parse_args()
 
 
@@ -144,6 +147,25 @@ def adjust_lr(optimizer, iter_ratio, init_lr, warmup, min_lr, power):
     for g in optimizer.param_groups:
         g["lr"] = lr
     return lr
+
+
+def enable_block_checkpointing(net) -> int:
+    """Checkpointing d'activations sur chaque bloc du ViT (`backbone.blocks`, appelés `blk(x)`
+    par leurs blocs d'interaction). On remplace la méthode `forward` de l'instance, sans
+    changer l'arbre des modules : le state_dict, donc best.pt et le cache, restent identiques.
+    `torch.utils.checkpoint` (use_reentrant=False) rejoue l'état RNG : le drop-path tire les
+    mêmes masques au recalcul. Désactivé hors gradient (évaluation, cache)."""
+    from torch.utils.checkpoint import checkpoint
+    blocks = net.backbone.blocks
+    for blk in blocks:
+        f = blk.forward
+
+        def fwd(x, _f=f):
+            if torch.is_grad_enabled():
+                return checkpoint(_f, x, use_reentrant=False)
+            return _f(x)
+        blk.forward = fwd
+    return len(blocks)
 
 
 def build_model(args, PerASCD):
@@ -239,15 +261,18 @@ def main():
     RS, CE2d, SSC, wBCE, stubbed = import_rs_st(Path(args.perascd_root).resolve())
 
     net, load_report = build_model(args, PerASCD)
+    grad_ckpt = args.grad_ckpt == "on" or (args.grad_ckpt == "auto" and args.arch == "ViT-G/16/1024")
+    n_ckpt = enable_block_checkpointing(net) if grad_ckpt and args.arch != "vmambaB" else 0
     net = net.to(device)
     n_params = sum(p.numel() for p in net.parameters())
     cfg = {**vars(args), "norm": norm, "locations": {k: sorted(v) for k, v in locs.items()},
            "pairs": {k: len(v) for k, v in lists.items()}, "params_M": round(n_params / 1e6, 2),
-           "pretrained_load": load_report, "stubbed_modules": stubbed,
+           "pretrained_load": load_report, "stubbed_modules": stubbed, "grad_ckpt_blocks": n_ckpt,
            "msda": "cuda" if compiled else "pytorch",
-           "deviations": ["sélection sur SeK de val du pli (eux : Fscd du test)", "pas de pseudo-labels"]}
+           "deviations": ["sélection sur SeK de val du pli (eux : Fscd du test)", "pas de pseudo-labels"]
+                         + ([f"checkpointing d'activations sur {n_ckpt} blocs ViT (A100 40 Go ; même calcul)"] if n_ckpt else [])}
     (out / "config.json").write_text(json.dumps(cfg, indent=1, ensure_ascii=False, default=str))
-    print(json.dumps({k: cfg[k] for k in ("arch", "params_M", "pairs", "locations", "pretrained_load", "norm")},
+    print(json.dumps({k: cfg[k] for k in ("arch", "params_M", "pairs", "locations", "pretrained_load", "norm", "grad_ckpt_blocks")},
                      ensure_ascii=False, default=str), flush=True)
 
     mk = lambda s, train: FoldPairs(args.data_root, fold / f"{s}.txt", train, norm["mean"], norm["std"], RS,

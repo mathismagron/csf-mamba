@@ -18,6 +18,7 @@
 #
 #   FOLD=0 MODE=feas PERA_WEIGHTS=$SCRATCH/csf-distill/pera/<fichier>.params \
 #       sbatch --export=ALL,FOLD,MODE,PERA_WEIGHTS scripts/teacher/teacher_landsat.sbatch
+#   # job 5160760 : OOM sur 40 Go à lot 4 sans checkpointing ; --grad-ckpt auto (on pour ViT-G) depuis
 #   FOLD=0 MODE=train PERA_WEIGHTS=... sbatch --time=20:00:00 --export=ALL,FOLD,MODE,PERA_WEIGHTS scripts/teacher/teacher_landsat.sbatch
 #   FOLD=0 MODE=cache GATE_SEK=0.xxxx sbatch --export=ALL,FOLD,MODE,GATE_SEK scripts/teacher/teacher_landsat.sbatch
 set -euo pipefail
@@ -71,6 +72,9 @@ case "$MODE" in
   feas|train)
     [ -n "$PRE" ] && [ -f "$PRE" ] || { echo "⛔ poids pré-entraînés absents : '$PRE' (PERA_WEIGHTS / VMB_WEIGHTS)"; exit 1; }
     EXTRA=(); [ "$MODE" = feas ] && EXTRA=(--max-iters 40)
+    # TEACHER_ARGS : options supplémentaires, p. ex. "--batch-size 2 --accum 4" ou "--grad-ckpt off"
+    read -r -a TARGS <<< "${TEACHER_ARGS:-}"; EXTRA+=("${TARGS[@]}")
+    echo "   options : ${EXTRA[*]:-aucune}"
     python -u scripts/teacher/train_teacher_landsat.py --perascd-root "$PERASCD" --arch "$ARCH_PY" \
         --pretrained "$PRE" --data-root "$DATA" --fold-dir "$FD" --out "$OUT" --workers 10 "${EXTRA[@]}"
     ;;
