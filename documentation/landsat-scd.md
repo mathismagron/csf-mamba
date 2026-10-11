@@ -300,6 +300,8 @@ jeu de données*, ce qui est un résultat en soi mais affaiblit l'énoncé gén�
 
 Remplace les §3–§7 pour l'étude de distillation. Chiffres et journal daté : `distillation.md`.
 
+**Ce que dit l'article d'origine** (Yuan *et al.*, 2022, `documentation/refs/`) : une seule zone (Tumushuke), 28 dates de 1990 à 2020, 8 468 paires réparties **au hasard** en 6 053 / 1 729 / 686 (p. 11), variantes augmentées comprises ; la généralisation à d'autres régions est annoncée comme travail futur (p. 19). Le découpage aléatoire est donc le protocole d'origine, pas une erreur d'un article : il mesure la reconnaissance sur une zone déjà vue. Détail et formulation : `distillation.md`.
+
 **Pourquoi des plis.** Le jeu ne compte que 12 emplacements (indice `_k` des noms, vérifié sur les pixels), chacun vu sur ~28 années. Tester honnêtement la généralisation impose des emplacements jamais vus à l'entraînement ; avec 3 emplacements seulement en test, un découpage unique dépendrait trop du tirage (selon le groupe, la baseline va de 18,4 à 28,8). D'où 4 plis : chaque emplacement est testé une fois, par un modèle qui ne l'a jamais vu, et le résultat est la moyenne des plis.
 
 | pli | test | val | entraînement |

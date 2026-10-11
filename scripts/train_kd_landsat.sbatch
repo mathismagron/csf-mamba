@@ -50,7 +50,7 @@ TAG="${TAG:?donner un TAG explicite (base, kdlogits, ...)}"
 
 REPO="$HOME/csf-mamba"
 if [ -n "$FOLD" ]; then
-    case "$FOLD" in 0|1|2|3) ;; *) echo "⛔ FOLD doit valoir 0..3"; exit 1 ;; esac
+    case "$FOLD" in 0|1|2|3) ;; *) echo "⛔ FOLD doit valoir 0..3 (reçu : [$FOLD])"; exit 1 ;; esac
     FD="$REPO/splits/LandsatSCD_loc/fold$FOLD"
     [ -f "$FD/train.txt" ] || { echo "⛔ $FD absent"; exit 1; }
     OUT="$SCRATCH/csf-distill/runs/landsat_f${FOLD}_${TAG}-s${SEED}"

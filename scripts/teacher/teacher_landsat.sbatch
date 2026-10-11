@@ -28,7 +28,7 @@ MODE="${MODE:?MODE=feas|train|cache}"
 # ⚠️ pas « ARCH » : l'environnement des grappes Alliance définit déjà ARCH (architecture
 # CPU), que --export=ALL transmet au job — d'où l'échec du job 5113078.
 TEACHER="${TEACHER:-vitg}"
-case "$FOLD" in 0|1|2|3) ;; *) echo "⛔ FOLD doit valoir 0..3"; exit 1 ;; esac
+case "$FOLD" in 0|1|2|3) ;; *) echo "⛔ FOLD doit valoir 0..3 (reçu : [$FOLD])"; exit 1 ;; esac
 case "$TEACHER" in
     vitg)    ARCH_PY="ViT-G/16/1024"; PRE="${PERA_WEIGHTS:-}"; TNAME=perascd ;;
     vmambab) ARCH_PY="vmambaB"; PRE="${VMB_WEIGHTS:-$SCRATCH/pretrained_weight/vssm_base_0229_ckpt_epoch_237.pth}"; TNAME=vmambab ;;

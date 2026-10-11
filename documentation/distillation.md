@@ -647,9 +647,35 @@ Relu avant d'en parler dans l'article ou aux auteurs.
 
 **Conséquence générale, par construction** : chaque image figure dans ~14 paires ; avec 60 % des paires en entraînement tirées au hasard, une image de test absente de l'entraînement a une probabilité ≈ 0,4¹³ < 10⁻⁵. **Tout découpage aléatoire au niveau des paires fuit**, quelle que soit la graine ; seuls un découpage par emplacement ou par année l'évitent.
 
-**Non vérifié** : les découpages exacts des autres travaux (Mamba-FCS, SCanNet, GSTM-SCD ne publient pas de listes Landsat ; les listes de Bi-SRNet sont celles de SECOND ; GSTM-SCD indique seulement « 3:1:1 selon Yuan et al. ») ; ce que dit l'article d'origine (Yuan et al., *Int. J. Digital Earth* 2022, doi 10.1080/17538947.2022.2111470, accès libre) de son découpage ; si d'autres auteurs connaissaient cette structure ; si le jeu visait la généralisation spatiale ou le suivi temporel d'une même zone.
+**Non vérifié** : les découpages exacts des autres travaux (Mamba-FCS, SCanNet, GSTM-SCD ne publient pas de listes Landsat ; les listes de Bi-SRNet sont celles de SECOND ; un extrait indexé par ResearchGate, attribué à un travail citant (vraisemblablement GSTM-SCD, non vérifié dans l'article lui-même), mentionne un découpage 3:1:1 « selon les proportions de Yuan et al. ») ; ce que dit l'article d'origine (Yuan et al., *Int. J. Digital Earth* 2022, doi 10.1080/17538947.2022.2111470, accès libre) de son découpage ; si d'autres auteurs connaissaient cette structure ; si le jeu visait la généralisation spatiale ou le suivi temporel d'une même zone.
 
 **Formulation retenue** : un constat mesuré et neutre, jamais « la littérature se trompe ». Pour l'article : *« Landsat-SCD est construit à partir de 12 tuiles observées sur ~28 années (333 images distinctes) ; un découpage aléatoire au niveau des paires place les mêmes images en entraînement et en test (découpage publié avec LandsatSCD512 : toutes les images de test figurent dans l'entraînement ; une recherche sans apprentissage atteint SeK 77,9). Nous évaluons sous un protocole disjoint par emplacement ; nos chiffres ne sont pas comparables aux résultats publiés sur le découpage aléatoire. »* Pour les auteurs : signaler un recouvrement, chiffres et script à l'appui, et demander si c'était voulu. Toute phrase sur la littérature en général attend la lecture de Yuan et al. 2022.
+
+### Fuite de Landsat-SCD : ce que dit l'article d'origine (11 oct.)
+
+Lu : Yuan *et al.*, « A transformer-based Siamese network and an open optical dataset for semantic change detection of remote sensing images », *Int. J. Digital Earth* 15 (2022), doi 10.1080/17538947.2022.2111470 (accès libre ; `documentation/refs/`).
+
+- **Construction** (p. 7, table 2) : 8 468 paires de 416 × 416 à 30 m, **28 dates** (« image phases ») entre 1990 et 2020, écarts de 3 à 23 ans, sur une seule zone, Tumushuke (39°39′–40°4′ N, 78°53′–79°19′ E). Le nombre de tuiles n'est pas donné ; 12 emplacements × 28 dates ≈ 336, à comparer à nos 333 images distinctes mesurées.
+- **Découpage d'origine** (p. 11, §5.2) : les auteurs **répartissent les paires au hasard** en 6 053 / 1 729 / 686 (train / val / test) — soit les 8 468 paires, **variantes augmentées hors ligne comprises** (rotations, recadrages, occultations, que l'article ne mentionne pas ; elles sont identifiées par leurs noms dans le dump figshare, et retirées par PerASCD comme par SemDINO). Ce découpage partage donc entre train et test à la fois les mêmes images et des copies transformées des mêmes tuiles.
+- **Limite reconnue par les auteurs** (p. 19, conclusion) : ils annoncent vouloir étendre le jeu à **plusieurs régions** pour vérifier la généralisation des modèles. Le jeu est conçu comme une longue série temporelle d'une seule zone ; la généralisation spatiale y est explicitement un travail futur.
+
+**Conséquence pour la formulation.** Le découpage aléatoire au niveau des paires n'est pas une erreur de tel ou tel article : c'est **le protocole d'origine, décrit par les auteurs du jeu**, repris au moins par PerASCD (`split_train_val.py`, aléatoire 60/20/20) ; d'autres travaux le citent sans publier leurs listes (un découpage 3:1:1 « selon Yuan et al. » apparaît dans un extrait ResearchGate attribué à un travail citant, non vérifié à la source). Il mesure la reconnaissance de changements sur une zone déjà vue, à d'autres couples de dates ; il ne mesure pas la généralisation à une zone nouvelle — que les auteurs eux-mêmes renvoient à un travail futur. Formulation pour l'article : *« Landsat-SCD couvre une seule zone (12 tuiles, 28 dates) et son protocole d'origine répartit les paires au hasard (Yuan et al., 2022) : les images de test figurent dans l'entraînement. Pour mesurer la généralisation à des zones non vues — que Yuan et al. désignent comme une perspective — nous utilisons une validation croisée disjointe par emplacement. »* Pas de mise en cause de la littérature : un changement de question, justifié par des faits mesurés.
+
+Reste non vérifié : les listes exactes des autres travaux (non publiées) ; le fait que l'archive de PerASCD dérive du découpage d'origine (leur script `split_train_val.py` tire un nouveau découpage 60/20/20, ce qui donne le même type de recouvrement).
+
+### Landsat, pli 0 : le professeur PerASCD ne passe pas le garde-fou (11 oct.)
+
+Job 5225769 (50 époques, recette legacy, checkpointing 40 blocs ; 4,0 h d'entraînement + 2,4 h d'évaluation, pic 28,5 Go).
+
+| | SeK val (empl. 21) | SeK test au meilleur val | Fscd | mIoU | test max |
+|---|---|---|---|---|---|
+| professeur PerASCD ViT-G, 548 M | **21,85** (ép. 28) | **28,61** | 70,62 | 75,61 | 29,99 (ép. 31) |
+| élève sans KD, 16,5 M (3 graines) | **22,50** | **28,75** (29,07 / 28,35 / 28,84) | 71,89 | 75,55 | 28,92 |
+
+- Garde-fou pré-enregistré (SeK val du professeur > 0,2250) : **échec**, 0,2185. Pas de cache.
+- Sur le test aussi, professeur ≈ élève (−0,14 pt au meilleur val). Sur SECOND, le même professeur devançait l'élève de 2,2 pt. Hypothèses, non testées : la tâche disjointe par emplacement à 30 m ne profite pas du prétraining PerA (images très haute résolution) ; 8 emplacements d'entraînement ne suffisent pas à un modèle de 548 M ; la recette (50 ép., lr 0,1) a été réglée par ses auteurs sur le découpage aléatoire.
+- La val du pli 0 n'a qu'un emplacement : val et test du professeur sont corrélés (r = 0,93 sur les époques) mais la val décroît en fin de run (19,93 à l'ép. 49) quand le test reste à 29,1.
+- Plis 1–3 (jobs 5225991–5225993) : échec en 7 s, `FOLD=$$F` dans la boucle soumise (`$$` = numéro du processus du shell, d'où une valeur invalide ; `PERA_WEIGHTS=$$SCRATCH…` également faux). Les lanceurs affichent désormais la valeur reçue.
 
 ## 5. Risques qui pourraient invalider la comparaison
 
