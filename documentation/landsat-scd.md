@@ -293,3 +293,41 @@ retrait de la loss SeK, échange temporel, EMA — n'ont **aucune garantie** de
 transférer. Le premier ne transfère déjà pas à Hi-UCD. S'ils ne transfèrent pas
 ici non plus, la conclusion du projet devient : *ces leviers sont spécifiques au
 jeu de données*, ce qui est un résultat en soi mais affaiblit l'énoncé général.
+
+---
+
+## 8. Protocole retenu : validation croisée disjointe par emplacement (octobre 2026)
+
+Remplace les §3–§7 pour l'étude de distillation. Chiffres et journal daté : `distillation.md`.
+
+**Pourquoi des plis.** Le jeu ne compte que 12 emplacements (indice `_k` des noms, vérifié sur les pixels), chacun vu sur ~28 années. Tester honnêtement la généralisation impose des emplacements jamais vus à l'entraînement ; avec 3 emplacements seulement en test, un découpage unique dépendrait trop du tirage (selon le groupe, la baseline va de 18,4 à 28,8). D'où 4 plis : chaque emplacement est testé une fois, par un modèle qui ne l'a jamais vu, et le résultat est la moyenne des plis.
+
+| pli | test | val | entraînement |
+|---|---|---|---|
+| 0 | 00, 02, 20 (580 paires) | 21 | 8 autres |
+| 1 | 01, 21, 30 (593) | 12 | 8 autres |
+| 2 | 10, 12, 22 (606) | 02 | 8 autres |
+| 3 | 11, 31, 32 (606) | 10 | 8 autres |
+
+Groupes choisis par recherche exhaustive (15 400 partitions) sur l'équilibre des transitions et du taux de changement, sans aucun résultat de modèle (`scripts/make_landsat_location_folds.py`, `splits/LandsatSCD_loc/README.json`).
+
+**Conséquences.**
+- Un professeur PerASCD par pli, entraîné par nous : celui des auteurs a vu toutes les images.
+- Comparaisons **appariées par pli et par graine** : σ entre plis 4,5 pt, σ entre graines 0,34 pt.
+- Budget élève : 100 époques (règle de pente sur la val, pilote du pli 0).
+- Chiffres non comparables à la littérature (découpage aléatoire) ; la fuite elle-même est un résultat (§ dédiée de `distillation.md` : ce qui est démontré, ce qui ne l'est pas, formulation).
+
+**Lancer.**
+```bash
+# élève, par pli et graine (100 époques, ≈ 2,4 A100-h)
+FOLD=0 SEED=1 EPOCHS=100 TAG=base sbatch --time=4:00:00 --export=ALL,FOLD,SEED,EPOCHS,TAG scripts/train_kd_landsat.sbatch
+# professeur : faisabilité, entraînement (≈ 4 h + évaluations), cache (garde-fou = SeK val des baselines du pli)
+FOLD=0 MODE=feas  PERA_WEIGHTS=$SCRATCH/csf-distill/pera/pera_ViTG161024.params sbatch --export=ALL,FOLD,MODE,PERA_WEIGHTS scripts/teacher/teacher_landsat.sbatch
+FOLD=0 MODE=train PERA_WEIGHTS=$SCRATCH/csf-distill/pera/pera_ViTG161024.params sbatch --time=12:00:00 --export=ALL,FOLD,MODE,PERA_WEIGHTS scripts/teacher/teacher_landsat.sbatch
+FOLD=0 MODE=cache GATE_SEK=0.2250 sbatch --time=2:00:00 --export=ALL,FOLD,MODE,GATE_SEK scripts/teacher/teacher_landsat.sbatch
+# élève distillé
+FOLD=0 SEED=1 EPOCHS=100 LKD_CHG=8 LKD_SEM=1 KD_T_SEM=2 KD_MASK=all TAG=kdlogits \
+    sbatch --time=4:00:00 --export=ALL,FOLD,SEED,EPOCHS,LKD_CHG,LKD_SEM,KD_T_SEM,KD_MASK,TAG scripts/train_kd_landsat.sbatch
+```
+Garde-fous par pli : 0,2250 / 0,2336 / 0,1490 / 0,2070.
+

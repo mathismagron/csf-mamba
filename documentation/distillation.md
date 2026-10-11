@@ -597,6 +597,60 @@ Tables : `logs/landsat_e600/analyse/` (à générer), runs `logs/landsat_e600/`.
 - Cache et KD généralisés à C classes (11 canaux pour Landsat) ; `train_kd_landsat.sbatch` prend `FOLD`. 55 tests passent ; tests CPU de bout en bout (entraînement 1 époque, cache, lecture + loss KD à 5 classes) passés.
 - Ordre : poids PerA → faisabilité (pli 0) → pilote élève 600 époques (pli 0, règle de budget sur val) → professeur pli 0 + garde-fou → plis 1–3 → 4 plis × (3 graines sans KD + 3 avec KD).
 
+### Landsat, pli 0 : pilote élève et budget (10 oct.)
+
+Job 5113082 (`landsat_f0_pilot-s1`, sans KD, recette SECOND, 1 graine), arrêté par le walltime de 14 h à l'époque 477 (84,5 s / époque, 200 pas / époque, 4,2 Go). Règle écrite d'avance, lue sur la **val** seule : première fenêtre de 50 époques avec pente < 0,05 pt / 10 ép.
+
+| époques | val moyenne | pente val | test moyen | pente test |
+|---|---|---|---|---|
+| 0–49 | 18,56 | +3,58 | 25,19 | +3,77 |
+| **50–99** | 22,84 | **+0,04** | 29,26 | −0,01 |
+| 100–149 | 22,63 | −0,05 | 29,12 | +0,01 |
+| 400–449 | 22,11 | −0,00 | 28,71 | −0,00 |
+
+- **Budget Landsat fixé à 100 époques** (20 000 pas), pour tous les bras et tous les plis. Meilleur val à l'époque 83 (23,00) ; test à cette époque **29,33** (Fscd 72,28, mIoU 75,85). Ensuite plateau puis lente décroissance (val 22,02, test 28,66 à l'époque 476).
+- **Comparaison avec le split aléatoire** : même élève, même recette, test **69,42** à 600 époques sur le split qui fuit, contre **29,33** sur des emplacements jamais vus. Les 40 pt d'écart mesurent la mémorisation ; la courbe qui ne plafonnait pas était celle de la mémorisation.
+- Réserves : une graine ; la val du pli 0 est un seul emplacement (21, 202 paires), d'où une courbe bruitée ; sur SECOND, les bras KD culminaient plus tard que la baseline, et un budget fixé sur la baseline peut les défavoriser (comme à 120 époques sur SECOND).
+- Coût d'un run à ce budget : ≈ 2,4 A100-h.
+
+### Landsat disjoint par emplacement : 12 baselines élève (11 oct.)
+
+4 plis × 3 graines, sans KD, 100 époques (budget du pilote), ≈ 2,35 A100-h par run (28,2 h au total). Test lu à l'époque du meilleur val (sélection sur la val du pli seule).
+
+| pli | emplacements test | val max | **test au meilleur val** | Fscd | mIoU |
+|---|---|---|---|---|---|
+| 0 | 00, 02, 20 | 22,50 | **28,75 ± 0,37** | 71,89 | 75,55 |
+| 1 | 01, 21, 30 | 23,36 | **25,57 ± 0,08** | 69,40 | 74,57 |
+| 2 | 10, 12, 22 | 14,90 | **21,48 ± 0,32** | 68,33 | 72,93 |
+| 3 | 11, 31, 32 | 20,70 | **18,42 ± 0,60** | 64,06 | 71,30 |
+| moyenne des plis | | | **23,56** (écart-type entre plis 4,54) | 68,42 | 73,59 |
+
+- Variance dominée par les plis (σ entre plis 4,5 pt, σ entre graines 0,34 pt dans un pli) : la comparaison KD / sans KD se fera **appariée par pli et par graine**, jamais en moyennes non appariées.
+- Fin de run : pente val 70–99 entre +0,02 et +0,07 pt / 10 ép. selon le pli (plateau atteint). Test final ≈ test au meilleur val (23,60).
+- Garde-fous du cache (SeK val moyenne des 3 graines, en fraction) : pli 0 **0,2250**, pli 1 **0,2336**, pli 2 **0,1490**, pli 3 **0,2070**. Ils remplacent le seuil du pilote (une graine).
+- Le préfixe 0–99 du pilote (600 ép.) et la graine 1 du pli 0 diffèrent de 0,5 pt au plus : non-déterminisme GPU, la reproductibilité n'est que statistique ici.
+- Tables : `logs/landsat_loc/analyse/landsat_loc_base_{runs,folds}.csv`.
+
+### Landsat : faisabilité du professeur PerASCD ViT-G sur A100 40 Go (9–11 oct.)
+
+- Job 5113078 : échec en 4 s, `ARCH` déjà défini par l'environnement des grappes Alliance et transmis par `--export=ALL`. Paramètre renommé `TEACHER=vitg|vmambab` (commit 09acacf). Règle : ne jamais nommer un paramètre sbatch `ARCH`.
+- Job 5160760 : poids PerA `pera_ViTG161024.params` (9,1 Go) chargés 486/486 tenseurs vérifiés ; **CUDA out of memory** au premier passage avant, à lot 4 (leur recette), 38,5 Go occupés dans le décodeur.
+- Correctif (commit e23e86a) : **checkpointing d'activations** des 40 blocs ViT (`--grad-ckpt auto`, actif pour ViT-G), par remplacement du `forward` de chaque bloc — l'arbre des modules et le `state_dict` sont inchangés. Vérifié sur CPU (ViT-B, drop-path 0,3) : **gradients strictement identiques** (écart max 0,0), aléa du drop-path rejoué. Écart déclaré dans le `config.json` du professeur.
+- Faisabilité, pli 0 : **pic 18,5 Go**, 0,71 s par micro-itération, 400 micro-itérations par époque, **3,9 h d'entraînement projetées** pour 50 époques (hors évaluation val + test à chaque époque). Décision : **PerASCD ViT-G retenu**, pas de repli VMamba-B.
+- Professeur du pli 0 en entraînement : job 5225769 (walltime 12 h). Cache ensuite avec `GATE_SEK=0.2250`.
+
+### Fuite de Landsat-SCD : ce qui est démontré, ce qui ne l'est pas (11 oct.)
+
+Relu avant d'en parler dans l'article ou aux auteurs.
+
+**Démontré** (sur LandsatSCD512 et son découpage, `scripts/verify_landsat_leakage.py`, sur les pixels, sans les noms) : 333 images distinctes pour 4 770 emplacements d'image ; 477/477 paires de val et 477/477 de test ont leurs deux images dans l'entraînement ; classes identiques à 100 % sur 199 M pixels communs ; recherche sans modèle à SeK 77,9 sur leur test. La structure (12 tuiles de 416 px à 30 m ≈ 12,5 km, ~28 années) colle à l'emprise publiée de la zone (39°39′–40°04′ N, 78°53′–79°19′ E, ≈ 45 × 37 km).
+
+**Conséquence générale, par construction** : chaque image figure dans ~14 paires ; avec 60 % des paires en entraînement tirées au hasard, une image de test absente de l'entraînement a une probabilité ≈ 0,4¹³ < 10⁻⁵. **Tout découpage aléatoire au niveau des paires fuit**, quelle que soit la graine ; seuls un découpage par emplacement ou par année l'évitent.
+
+**Non vérifié** : les découpages exacts des autres travaux (Mamba-FCS, SCanNet, GSTM-SCD ne publient pas de listes Landsat ; les listes de Bi-SRNet sont celles de SECOND ; GSTM-SCD indique seulement « 3:1:1 selon Yuan et al. ») ; ce que dit l'article d'origine (Yuan et al., *Int. J. Digital Earth* 2022, doi 10.1080/17538947.2022.2111470, accès libre) de son découpage ; si d'autres auteurs connaissaient cette structure ; si le jeu visait la généralisation spatiale ou le suivi temporel d'une même zone.
+
+**Formulation retenue** : un constat mesuré et neutre, jamais « la littérature se trompe ». Pour l'article : *« Landsat-SCD est construit à partir de 12 tuiles observées sur ~28 années (333 images distinctes) ; un découpage aléatoire au niveau des paires place les mêmes images en entraînement et en test (découpage publié avec LandsatSCD512 : toutes les images de test figurent dans l'entraînement ; une recherche sans apprentissage atteint SeK 77,9). Nous évaluons sous un protocole disjoint par emplacement ; nos chiffres ne sont pas comparables aux résultats publiés sur le découpage aléatoire. »* Pour les auteurs : signaler un recouvrement, chiffres et script à l'appui, et demander si c'était voulu. Toute phrase sur la littérature en général attend la lecture de Yuan et al. 2022.
+
 ## 5. Risques qui pourraient invalider la comparaison
 
 1. **Réglage sur le test.** Avec 12 à 18 configurations criblées, choisir λ/T/masque sur le test gonflerait le gain de KD. Parade : criblage sur val, confirmation sur test (§3). Le plus grave des risques listés.
