@@ -81,19 +81,28 @@ case "$MODE" in
   cache)
     GATE="${GATE_SEK:?GATE_SEK (SeK val du pilote élève, fraction) obligatoire}"
     [ -f "$OUT/best.pt" ] || { echo "⛔ $OUT/best.pt absent"; exit 1; }
+    # EXPLORATORY=1 : lève le garde-fou, de façon déclarée (cache suffixé _exploratory,
+    # fichier GATE_OVERRIDDEN.txt) — pour un pli dont le professeur n'a pas passé le seuil.
+    if [ "${EXPLORATORY:-0}" = 1 ]; then CACHE="${CACHE}_exploratory"; fi
     [ -e "$CACHE/meta.json" ] && { echo "⛔ $CACHE existe déjà : le déplacer avant de régénérer"; exit 1; }
-    python - "$OUT/best.pt" "$GATE" <<'EOF'
+    python - "$OUT/best.pt" "$GATE" "${EXPLORATORY:-0}" <<'EOF'
 import sys, torch
 ck = torch.load(sys.argv[1], map_location="cpu", weights_only=False)
-sek, gate = float(ck["Sek"]), float(sys.argv[2])
+sek, gate, expl = float(ck["Sek"]), float(sys.argv[2]), sys.argv[3] == "1"
 print(f"   professeur : SeK val {sek:.4f} (époque {ck['epoch']}) ; test à la sélection {ck['test_at_selection']}")
-print(f"   garde-fou : SeK val professeur {sek:.4f} > élève pilote {gate:.4f} ? {sek > gate}")
+print(f"   garde-fou : SeK val professeur {sek:.4f} > élève {gate:.4f} ? {sek > gate}")
 if not sek > gate:
-    raise SystemExit("⛔ professeur pas meilleur que l'élève sur la val du pli : pas de cache")
+    if expl:
+        print("   ⚠️ garde-fou NON satisfait, levé par EXPLORATORY=1 : cache exploratoire, à déclarer")
+    else:
+        raise SystemExit("⛔ professeur pas meilleur que l'élève sur la val du pli : pas de cache")
 EOF
     python scripts/teacher/cache_teacher.py --perascd-root "$PERASCD" --checkpoint "$OUT/best.pt" \
         --arch "$ARCH_PY" --dataset landsat_perascd --ids-file "$FD/train.txt" --data-root "$DATA" \
         --split train --precision fp32 --batch-size 8 --out-dir "$CACHE" --msda "$([ "$TEACHER" = vitg ] && echo cuda || echo auto)"
+    if [ "${EXPLORATORY:-0}" = 1 ]; then
+        echo "garde-fou levé (EXPLORATORY=1, job $SLURM_JOB_ID) : seuil $GATE" > "$CACHE/GATE_OVERRIDDEN.txt"
+    fi
     (cd "$CACHE" && sha256sum d4_*.npy ids.txt meta.json > SHA256SUMS)
     du -sh "$CACHE"
     ;;

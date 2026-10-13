@@ -677,6 +677,22 @@ Job 5225769 (50 époques, recette legacy, checkpointing 40 blocs ; 4,0 h d'entra
 - La val du pli 0 n'a qu'un emplacement : val et test du professeur sont corrélés (r = 0,93 sur les époques) mais la val décroît en fin de run (19,93 à l'ép. 49) quand le test reste à 29,1.
 - Plis 1–3 (jobs 5225991–5225993) : échec en 7 s, `FOLD=$$F` dans la boucle soumise (`$$` = numéro du processus du shell, d'où une valeur invalide ; `PERA_WEIGHTS=$$SCRATCH…` également faux). Les lanceurs affichent désormais la valeur reçue.
 
+### Landsat : professeurs des 4 plis (13 oct.)
+
+Plis 1–3 relancés après l'erreur `$$F` (≈ 6,4 h chacun, pic 21–24 Go ; total des 4 professeurs 25,8 A100-h). Test au meilleur val du professeur, contre la moyenne des 3 baselines élève du même pli :
+
+| pli | test | val prof. / seuil | garde-fou | test prof. | test élève | **prof. − élève** |
+|---|---|---|---|---|---|---|
+| 0 | 00, 02, 20 | 21,85 / 22,50 | ❌ | 28,61 | 28,75 ± 0,37 | **−0,14** |
+| 1 | 01, 21, 30 | 25,74 / 23,36 | ✅ | 26,02 | 25,57 ± 0,08 | **+0,45** |
+| 2 | 10, 12, 22 | 16,89 / 14,90 | ✅ | 22,48 | 21,48 ± 0,32 | **+1,00** |
+| 3 | 11, 31, 32 | 23,25 / 20,70 | ✅ | 20,18 | 18,42 ± 0,60 | **+1,75** |
+| moyenne | | | 3/4 | 24,32 | 23,56 | **+0,77** [−0,52 ; +2,05] |
+
+- Le professeur passe le garde-fou sur 3 plis sur 4 (marge val +2,0 à +2,6 pt). Sur le test, il devance l'élève de +0,77 pt en moyenne (n = 4 plis, IC large) — bien moins que les +2,2 pt de SECOND.
+- Suite : cache et distillation sur les plis 1–3 (protocole) ; pli 0 en **exploratoire déclaré** (`EXPLORATORY=1` : cache `…_exploratory` + `GATE_OVERRIDDEN.txt`, runs marqués `exploratory=1`), pour pouvoir rapporter aussi la validation croisée complète. Analyse principale sur les 3 plis qui passent ; les 4 plis en analyse secondaire.
+- Table : `logs/landsat_loc/analyse/landsat_loc_teachers.csv`.
+
 ## 5. Risques qui pourraient invalider la comparaison
 
 1. **Réglage sur le test.** Avec 12 à 18 configurations criblées, choisir λ/T/masque sur le test gonflerait le gain de KD. Parade : criblage sur val, confirmation sur test (§3). Le plus grave des risques listés.

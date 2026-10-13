@@ -56,6 +56,7 @@ if [ -n "$FOLD" ]; then
     OUT="$SCRATCH/csf-distill/runs/landsat_f${FOLD}_${TAG}-s${SEED}"
     IDS_ARGS=(--train-ids "$FD/train.txt" --val-ids "$FD/val.txt" --test-ids "$FD/test.txt")
     CACHE_NAME="${KD_TEACHER}_landsat_f${FOLD}_train"
+    if [ "${EXPLORATORY:-0}" = 1 ]; then CACHE_NAME="${CACHE_NAME}_exploratory"; fi
 else
     OUT="$SCRATCH/csf-distill/runs/landsat_${TAG}-s${SEED}"
     IDS_ARGS=()
@@ -66,6 +67,7 @@ mkdir -p "$OUT"
 RECIPE="weight=1 dice=0 lovasz=0 crop=512 batch=2 x accum=4 enc=vmamba_mini dec=dw fusion=concat cga=1 mcasf=1 up=dysample core=chess deep=0 sek=0 sc=0.1 fft=[0,1] lr=constant rot90=1 photo=0.2 tswap=0.5 ema=0.9998"
 CONF="dataset=landsat_perascd $RECIPE seed=$SEED epochs=$EPOCHS select=val report=test"
 if [ -n "$FOLD" ]; then CONF="$CONF fold=$FOLD split=location"; fi
+if [ "${EXPLORATORY:-0}" = 1 ]; then CONF="$CONF exploratory=1"; fi
 KD_ARGS=()
 if [ "$LKD_CHG" != "0" ] || [ "$LKD_SEM" != "0" ]; then
     CACHE_SRC="$SCRATCH/csf-distill/cache/$CACHE_NAME"
