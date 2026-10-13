@@ -693,6 +693,30 @@ Plis 1–3 relancés après l'erreur `$$F` (≈ 6,4 h chacun, pic 21–24 Go ; t
 - Suite : cache et distillation sur les plis 1–3 (protocole) ; pli 0 en **exploratoire déclaré** (`EXPLORATORY=1` : cache `…_exploratory` + `GATE_OVERRIDDEN.txt`, runs marqués `exploratory=1`), pour pouvoir rapporter aussi la validation croisée complète. Analyse principale sur les 3 plis qui passent ; les 4 plis en analyse secondaire.
 - Table : `logs/landsat_loc/analyse/landsat_loc_teachers.csv`.
 
+### Landsat : distillation sur les 4 plis (13 oct.)
+
+12 runs KD (λ_chg 8, λ_sem 1, T 2, masque all ; 100 époques ; jobs 5460509–5460528, commit 1da038a), 3 graines × 4 plis, appariés par pli et graine aux 12 baselines. Le pli 0 tourne sur le cache `perascd_landsat_f0_train_exploratory` (`exploratory=1` dans `config.txt`) ; ses runs s'appellent `landsat_f0_kdlogits-s?` (le TAG `-expl` prévu n'a pas été appliqué, la marque est dans la config). Test au meilleur val :
+
+| pli | test prof. | élève sans KD | élève KD | **gain KD** (min–max sur 3 graines) | KD − prof. |
+|---|---|---|---|---|---|
+| 0* | 28,61 | 28,75 ± 0,37 | 31,21 ± 0,09 | **+2,46** (2,12–2,97) | +2,61 |
+| 1 | 26,02 | 25,57 ± 0,08 | 28,05 ± 0,15 | **+2,48** (2,35–2,73) | +2,03 |
+| 2 | 22,48 | 21,48 ± 0,32 | 23,32 ± 0,08 | **+1,84** (1,68–2,16) | +0,84 |
+| 3 | 20,18 | 18,42 ± 0,60 | 21,70 ± 0,17 | **+3,28** (2,80–3,71) | +1,52 |
+
+\* pli exploratoire (garde-fou du professeur non passé).
+
+- **Analyse principale (plis 1–3, 9 paires) :** gain SeK **+2,53** pt, IC 95 % sur les 3 moyennes de pli [+0,74 ; +4,32], p = 0,026 (t sur les plis) ; 9/9 paires positives (Wilcoxon p = 0,004). Fscd +1,30, mIoU +1,46.
+- **Analyse secondaire (4 plis, 12 paires) :** +2,51 [+1,58 ; +3,45], p = 0,003 ; 12/12 positives.
+- **L'élève KD dépasse le professeur sur les 4 plis** : +1,46 pt sur les plis 1–3 (p = 0,051, n = 3), +1,75 sur les 4 (p = 0,019). Le professeur est à graine unique.
+- **Le gain ne suit pas l'avance du professeur.** Sur les 6 configurations (SECOND × 2 professeurs, Landsat × 4 plis), la corrélation entre l'avance du professeur sur l'élève sans KD et le gain KD vaut r = 0,09. Le pli 0, où le professeur est *sous* l'élève (−0,14), donne +2,46. Le garde-fou « professeur meilleur que l'élève sur val » était donc trop conservateur : il ne prédit pas l'utilité du professeur. Ce qui est transmis n'est pas le score de test du professeur. Sur SECOND, les contrôles `gt` / `gt_smooth` à λ = 2 (+0,04 / −0,02) montrent que le gain ne vient pas du terme de perte lui-même mais des cibles du professeur. Ces contrôles n'ont pas été refaits sur Landsat.
+- **Budget de 100 époques :** pente val des runs KD sur les époques 70–99 ≤ 0,10 pt/10 ép. (baselines ≤ 0,14) ; test final ≈ test au meilleur val (gain final +2,48 sur les plis 1–3). Le budget ne désavantage pas la KD.
+- La KD réduit aussi la dispersion entre graines (σ 0,08–0,17 contre 0,08–0,60).
+- Coût : 12 runs × 2,4 h (train + val ; 29,0 A100-h) + 4 caches.
+- Fichiers : `logs/landsat_loc/analyse/landsat_loc_kd_{runs,folds,stats}.csv` (non suivis par git : `logs/` est ignoré) ; figure `documentation/distillation_landsat_folds.{png,pdf}`.
+
+![KD sur Landsat par pli ; gain contre avance du professeur](distillation_landsat_folds.png)
+
 ## 5. Risques qui pourraient invalider la comparaison
 
 1. **Réglage sur le test.** Avec 12 à 18 configurations criblées, choisir λ/T/masque sur le test gonflerait le gain de KD. Parade : criblage sur val, confirmation sur test (§3). Le plus grave des risques listés.
