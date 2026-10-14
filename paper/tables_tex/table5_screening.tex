@@ -7,7 +7,7 @@
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{lcllcccrr}
 \toprule
-Arm & $\lambda_{chg}$ & Semantic KL & Feature KD & SeK max & SeK final & $\Delta$ max vs no KD ($p$) & h/run & GB \\
+Arm & $\lambda_{\mathrm{chg}}$ & Semantic KL & Feature KD & SeK max & SeK final & $\Delta$ max vs no KD ($p$) & h/run & GB \\
 \midrule
 no KD & 0 & -- & -- & 23.61\,$\pm$\,0.30 & 23.25\,$\pm$\,0.26 & -- & 4.8 & 4.2 \\
 \midrule
@@ -31,5 +31,5 @@ output KD & 8 & T = 4, changed & -- & 26.46\,$\pm$\,0.31 & 26.45\,$\pm$\,0.32 & 
 + feature KD & 8 & T = 2, all & 1/8, 1/16, 1/32; 1 & 26.86\,$\pm$\,0.20 & 26.82\,$\pm$\,0.13 & +3.25 ($<$0.001) & 10.7 & 17.4 \\
 \bottomrule
 \end{tabular}
-\par\smallskip\parbox{\textwidth}{\scriptsize 16 arms $\times$ 2 seeds (1, 2) = 32 runs, 120 epochs, trained on 2\,671 SECOND training pairs and evaluated on the 297-pair internal validation split (the test set was not used). Mean $\pm$ standard deviation. $\Delta$: difference of the mean max SeK to the no-KD arm, with the $p$-value of a pooled-variance $t$-test. Controls replace the teacher's change target by the binary or smoothed ground truth, same loss and weight. Feature KD: encoder stages (fraction of the input resolution) and weight $\lambda_{feat}$, on top of the retained output KD.}
+\par\smallskip\parbox{\textwidth}{\scriptsize 16 arms $\times$ 2 seeds (1, 2) = 32 runs, 120 epochs, trained on 2\,671 SECOND training pairs and evaluated on the 297-pair internal validation split (the test set was not used). Mean $\pm$ standard deviation. $\Delta$: difference of the mean max SeK to the no-KD arm, with the $p$-value of a pooled-variance $t$-test. Controls replace the teacher's change target by the binary or smoothed ground truth, same loss and weight. Feature KD: encoder stages (fraction of the input resolution) and weight $\lambda_{\mathrm{feat}}$, on top of the retained output KD.}
 \end{table*}

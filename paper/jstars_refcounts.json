@@ -1,0 +1,156 @@
+{
+ "jstars_cd_2025_2026": [
+  {
+   "doi": "10.1109/jstars.2025.3565383",
+   "title": "Spatial-Temporal Semantic Feature Interaction Network for Semantic Change Detection in Remote S",
+   "references_count": 48,
+   "pages": "12090-12102"
+  },
+  {
+   "doi": "10.1109/jstars.2024.3514926",
+   "title": "SCDVit: Semantic Change Detection Based on Sam-Vit and Semantic Consistency",
+   "references_count": 43,
+   "pages": "2269-2282"
+  },
+  {
+   "doi": "10.1109/jstars.2024.3493945",
+   "title": "Remote Sensing Semantic Change Detection Model for Improving Objects Completeness",
+   "references_count": 90,
+   "pages": "2526-2540"
+  },
+  {
+   "doi": "10.1109/jstars.2025.3649267",
+   "title": "A Lightweight Semantic Reasoning and Fusion Network for Open-Pit Mine Semantic Change Detection",
+   "references_count": 44,
+   "pages": "5618-5633"
+  },
+  {
+   "doi": "10.1109/jstars.2026.3727242",
+   "title": "LTS-ProtoNet: Local\u2013Temporal\u2013Semantic Prototype Network for Remote Sensing Change Detection",
+   "references_count": 63,
+   "pages": "28611-28625"
+  },
+  {
+   "doi": "10.1109/jstars.2025.3556723",
+   "title": "MSA: Mamba Semantic Alignment Networks for Remote Sensing Change Detection",
+   "references_count": 59,
+   "pages": "10625-10639"
+  },
+  {
+   "doi": "10.1109/jstars.2024.3522910",
+   "title": "A Hierarchical Local-Sparse Model for Semantic Change Detection in Remote Sensing Imagery",
+   "references_count": 54,
+   "pages": "3144-3159"
+  },
+  {
+   "doi": "10.1109/jstars.2025.3555849",
+   "title": "SChanger: Change Detection From a Semantic Change and Spatial Consistency Perspective",
+   "references_count": 75,
+   "pages": "10186-10203"
+  },
+  {
+   "doi": "10.1109/jstars.2026.3651696",
+   "title": "Learning Boundary-Aware Semantic Context Network for Remote Sensing Change Detection",
+   "references_count": 68,
+   "pages": "4177-4187"
+  },
+  {
+   "doi": "10.1109/jstars.2024.3487137",
+   "title": "Multitask Siamese Network Guided by Enhanced Change Information for Semantic Change Detection i",
+   "references_count": 65,
+   "pages": "61-77"
+  },
+  {
+   "doi": "10.1109/jstars.2026.3715175",
+   "title": "ProtoMix: Unified Prototype Learning for Semantic Change Detection in Remote Sensing",
+   "references_count": 69,
+   "pages": "25482-25494"
+  },
+  {
+   "doi": "10.1109/jstars.2025.3574755",
+   "title": "GLAI-Net: Global\u2013Local Awareness Integrated Network for Semantic Change Detection in Remote Sen",
+   "references_count": 81,
+   "pages": "14291-14307"
+  },
+  {
+   "doi": "10.1109/jstars.2026.3714840",
+   "title": "CIENet: Cross-Dimensional Information Enhancement Network for Semantic Change Detection of Dese",
+   "references_count": 50,
+   "pages": "25103-25117"
+  },
+  {
+   "doi": "10.1109/jstars.2026.3706523",
+   "title": "Beyond Differences: Semantic Consistency for Remote Sensing Change Detection",
+   "references_count": 54,
+   "pages": "23461-23475"
+  },
+  {
+   "doi": "10.1109/jstars.2026.3727661",
+   "title": "FVT: Feature-to-Video Transition Modeling for Semantic Change Detection",
+   "references_count": 51,
+   "pages": "29780-29798"
+  },
+  {
+   "doi": "10.1109/jstars.2024.3511597",
+   "title": "Deep-Learning-Based Semantic Change Detection for Urban Greenery and Comprehensive Urban Areas",
+   "references_count": 43,
+   "pages": "1841-1852"
+  },
+  {
+   "doi": "10.1109/jstars.2025.3585568",
+   "title": "Spatial\u2013Temporal Semantic and Geographic Correlation Network for SAR Image Change Detection Wit",
+   "references_count": 68,
+   "pages": "17119-17138"
+  },
+  {
+   "doi": "10.1109/jstars.2026.3687130",
+   "title": "A Cross-Modal Semantic Change Detection Framework for Coastal Wetland Monitoring Using Optical ",
+   "references_count": 67,
+   "pages": "17142-17161"
+  },
+  {
+   "doi": "10.1109/jstars.2025.3645314",
+   "title": "SemSAM-CD: A Novel Weakly Supervised Change Detection Method Based on Semantic Guidance and Seg",
+   "references_count": 59,
+   "pages": "3352-3370"
+  },
+  {
+   "doi": "10.1109/jstars.2026.3713960",
+   "title": "CAM-CD: Change-Aware Mamba for Remote Sensing Change Detection",
+   "references_count": 54,
+   "pages": "24007-24021"
+  },
+  {
+   "doi": "10.1109/jstars.2025.3554385",
+   "title": "CD4C: Change Detection for Remote Sensing Image Change Captioning",
+   "references_count": 61,
+   "pages": "9181-9194"
+  },
+  {
+   "doi": "10.1109/jstars.2025.3642571",
+   "title": "Spatial\u2013Frequency Collaborative Network for Remote Sensing Image Change Detection",
+   "references_count": 54,
+   "pages": "2485-2496"
+  },
+  {
+   "doi": "10.1109/jstars.2025.3574173",
+   "title": "CFNet: Optimizing Remote Sensing Change Detection Through Content-Aware Enhancement",
+   "references_count": 54,
+   "pages": "14688-14704"
+  }
+ ],
+ "named": {
+  "wang2024knowledge (CDKD)": [
+   69,
+   "Knowledge Distillation-Based Lightweight Change Detection in High-Resolution Rem"
+  ],
+  "liu2025novel": [
+   43,
+   "A Novel Multibranch Self-Distillation Framework for Optimizing Remote Sensing Ch"
+  ],
+  "wang2024mtp": [
+   193,
+   "MTP: Advancing Remote Sensing Foundation Model via Multitask Pretraining"
+  ]
+ }
+}

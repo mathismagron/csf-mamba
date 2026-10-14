@@ -10,6 +10,7 @@ complete `table`/`table*` float to \\input{} in the manuscript. Requires \\usepa
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -184,13 +185,13 @@ def table3():
     p_s = eff.loc["Parameters (M)", "student"]
     g_s = eff.loc["GMACs / pair, aten counter", "student"]
     label = {
-        "PerASCD (ViT-G/16 PerA + ViT-Adapter + CG-Decoder)": "PerASCD, ViT-G (teacher)",
-        "VMamba-B + CG-Decoder (PerASCD authors)": "VMamba-B + CG-Decoder (teacher)",
-        "Mamba-FCS": "Mamba-FCS",
-        "MambaSCD-Base (ChangeMamba)": "MambaSCD-Base",
-        "MambaSCD-Tiny (ChangeMamba)": "MambaSCD-Tiny",
+        "PerASCD (ViT-G/16 PerA + ViT-Adapter + CG-Decoder)": "PerASCD, ViT-G (teacher)~\\cite{shen2026foundation}",
+        "VMamba-B + CG-Decoder (PerASCD authors)": "VMamba-B + CG-Decoder (teacher)~\\cite{shen2026foundation}",
+        "Mamba-FCS": "Mamba-FCS~\\cite{wijenayake2026mamba}",
+        "MambaSCD-Base (ChangeMamba)": "MambaSCD-Base~\\cite{chen2024changemamba}",
+        "MambaSCD-Tiny (ChangeMamba)": "MambaSCD-Tiny~\\cite{chen2024changemamba}",
         "MambaSCD-Tiny, released checkpoint, our metric code": "MambaSCD-Tiny, released ckpt.$^{a}$",
-        "SCanNet (retrained on the official split by PerASCD)": "SCanNet (retrained by PerASCD)$^{b}$",
+        "SCanNet (retrained on the official split by PerASCD)": "SCanNet~\\cite{ding2024joint} (retrained by PerASCD)$^{b}$",
     }
     assert set(pub.model) <= set(label), f"unlabelled rows: {set(pub.model) - set(label)}"
     counter = {
@@ -216,19 +217,19 @@ def table3():
         rows.append(f"{lab} & {n(p_s)} & {n(g_s)} & aten & {n(r.sek_max_mean)} & {n(r.fscd_at_max_mean)} & "
                     f"{n(r.miou_at_max_mean)} & ours, {int(r.n)} seeds")
     notes = ("Params in M; GMACs per image pair at 512$\\times$512. aten: torch.utils.flop\\_counter, the same "
-             "counter for our models and the teachers (measured by us); it does not count the deformable "
+             "counter for our models and the teachers (measured by us); it counts neither the deformable "
              "attention of the teacher nor the selective scan of the student (fvcore gives 31.42 GMACs for "
              "the student). paper: complexity reported by the original papers as `GFLOPs', which are "
              "fvcore-style MAC counts for ChangeMamba and Mamba-FCS (conventions differ across papers); a different counter from aten, so not strictly comparable. "
              "Accuracies of published models as reported in their papers, on the official SECOND split. "
              "$^{a}$Released checkpoint evaluated with our metric code; params and fvcore GMACs measured by us; "
              "the released code builds a larger configuration than the one reported in the paper (row MambaSCD-Tiny). "
-             "$^{c}$ChangeMamba reports an `F1' column whose values are not comparable with the Fscd of the other rows; omitted. "
              "$^{b}$SCanNet retrained on the official split by the PerASCD authors (their Table I; params and "
              "GFLOPs from ChangeMamba Table VIII); the SeK reported in the SCanNet paper uses a different, "
-             "non-official evaluation split and is not used.")
+             "non-official evaluation split and is not used. "
+             "$^{c}$ChangeMamba reports an `F1' column whose values are not comparable with the Fscd of the other rows; omitted.")
     notes = notes.replace("31.42", n(eff.loc["GMACs / pair, fvcore", "student"]))
-    notes += (" Provenance: reported, checked = from the cited paper, checked against it "
+    notes += (" Provenance: reported, checked = from the cited paper, checked against it; "
               "re-evaluated = published checkpoint evaluated "
               "under our protocol (SeK, Fscd, mIoU as published, SeK reproduced); measured = released checkpoint "
               "run with our code. Sources: PerASCD (arXiv 2602.13780, Table I), Mamba-FCS (arXiv 2508.08232, "
@@ -269,7 +270,8 @@ def table4():
         protos[proto] = setting.split("(")[1]
         rows2.append(f"{proto} & {label[tag]} & {int(r.n_runs)} & "
                      f"{n(r.hours_per_run, 2)} & {n(r.train_s_per_epoch, 1)} & {n(r.peak_train_gb, 2)}")
-    pnote = "; ".join(f"{k}: {v.replace('test val', 'test set as validation')}" for k, v in protos.items())
+    pnote = "; ".join(f"{k}: {v.replace('test val', 'test set evaluated every epoch')}" for k, v in protos.items())
+    pnote = re.sub(r"(\d)(\d{3})(?!\d)", r"\1\\,\2", pnote)  # thousands separators (2\,968)
     body2 = float_env("Training cost per run (120 epochs, one A100).", "tab:trainingcost", "@{}llrrrr@{}",
                       "Prot. & Arm & Runs & h/run & s/epoch & GB", rows2, sep=3,
                       notes=f"Pairs used ({pnote}). GB: peak training memory. From the run timing logs. "
@@ -330,10 +332,10 @@ def table5():
              "difference of the mean max SeK to the no-KD arm, with the $p$-value of a pooled-variance "
              "$t$-test. Controls replace the teacher's change target by the binary or smoothed ground "
              "truth, same loss and weight. Feature KD: encoder stages (fraction of the input "
-             "resolution) and weight $\\lambda_{feat}$, on top of the retained output KD.")
+             "resolution) and weight $\\lambda_{\\mathrm{feat}}$, on top of the retained output KD.")
     body = float_env("Screening on the SECOND internal validation split.", "tab:screening",
                      "lcllcccrr",
-                     "Arm & $\\lambda_{chg}$ & Semantic KL & Feature KD & SeK max & SeK final & "
+                     "Arm & $\\lambda_{\\mathrm{chg}}$ & Semantic KL & Feature KD & SeK max & SeK final & "
                      "$\\Delta$ max vs no KD ($p$) & h/run & GB", rows, wide=True, notes=notes, sep=3)
     return write("table5_screening", body)
 

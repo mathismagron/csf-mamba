@@ -201,6 +201,7 @@ for key, ds, comp in [("SelfSec", "SECOND", "self_kd_minus_no_kd"), ("KdSelfSec"
     for suffix, metric in (("", m1), ("Final", m2)):
         r = rstat(ds, comp, metric)
         put(f"Rev{key}{suffix}", signed(r["mean"]))
+        put(f"Rev{key}{suffix}Abs", f"{abs(r['mean']):.2f}")   # unsigned, for "by X" in prose
         put(f"Rev{key}{suffix}Lo", signed(r.lo)); put(f"Rev{key}{suffix}Hi", signed(r.hi))
         put(f"Rev{key}{suffix}P", p_fmt(r.p))
         if not np.isnan(r.n_pairs) and not comp.endswith("its_teacher"):
