@@ -132,6 +132,19 @@ on this dataset; their effects were required to hold on both the best and the fi
 
 \input{tables_tex/supp_student_design}
 
+\section{Control Experiments}
+Table~\ref{tab:s-controls-runs} lists every control run of Section~VII of the main text, and
+Table~\ref{tab:s-controls-caches} the checks of the student-as-teacher caches used for
+self-distillation. The caches have the format of the teacher caches (eight D4 views, $2C+1$ logit
+channels at one quarter of the tile resolution) and are read by the same data loader. Pooling the
+student's full-resolution logits to that resolution costs \RevCacheSecDrop\ SeK points on SECOND but
+\RevCacheLanDropMin--\RevCacheLanDropMax\ on the Landsat-SCD folds, whose changed regions are small and fragmented. The analysis
+script is \texttt{paper/scripts/analyze\_revision\_a.py}; the plan, written before the runs were
+evaluated, is \texttt{documentation/revision\_vague\_a.md}.
+
+\input{tables_tex/supp_controls_runs}
+\input{tables_tex/supp_controls_caches}
+
 \section{Compute}
 Table~\ref{tab:s-compute} lists the GPU time used by this study, about \ComputeTotal\ A100-hours
 in total, excluding teacher caches and checks (about 10 A100-hours).

@@ -43,3 +43,13 @@ student (local), published-model MACs with our counter (released code, < 1 A100-
 Priority C — would strengthen but not decisive: single-view cache ablation (≈ 10 A100-h), one
 standard dense-KD baseline such as CWD (≈ 10 A100-h), teacher seed variance, second student
 family (≈ 40–60 A100-h), third dataset.
+
+## Status after experiment wave A (14 Oct 2026)
+
+| Request | Outcome |
+|---|---|
+| self-distillation control | run (SECOND 3 seeds, Landsat folds 1–3 × 2 seeds): +0.75 SeK on SECOND (one third of the gain), −0.04 on the folds; PerASCD targets +1.52 / +2.61 above it |
+| target controls at the retained configuration, held-out data | run (folds 1–3 × 3 seeds; smoothed GT change + class label smoothing with ε matched to the teacher): −0.21; PerASCD +2.75 above it (9/9) |
+| decaying-LR baseline | run (cosine, SECOND 3 seeds): −0.33 best / −0.82 final vs constant → recipe does not handicap the baseline |
+| qualitative maps | Fig. 7 |
+| still open | single-view cache ablation, other KD losses (CWD/DKD), teacher seed variance, second student family |

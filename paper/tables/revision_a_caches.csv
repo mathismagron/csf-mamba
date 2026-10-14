@@ -1,0 +1,5 @@
+cache,n_pairs,checkpoint,train_sek_full,train_sek_cache,train_fscd_full,train_fscd_cache,d4_change_agreement_min,d4_change_agreement_mean
+student_landsat_f1_train,1590,/scratch/magron13/csf-distill/runs/landsat_f1_base-s1/best.pt,54.05494833784928,50.64333464764344,86.55263545354688,85.17986680950281,0.9798921021275551,0.9805713033204879
+student_landsat_f2_train,1590,/scratch/magron13/csf-distill/runs/landsat_f2_base-s1/best.pt,52.085824965232185,49.42741322299945,85.25203383747338,84.15898181071822,0.9787801106770834,0.9795398804698029
+student_landsat_f3_train,1577,/scratch/magron13/csf-distill/runs/landsat_f3_base-s1/best.pt,50.208635739003746,47.44431412079598,84.83342687585592,83.68561638976291,0.9782663755350349,0.9789909406334217
+student_second_train,2968,/scratch/magron13/csf-mamba-runs/second_mini_chess_crop512-lean-augswap-ema-s1/best.pt,53.54453014015168,53.321796843539694,84.32061308957563,84.21053197350244,0.9775943190582358,0.9787151408645343

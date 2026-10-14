@@ -104,3 +104,4 @@ number,meaning,source
 25.85,ViT-G teacher last-epoch SeK in its training log,documentation/distillation.md (sec. 2)
 1.5,TMACs per pair (1509.74 GMACs),tables/efficiency.csv
 2.4,feature-KD training-time factor upper (2.29-2.40),tables/training_cost.csv
+6,exponent of cosine LR floor 10^-6 (control arm),"scripts/train.py (--min-lr default 1e-6)"

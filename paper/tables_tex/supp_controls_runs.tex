@@ -1,0 +1,34 @@
+\begin{table}[!t]
+\centering
+\footnotesize
+\caption{Control runs (Section~VII of the main text), per run.}
+\label{tab:s-controls-runs}
+\begin{tabular}{llllrrrr}
+\toprule
+Dataset & Fold & Arm & Seed & SeK & Ep. & SeK final & $\varepsilon$ \\
+\midrule
+Landsat-SCD & 1 & ground truth only & 1 & 25.40 & 88 & 25.39 & 0.21 \\
+Landsat-SCD & 1 & ground truth only & 2 & 25.72 & 37 & 25.59 & 0.21 \\
+Landsat-SCD & 1 & ground truth only & 3 & 25.53 & 71 & 25.53 & 0.21 \\
+Landsat-SCD & 2 & ground truth only & 1 & 21.02 & 65 & 21.03 & 0.25 \\
+Landsat-SCD & 2 & ground truth only & 2 & 20.74 & 47 & 20.84 & 0.25 \\
+Landsat-SCD & 2 & ground truth only & 3 & 20.89 & 65 & 20.82 & 0.25 \\
+Landsat-SCD & 3 & ground truth only & 1 & 18.26 & 85 & 18.32 & 0.28 \\
+Landsat-SCD & 3 & ground truth only & 2 & 18.46 & 95 & 18.46 & 0.28 \\
+Landsat-SCD & 3 & ground truth only & 3 & 18.47 & 84 & 18.48 & 0.28 \\
+Landsat-SCD & 1 & self-distillation & 2 & 25.39 & 99 & 25.39 & -- \\
+Landsat-SCD & 1 & self-distillation & 3 & 25.46 & 98 & 25.49 & -- \\
+Landsat-SCD & 2 & self-distillation & 2 & 21.01 & 89 & 21.06 & -- \\
+Landsat-SCD & 2 & self-distillation & 3 & 21.09 & 99 & 21.09 & -- \\
+Landsat-SCD & 3 & self-distillation & 2 & 18.79 & 89 & 18.86 & -- \\
+Landsat-SCD & 3 & self-distillation & 3 & 18.89 & 95 & 18.91 & -- \\
+SECOND & -- & no KD, cosine LR & 1 & 23.66 & 35 & 22.95 & -- \\
+SECOND & -- & no KD, cosine LR & 2 & 23.48 & 37 & 22.68 & -- \\
+SECOND & -- & no KD, cosine LR & 3 & 23.42 & 57 & 22.75 & -- \\
+SECOND & -- & self-distillation & 2 & 24.66 & 103 & 24.65 & -- \\
+SECOND & -- & self-distillation & 3 & 24.52 & 99 & 24.46 & -- \\
+SECOND & -- & self-distillation & 4 & 24.68 & 118 & 24.68 & -- \\
+\bottomrule
+\end{tabular}
+\par\smallskip\parbox{\linewidth}{\scriptsize SECOND: best test epoch over 120 epochs; Landsat-SCD: test SeK at the best-validation epoch over 100 epochs. $\varepsilon$: label-smoothing parameter of the ground-truth-only control, matched to the fold teacher (scripts/kd\_control\_eps.py).}
+\end{table}

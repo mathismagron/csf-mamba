@@ -1,0 +1,17 @@
+\begin{table}[!t]
+\centering
+\footnotesize
+\caption{Student-as-teacher caches for the self-distillation control.}
+\label{tab:s-controls-caches}
+\begin{tabular}{lrrrrrr}
+\toprule
+Cache & Pairs & SeK full & SeK cache & Fscd full & Fscd cache & D4 agr. (\%) \\
+\midrule
+student\_landsat\_f1\_train & 1590 & 54.05 & 50.64 & 86.55 & 85.18 & 98.0 \\
+student\_landsat\_f2\_train & 1590 & 52.09 & 49.43 & 85.25 & 84.16 & 97.9 \\
+student\_landsat\_f3\_train & 1577 & 50.21 & 47.44 & 84.83 & 83.69 & 97.8 \\
+student\_second\_train & 2968 & 53.54 & 53.32 & 84.32 & 84.21 & 97.8 \\
+\bottomrule
+\end{tabular}
+\par\smallskip\parbox{\linewidth}{\scriptsize Training-set scores of the undistilled seed-1 student: at full resolution (identity view) and from the cached targets ($4\times4$ average-pooled logits, bilinearly upsampled). D4 agr.: minimum over the seven non-identity views of the change agreement between the cached view and the transformed identity view.}
+\end{table}

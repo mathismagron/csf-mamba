@@ -104,3 +104,27 @@ table("supp_student_design", "Student design results obtained before this study 
            "best-epoch and final-epoch readings). These results fixed the student recipe that is then frozen in this "
            "paper; they are reported for transparency and are not part of the distillation evidence.")
 print(sorted(p.name for p in O.glob("supp_*.tex")))
+
+# S-revision: control runs (wave A) and student-as-teacher caches
+rv = pd.read_csv(T / "revision_a_runs.csv").sort_values(["dataset", "arm", "fold", "seed"])
+RARM = {"self_kd": "self-distillation", "no_kd_cosine": "no KD, cosine LR", "gt_only_control": "ground truth only"}
+rows = []
+for x in rv.itertuples():
+    if x.dataset == "SECOND":
+        rows.append(["SECOND", "--", RARM[x.arm], x.seed, f(x.sek_max), int(x.epoch_max), f(x.sek_final), "--"])
+    else:
+        rows.append(["Landsat-SCD", int(x.fold), RARM[x.arm], x.seed, f(x.test_at_best_val), int(x.ep_best_val),
+                     f(x.test_final), f(x.sem_eps)])
+table("supp_controls_runs", "Control runs (Section~VII of the main text), per run.", "tab:s-controls-runs",
+      ["Dataset", "Fold", "Arm", "Seed", "SeK", "Ep.", "SeK final", r"$\varepsilon$"], rows, "llllrrrr",
+      note="SECOND: best test epoch over 120 epochs; Landsat-SCD: test SeK at the best-validation epoch over 100 "
+           r"epochs. $\varepsilon$: label-smoothing parameter of the ground-truth-only control, matched to the fold "
+           "teacher (scripts/kd\\_control\\_eps.py).")
+c = pd.read_csv(T / "revision_a_caches.csv")
+rows = [[x.cache.replace("_", r"\_"), x.n_pairs, f(x.train_sek_full), f(x.train_sek_cache), f(x.train_fscd_full),
+         f(x.train_fscd_cache), f(100 * x.d4_change_agreement_min, 1)] for x in c.itertuples()]
+table("supp_controls_caches", "Student-as-teacher caches for the self-distillation control.", "tab:s-controls-caches",
+      ["Cache", "Pairs", "SeK full", "SeK cache", "Fscd full", "Fscd cache", "D4 agr. (\\%)"], rows, "lrrrrrr",
+      note="Training-set scores of the undistilled seed-1 student: at full resolution (identity view) and from the cached "
+           r"targets ($4\times4$ average-pooled logits, bilinearly upsampled). D4 agr.: minimum over the seven non-identity "
+           "views of the change agreement between the cached view and the transformed identity view.")

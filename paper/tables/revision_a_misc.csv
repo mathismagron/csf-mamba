@@ -1,0 +1,10 @@
+key,value
+SECOND,23.87
+fold1,25.576
+fold2,21.737
+fold3,18.233
+eps_fold1,0.2143
+eps_fold2,0.2485
+eps_fold3,0.2829
+landsat_rule_max_abs_dev,3.552713678800501e-15
+a100_h_runs_total,74.25097222222223

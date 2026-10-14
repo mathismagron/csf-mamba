@@ -1,6 +1,6 @@
 """Fig. 7 (qualitative maps) from the .npz written on the cluster by qualitative_predictions.py.
 
-    rsync -a narval:$SCRATCH/csf-distill/qualitative/ logs/qualitative/
+    scp -r magron13@narval.alliancecan.ca:/scratch/magron13/csf-distill/qualitative logs/
     python paper/scripts/plot_qualitative.py --in logs/qualitative            # 6 SECOND + 4 Landsat
     python paper/scripts/plot_qualitative.py --in logs/qualitative --n-second 4 --n-landsat 3
 

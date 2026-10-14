@@ -393,6 +393,80 @@ def table7():
     return write("table7_landsat_folds", body)
 
 
+# ----------------------------------------------------------------------------- Table VIII (revision controls)
+def table8():
+    st = tab("revision_a_stats")
+    arms = tab("revision_a_arms")
+    sr = tab("second_runs"); sr = sr[sr.epochs == 120]
+    kf = tab("landsat_loc_kd_folds"); kf = kf[kf.fold.isin([1, 2, 3])]
+    ks = tab("landsat_loc_kd_stats").set_index(["analysis", "metric"])
+    sa = tab("second_arms"); sa = sa[sa.epochs == 120].set_index("arm")
+    misc = tab("revision_a_misc").set_index("key").value
+
+    def S(ds, comp, metric):
+        r = st[(st.dataset.str.startswith(ds)) & (st.comparison == comp) & (st.metric == metric)]
+        assert len(r) == 1, (ds, comp, metric)
+        r = r.iloc[0]
+        return ci(r["mean"], r.lo, r.hi)
+
+    def sek_sec(arm):
+        g = sr[sr.arm == arm] if arm in set(sr.arm) else None
+        a = arms[(arms.dataset == "SECOND") & (arms.arm == arm)].iloc[0]
+        return pm(a.sek_max_mean, a.sek_max_sd), n(a.sek_final_mean)
+
+    def lan_mean(arm):
+        a = arms[(arms.dataset == "Landsat-SCD") & (arms.arm == arm)]
+        assert len(a) == 3, arm
+        return n(a.test_at_best_val_mean.mean()), n(a.test_final_mean.mean())
+
+    rows = ["\\multicolumn{8}{l}{\\emph{SECOND test, best test epoch (last epoch); paired by seed}} \\\\[1pt]".replace("\\\\[1pt]", "")]
+    rows[-1] = rows[-1].rstrip()
+    b, bf = sek_sec("no_kd")
+    rows.append(f"No KD, constant LR (recipe) & -- & 1--6, 42 & {b} & {bf} & -- & -- & {S('SECOND', 'kd_vitg_minus_no_kd_same_seeds', 'sek_max')}")
+    c, cf = sek_sec("no_kd_cosine")
+    rows.append(f"No KD, cosine LR & -- & 1--3 & {c} & {cf} & {S('SECOND', 'no_kd_cosine_minus_constant', 'sek_max')} & "
+                f"{S('SECOND', 'no_kd_cosine_minus_constant', 'sek_final')} & {S('SECOND', 'kd_vitg_minus_no_kd_cosine', 'sek_max')}")
+    sd, sdf = sek_sec("self_kd")
+    rows.append(f"Self-distillation & no-KD student ({n(float(misc['SECOND']))}) & 2--4 & {sd} & {sdf} & "
+                f"{S('SECOND', 'self_kd_minus_no_kd', 'sek_max')} & {S('SECOND', 'self_kd_minus_no_kd', 'sek_final')} & "
+                f"{S('SECOND', 'kd_vitg_minus_self_kd', 'sek_max')}")
+    k, kf_ = sek_sec("kd_full_vitg")
+    rows.append(f"{METHOD} & PerASCD ViT-G (26.11) & 1--5 & \\textbf{{{k}}} & \\textbf{{{kf_}}} & "
+                f"{S('SECOND', 'kd_vitg_minus_no_kd_same_seeds', 'sek_max')} & "
+                f"{S('SECOND', 'kd_vitg_minus_no_kd_same_seeds', 'sek_final')} & --")
+    rows.append("\\midrule")
+    rows.append("\\multicolumn{8}{l}{\\emph{Landsat-SCD, location-disjoint folds 1--3, test at best validation epoch (last epoch); "
+                "mean over folds, 95\\,\\% CI across fold means}}")
+    p = ks.loc[("primary_f123", "test_at_best_val")]
+    pf = ks.loc[("primary_f123", "test_final")] if ("primary_f123", "test_final") in ks.index else None
+    bl, blf = lan_mean("no_kd")
+    rows.append(f"No KD & -- & 1--3 & {bl} & {blf} & -- & -- & {ci(p['mean'], p.ci_lo, p.ci_hi)}")
+    gl, glf = lan_mean("gt_only_control")
+    rows.append(f"Ground truth only & none & 1--3 & {gl} & {glf} & {S('Landsat', 'gt_control_minus_no_kd', 'test_at_best_val')} & "
+                f"{S('Landsat', 'gt_control_minus_no_kd', 'test_final')} & {S('Landsat', 'kd_vitg_minus_gt_control', 'test_at_best_val')}")
+    sl, slf = lan_mean("self_kd")
+    rows.append(f"Self-distillation & no-KD student & 2, 3 & {sl} & {slf} & {S('Landsat', 'self_kd_minus_no_kd', 'test_at_best_val')} & "
+                f"{S('Landsat', 'self_kd_minus_no_kd', 'test_final')} & {S('Landsat', 'kd_vitg_minus_self_kd', 'test_at_best_val')}")
+    kl, klf = lan_mean("kd_full_vitg")
+    gfin = ci(pf["mean"], pf.ci_lo, pf.ci_hi) if pf is not None else "--"
+    rows.append(f"{METHOD} & PerASCD, per fold & 1--3 & \\textbf{{{kl}}} & \\textbf{{{klf}}} & "
+                f"{ci(p['mean'], p.ci_lo, p.ci_hi)} & {gfin} & --")
+    notes = ("All arms use the same student, recipe, data pipeline and, for the distillation arms, the same losses "
+             "($\\lambda_{\\mathrm{chg}}=8$, $\\lambda_{\\mathrm{sem}}=1$, $T_{\\mathrm{s}}=2$, all pixels) and the same "
+             "eight-view cache format; only the source of the targets changes. Self-distillation: the teacher is the "
+             "undistilled student of seed 1 (best test epoch on SECOND, best validation epoch on each fold); its students "
+             "use other seeds. Ground truth only: change target = ground truth average-pooled to the cache resolution and "
+             "upsampled; semantic target = label smoothing with $\\varepsilon$ matched to the teacher's mean confidence in "
+             f"the true class ({n(float(misc['eps_fold1']))}--{n(float(misc['eps_fold3']))} across folds), uniform on unlabelled "
+             "pixels. $\\Delta$: arm $-$ no KD (constant LR), paired by seed (SECOND) or by fold and seed (Landsat-SCD); "
+             "on SECOND, DistilSCD $-$ no KD is paired over the five common seeds (unpaired over all seeds: Table~\\ref{tab:second}).")
+    body = float_env("Control experiments: source of the distillation targets and learning-rate schedule (SeK).",
+                     "tab:controls", "@{}lllccccc@{}",
+                     "Arm & Targets (teacher SeK) & Seeds & SeK & Last ep. & $\\Delta$ vs no KD & $\\Delta$, last ep. & "
+                     f"{METHOD} $-$ arm", rows, wide=True, notes=notes, sep=3)
+    return write("table8_controls", body)
+
+
 if __name__ == "__main__":
-    for f in (table1, table2, table3, table4, table5, table6, table7):
+    for f in (table1, table2, table3, table4, table5, table6, table7, table8):
         f()

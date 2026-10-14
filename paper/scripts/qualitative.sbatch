@@ -14,7 +14,7 @@
 #
 #   sbatch paper/scripts/qualitative.sbatch
 #   # then, locally:
-#   rsync -a narval:$SCRATCH/csf-distill/qualitative/ logs/qualitative/
+#   scp -r magron13@narval.alliancecan.ca:/scratch/magron13/csf-distill/qualitative logs/
 #   python paper/scripts/plot_qualitative.py --in logs/qualitative
 set -euo pipefail
 

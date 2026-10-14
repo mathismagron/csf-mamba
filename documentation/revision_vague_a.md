@@ -112,7 +112,7 @@ grep -m1 "Distillation" logs/csf-kd-*.out | tail -5      # cible=gt_smooth / gt_
 Rapatriement (local) quand tout est fini :
 
 ```bash
-ssh narval 'cd $SCRATCH/csf-distill && tar cf - --exclude="*.pt" runs/confirm_selfkd-s* runs/confirm_nokd-cos-s* \
+ssh magron13@narval.alliancecan.ca 'cd $SCRATCH/csf-distill && tar cf - --exclude="*.pt" runs/confirm_selfkd-s* runs/confirm_nokd-cos-s* \
     runs/landsat_f?_selfkd-s* runs/landsat_f?_ctl-gt-s* cache/student_*/meta.json qualitative' > logs/revision_a.tar
 mkdir -p logs/revision_a && tar xf logs/revision_a.tar -C logs/revision_a
 ```
@@ -126,3 +126,40 @@ mkdir -p logs/revision_a && tar xf logs/revision_a.tar -C logs/revision_a
 * **3** : nokd-cos vs sans KD constant (SeK max et final) ; si l'écart dépasse ≈ 0,5, refaire 3b.
 * Rapport : moyennes ± écart-type, IC à 95 % (t apparié), cohérence de signe ; pas de Wilcoxon
   sur paires pli × graine (pseudo-réplication).
+
+## 5. Résultats (14 oct. 2026)
+
+21 runs, 74 A100-h (+ caches ≈ 1 h). Analyse : `paper/scripts/analyze_revision_a.py` →
+`paper/tables/revision_a_{runs,arms,stats,caches,misc,cost}.csv`. La règle de sélection Landsat
+recalculée sur les logs bruts reproduit la table existante à 4·10⁻¹⁵ près.
+
+| Comparaison | Données | Δ SeK [IC 95 %] | p | signes |
+|---|---|---|---|---|
+| auto-KD − sans KD | SECOND (graines 2–4) | +0,75 [0,41 ; 1,08] (final +1,05) | 0,011 | 3/3 |
+| KD PerASCD − auto-KD | SECOND | +1,52 [1,35 ; 1,70] | 0,0007 | 3/3 |
+| auto-KD − son professeur (23,87) | SECOND | +0,75 | 0,005 | 3/3 |
+| sans KD cosinus − sans KD constant | SECOND (1–3) | −0,33 [−0,68 ; 0,03] (final −0,82) | 0,06 | 0/3 |
+| KD − sans KD cosinus | SECOND | +2,70 | < 10⁻⁴ | 3/3 |
+| auto-KD − sans KD | plis 1–3 (graines 2–3) | −0,04 [−0,86 ; 0,77] | 0,85 | 1/6 |
+| KD PerASCD − auto-KD | plis 1–3 | +2,61 [1,73 ; 3,49] | 0,006 | 6/6 |
+| vérité seule − sans KD | plis 1–3 (1–3) | −0,21 [−1,04 ; 0,61] | 0,38 | 4/9 |
+| KD PerASCD − vérité seule | plis 1–3 | +2,75 [1,55 ; 3,94] | 0,010 | 9/9 |
+
+(Landsat : IC sur les 3 moyennes de pli ; signes = paires pli × graine, simple comptage.)
+
+Lecture, selon la règle fixée au §4 :
+* **Le gain dépend des cibles du modèle de fondation.** Sur les plis tenus à l'écart de toute
+  mise au point, ni l'auto-distillation ni la vérité terrain adoucie (ε apparié : 0,21–0,28) ne
+  font gagner quoi que ce soit ; les cibles PerASCD donnent +2,6 à +2,8 de plus.
+* **Sur SECOND, l'auto-distillation récupère environ un tiers du gain** (0,75 sur 2,27 aux
+  mêmes graines), effet « born-again » classique : l'élève auto-distillé dépasse même son
+  professeur de 0,75. Les deux tiers restants exigent PerASCD.
+* **Le LR constant ne désavantage pas la baseline** : le cosinus fait moins bien, surtout à la
+  dernière époque ; 3b (KD cosinus) inutile.
+* Réserve : moyenner les logits de l'élève 512 → 128 coûte 0,22 SeK (train) sur SECOND mais
+  2,7–3,4 sur les plis Landsat (changements petits et fragmentés) ; l'auto-distillation y est donc
+  désavantagée. Le contrôle « vérité seule » n'a pas ce défaut et conduit à la même conclusion.
+
+Article mis à jour : sous-section IV-G (bras de contrôle), section VII (contrôles + Fig. 7
+qualitative), table VIII, discussion VIII-A, limites, conclusion, résumé ; supplément : tables
+des runs et des caches de contrôle. `check_numbers.py` : 0 problème.

@@ -10,4 +10,5 @@ Landsat fold 0: 600-epoch budget pilot (stopped at epoch 477),1,11.2200277777777
 Landsat folds: student baselines (12 runs),12,28.199416666666664,timing.csv
 Landsat folds: PerASCD ViT-G teachers (4 runs),4,25.809749999999998,timing.csv
 Landsat folds: KD students (12 runs),12,28.984527777777785,timing.csv
-"TOTAL (excluding teacher caches and checks, about 10 A100-h)",87,478.68713888888885,sum
+"Revision controls: self-distillation, ground-truth targets, cosine LR (21 runs)",21,74.2509722222222,timing.csv
+"TOTAL (excluding teacher caches and checks, about 10 A100-h)",108,552.9381111111111,sum

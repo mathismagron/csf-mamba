@@ -733,6 +733,10 @@ Plis 1–3 relancés après l'erreur `$$F` (≈ 6,4 h chacun, pic 21–24 Go ; t
 
 Décision : lancer les contrôles demandés par les trois relecteurs internes — auto-distillation (professeur = élève sans KD), contrôle « vérité seule » à la configuration retenue sur les plis Landsat 1–3 (vérité lissée + lissage d'étiquettes apparié au professeur), baseline à LR cosinus, cartes qualitatives. ≈ 77 A100-h. Plan, justification des choix, commandes Narval et lecture prévue des résultats (fixée avant de les voir) : `documentation/revision_vague_a.md`. Code testé localement (63 tests ; entraînement de bout en bout sur données synthétiques avec les nouvelles cibles).
 
+### Révision : résultats de la vague A (14 oct.)
+
+Les 21 runs et les 4 caches élèves sont rapatriés dans `logs/revision_a/` (74 A100-h). Résultats (détail et lecture : `documentation/revision_vague_a.md` §5) : **sur les plis Landsat 1–3, ni l'auto-distillation (−0,04 SeK) ni la vérité terrain adoucie au niveau de confiance du professeur (−0,21) n'aident l'élève, alors que les cibles PerASCD les dépassent de +2,61 et +2,75 (6/6 et 9/9 paires)** ; sur SECOND, l'auto-distillation donne +0,75 (un tiers du gain), PerASCD +1,52 de plus ; un LR cosinus dégrade la baseline sans KD (−0,33 au meilleur, −0,82 au final). L'objection « la KD n'est qu'une régularisation » est donc écartée pour l'essentiel du gain. Article, table VIII, Fig. 7 (cartes qualitatives) et supplément mis à jour ; manuscrit 15 pages, supplément 7.
+
 ## 5. Risques qui pourraient invalider la comparaison
 
 1. **Réglage sur le test.** Avec 12 à 18 configurations criblées, choisir λ/T/masque sur le test gonflerait le gain de KD. Parade : criblage sur val, confirmation sur test (§3). Le plus grave des risques listés.

@@ -251,6 +251,10 @@ def compute_cost() -> pd.DataFrame:
              dict(study="Landsat folds: student baselines (12 runs)", runs=12, a100_h=sum(base), source="timing.csv"),
              dict(study="Landsat folds: PerASCD ViT-G teachers (4 runs)", runs=4, a100_h=sum(tea), source="timing.csv"),
              dict(study="Landsat folds: KD students (12 runs)", runs=12, a100_h=sum(kd), source="timing.csv")]
+    ra = sorted((L / "revision_a/runs").glob("*/timing.csv"))
+    if ra:   # revision wave A (documentation/revision_vague_a.md)
+        rows.append(dict(study=f"Revision controls: self-distillation, ground-truth targets, cosine LR ({len(ra)} runs)",
+                         runs=len(ra), a100_h=sum(_hours(ra)), source="timing.csv"))
     df = pd.DataFrame(rows)
     assert len(e250) == 5 and len(e600) == 5 and len(base) == 12 and len(kd) == 12 and len(tea) == 4
     df.loc[len(df)] = dict(study="TOTAL (excluding teacher caches and checks, about 10 A100-h)", runs=df.runs.sum(),
