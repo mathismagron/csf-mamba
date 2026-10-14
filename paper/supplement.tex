@@ -27,7 +27,7 @@ the code repository; SeK, Fscd and mIoU are in percentage points.
 
 \section{SECOND: Per-Seed Results and the 200-Epoch Extension}
 Table~\ref{tab:s-second-runs} lists every SECOND test run. Arms with the same seed share their
-initialisation, data order and augmentation draws; their losses at the first optimiser step are
+initialization, data order and augmentation draws; their losses at the first optimizer step are
 identical, which we checked for every arm. Without distillation, the best epoch falls between
 47 and 100 and the SeK then declines under the constant learning rate; with distillation, the
 best epoch is at or near the end of the 120-epoch budget. Because the distilled runs were still
@@ -47,7 +47,7 @@ Table~\ref{tab:s-screening-runs} lists the 32 screening runs (16 arms, two seeds
 internal validation split. The split (2\,671 training and 297 validation pairs from the official
 training set) is fixed and hashed and is released with the code. The decision rule (``best mean
 validation SeK; an increment counts if it exceeds 0.36 points'') was written in the versioned lab journal before each of the three waves (waves 1--3 were trained at commits \texttt{2f8ece0}, \texttt{51205c5} and \texttt{8de169a}, the feature wave at \texttt{945879a}; see \texttt{documentation/distillation.md}). It is a record specified in advance, not a public registration. The change-weight grid was extended twice, from $\{0.5,1,2\}$ to $\{4,8\}$ and then to 16, because the best value lay at its edge. Two caveats apply to the screening only. First, the SECOND teacher was trained
-by its authors on all 2\,968 training pairs, including our 297 validation pairs, which can favour
+by its authors on all 2\,968 training pairs, including our 297 validation pairs, which can favor
 distillation over the ground-truth controls on validation; it is unlikely to explain the whole gap
 of about 1.8 points between distillation and the controls at the same weight. These screening
 controls were not run on the SECOND test set, so the SECOND test confirms the distillation gain, not
@@ -67,7 +67,7 @@ predictions; the deformable-attention CUDA operator and its PyTorch reference ag
 equivalent for evaluation (no pixel where the change map and the semantic labels disagree, among
 444\,M pixels, and identical class order). Half precision changes the ViT-G score by less than
 0.01 point, so the cache was computed in float16. The VMamba-B checkpoint is sensitive to the
-input normalisation: with the PerA statistics used by the released evaluation code it scores
+input normalization: with the PerA statistics used by the released evaluation code it scores
 23.73, and with ImageNet statistics it reproduces exactly the score stored in the checkpoint;
 its float16 inference is also degraded, so its cache was computed in float32 and stored in
 float16. We verified that the selective-scan kernels were not the cause (compiled kernel,
@@ -75,7 +75,7 @@ PyTorch reference scan, and TF32 disabled give the same SeK on a 256-pair subset
 
 \input{tables_tex/supp_teacher_repro}
 
-\subsection{Teacher Equivariance and the D4 Cache}
+\subsection{Teacher Equivariance and the $D_4$ Cache}
 Between $T(g\cdot x)$ and $g\cdot T(x)$, the ViT-G teacher's change decision differs on
 2.2--2.5\,\% of the pixels of the SECOND training set and its class decision on 2.7--3.0\,\% of
 the changed pixels. With about 20\,\% of pixels changed, a single-view cache would have given
@@ -85,9 +85,9 @@ On its own training set, read back from the half-precision cache, the teacher sc
 (Fscd 71.50, mIoU 77.77): the soft targets are far from a copy of the labels.
 
 \subsection{Landsat-SCD Fold Teachers}
-Table~\ref{tab:s-teachers} summarises the four retrained ViT-G teachers. They follow the authors'
+Table~\ref{tab:s-teachers} summarizes the four retrained ViT-G teachers. They follow the authors'
 recipe (SGD, learning rate 0.1, momentum 0.9, polynomial decay, 10\,\% warm-up, 50 epochs, batch
-4 with 2 accumulation steps, float16 autocast, gradient clipping 1.5, drop-path 0.3, D4 and
+4 with 2 accumulation steps, float16 autocast, gradient clipping 1.5, drop-path 0.3, $D_4$ and
 photometric augmentation), with two declared differences: the checkpoint is selected on the fold's
 validation SeK instead of the test Fscd, and activation checkpointing of the 40 ViT blocks is used
 to fit a 40\,GB A100. On CPU with a ViT-B and drop-path 0.3, checkpointing gives gradients
@@ -128,7 +128,7 @@ explicitly; the lift is recorded in the cache directory and in each run's config
 
 \section{Student Design Before This Study}
 The student was designed earlier by the first author as an efficient SCD model and its recipe was
-frozen before the distillation study. Table~\ref{tab:s-student-design} summarises the design
+frozen before the distillation study. Table~\ref{tab:s-student-design} summarizes the design
 results that fixed the recipe, for transparency. Three blocks inherited from that design (the
 checkerboard state-space fusion, the frequency branch and the change-guided attention) have no
 detectable effect; the fusion block was removed, the other two remain in the network that is
@@ -140,7 +140,7 @@ on this dataset; their effects were required to hold on both the best and the fi
 \section{Control Experiments}
 Table~\ref{tab:s-controls-runs} lists every control run of Section~VII of the main text, and
 Table~\ref{tab:s-controls-caches} the checks of the student-as-teacher caches used for
-self-distillation. The caches have the format of the teacher caches (eight D4 views, $2C+1$ logit
+self-distillation. The caches have the format of the teacher caches (eight $D_4$ views, $2C+1$ logit
 channels at one quarter of the tile resolution) and are read by the same data loader. Pooling the
 student's full-resolution logits to that resolution costs \RevCacheSecDrop\ SeK points on SECOND but
 \RevCacheLanDropMin--\RevCacheLanDropMax\ on the Landsat-SCD folds, whose changed regions are small and fragmented. The analysis

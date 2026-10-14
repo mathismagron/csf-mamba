@@ -40,24 +40,24 @@ Canada.}}
 
 \begin{abstract}
 Remote-sensing foundation models hold the best published accuracy for semantic change detection
-(SCD), at a cost that is hard to deploy at scale: the strongest SECOND model, PerASCD, has
-\TeacherParams\,M parameters and needs about 1.5 TMACs per image pair. We ask how much of that
-accuracy a compact model inherits from the teacher's outputs alone. DistilSCD trains a
-\StudentParams\,M-parameter siamese VMamba student with two extra loss terms, soft change targets
-and temperature-scaled class distributions, read from an offline cache of the teacher's logits
-under the eight D4 views that the student's augmentation produces; inference cost is unchanged.
-Hyper-parameters were selected on an internal validation split. On SECOND (five seeds),
-distillation raises the student from \SecBaseSek\ to \SecFullSek\ SeK (+\SecFullGain\
-[\SecFullGainLo, \SecFullGainHi]), equivalent to the teacher within $\pm\TostMargin$ SeK, with
-\RatioParams$\times$ fewer parameters, \RatioGmacs$\times$ fewer MACs and
-\RatioLatOneBf--\RatioLatFpThirtyTwo$\times$ lower GPU latency. Because the released random pair
-split of Landsat-SCD places both images of every test pair in the training set, we introduce a
-location-disjoint four-fold protocol; under it, distillation improves the student on every fold
-and seed (+\LPrimGain\ SeK on the three primary folds). Controls with identical losses and cache format
-tie the gain to the teacher's targets: on these folds, neither self-distillation nor ground-truth
-targets smoothed to the teacher's confidence measurably improve the student, and the foundation-model targets
-exceed them by \RevKdSelfLanAbs\ and \RevKdCtlLanAbs\ SeK; on SECOND, self-distillation recovers about
-one third of the gain, and a decaying learning rate does not improve the undistilled baseline.
+(SCD), but at a computational cost that hinders large-scale deployment: the strongest SECOND model,
+PerASCD, has \TeacherParams\,M parameters and needs about 1.5 TMACs per image pair. We ask how much
+of that accuracy a compact model can inherit from the teacher's outputs alone. DistilSCD supervises
+a \StudentParams\,M-parameter siamese VMamba student with soft change targets and temperature-scaled
+class distributions, read from an offline cache of the teacher's logits across the eight $D_4$ views
+produced by the student's geometric augmentation; inference cost is unchanged. Hyperparameters were
+selected on an internal validation split. On SECOND (five seeds), distillation raises the student
+from \SecBaseSek\ to \SecFullSek\ SeK (+\SecFullGain\ [\SecFullGainLo, \SecFullGainHi]), equivalent
+to the teacher within $\pm\TostMargin$ SeK, with \RatioParams$\times$ fewer parameters,
+\RatioGmacs$\times$ fewer MACs and \RatioLatOneBf--\RatioLatFpThirtyTwo$\times$ lower GPU latency.
+Because the released random pair split of Landsat-SCD places both images of every test pair in the
+training set, we introduce a location-disjoint four-fold protocol; under it, distillation improves
+the student on every fold and seed (+\LPrimGain\ SeK on the three primary folds). Controls with
+identical losses and cache format tie the gain to the teacher's targets: on these folds, neither
+self-distillation nor ground-truth targets smoothed to the teacher's confidence measurably improve
+the student, and the foundation-model targets exceed them by \RevKdSelfLanAbs\ and \RevKdCtlLanAbs\
+SeK; on SECOND, self-distillation recovers about one third of the gain, and a decaying learning rate
+does not improve the undistilled baseline.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -88,7 +88,7 @@ drop the cost (Fig.~\ref{fig:pitch}). Distilling foundation models into efficien
 for \emph{binary} change detection, either through features~\cite{wang2025burden} or through
 output probabilities~\cite{wang2024knowledge}. Whether it works for \emph{semantic} change
 detection, how much of the teacher's accuracy a compact student can reach, and \emph{why} it
-works, remain open. The KD literature predicts both outcomes: very large teachers can be hard
+works remain open. The KD literature predicts both outcomes: very large teachers can be hard
 to imitate for small students~\cite{cho2019efficacy,mirzadeh2020improved}, yet students
 sometimes exceed their teachers~\cite{furlanello2018born,yuan2020revisiting,
 stanton2021knowledge}, and part of the effect of KD can be explained as label smoothing
@@ -100,7 +100,7 @@ turned out to matter. Landsat-SCD~\cite{yuan2022transformer}, the second standar
 benchmark, is built from a small number of tiles observed at many dates. We show that a random
 split at the level of image pairs, the dataset's original protocol, places the same images in
 the training and test sets, so that the test set measures recognition at locations and dates
-already seen in training rather than generalisation to new locations. Random splits of spatially
+already seen in training rather than generalization to new locations. Random splits of spatially
 structured data are known to answer this narrower question~\cite{roberts2017crossvalidation,
 ploton2020spatial,kattenborn2022spatially,kapoor2023leakage}, and this changes what a distillation
 experiment on this dataset can conclude.
@@ -123,12 +123,12 @@ retrained on the official split by~\cite{shen2026foundation}.}
 This paper makes the following contributions.
 \begin{enumerate}
 \item \emph{DistilSCD, an output-only distillation recipe for SCD.} A frozen foundation-model
-teacher is run once, offline, under the eight D4 views that the student's augmentation
+teacher is run once, offline, under the eight $D_4$ views that the student's augmentation
 produces; its change logits and class distributions supervise the student through a soft
 binary cross-entropy and a temperature-scaled KL term. The student's architecture and
 inference cost are unchanged, and training takes the same time as without distillation
 (Section~\ref{sec:method}).
-\item \emph{A controlled evaluation on SECOND.} With distillation hyper-parameters selected on an
+\item \emph{A controlled evaluation on SECOND.} With distillation hyperparameters selected on an
 internal validation split and five seeds on the test set, a \StudentParams\,M-parameter student
 gains \SecFullGain\ SeK and is equivalent to the \TeacherParams\,M-parameter teacher within
 $\pm\TostMargin$ SeK at \RatioGmacs$\times$ fewer MACs. A second teacher, smaller and pre-trained on
@@ -138,11 +138,11 @@ the pixel level that the dataset holds \LkDistinct\ distinct images recombined i
 pairs, and release a four-fold cross-validation in which test tiles are never seen in
 training (Section~\ref{sec:landsat-data}).
 \item \emph{Controls that tie the gain to the teacher's targets.} Under the location-disjoint
-protocol the distilled student improves on its undistilled counterpart on every fold and seed and
+protocol, the distilled student improves on its undistilled counterpart on every fold and seed and
 exceeds the single-run fold teachers. With the same losses, cache format and schedule, replacing the
-foundation-model targets by the undistilled student's own outputs (self-distillation) or by ground
+foundation-model targets with the undistilled student's own outputs (self-distillation) or with ground
 truth smoothed to the teacher's confidence yields no measurable gain on these folds; on SECOND,
-self-distillation yields about one third of the gain. A decaying learning rate does not improve the
+self-distillation recovers about one third of the gain. A decaying learning rate does not improve the
 undistilled baseline, and our feature-distillation term adds nothing on top of output distillation
 (Sections~\ref{sec:landsat}--\ref{sec:discussion}).
 \end{enumerate}
@@ -156,22 +156,22 @@ Availability).
 \subsection{Semantic Change Detection}
 HRSCD~\cite{daudt2019multitask} framed SCD as joint land-cover mapping and change detection.
 Yang \emph{et al.}~\cite{yang2022asymmetric} introduced the SECOND dataset, an asymmetric
-siamese network and the separated kappa (SeK) metric used throughout this paper. Bi-SRNet~\cite{ding2022bi} and SCanNet~\cite{ding2024joint} added bi-temporal semantic reasoning and spatio-temporal Transformer modelling. State-space models entered the field with ChangeMamba~\cite{chen2024changemamba}, built on Mamba~\cite{gu2023mamba} and VMamba~\cite{liu2024vmamba}, and were followed by Mamba-FCS~\cite{wijenayake2026mamba}. The strongest recent results use foundation-model encoders, for example PerASCD~\cite{shen2026foundation} and DBTANet~\cite{li2026dual}, which adds a SAM branch. Lightweight change detection has mostly been pursued by architecture design for binary change, for example TinyCD~\cite{codegoni2023tinycd}; Corley \emph{et al.}~\cite{corley2024change} caution that well-trained simple baselines remain competitive. We propose no new architecture: our contribution is a training signal and an
+siamese network and the separated kappa (SeK) metric used throughout this paper. Bi-SRNet~\cite{ding2022bi} and SCanNet~\cite{ding2024joint} added bi-temporal semantic reasoning and spatio-temporal Transformer modeling. State-space models entered the field with ChangeMamba~\cite{chen2024changemamba}, built on Mamba~\cite{gu2023mamba} and VMamba~\cite{liu2024vmamba}, and were followed by Mamba-FCS~\cite{wijenayake2026mamba}. The strongest recent results use foundation-model encoders, for example PerASCD~\cite{shen2026foundation} and DBTANet~\cite{li2026dual}, which adds a SAM branch. Lightweight change detection has mostly been pursued by architecture design for binary change, for example TinyCD~\cite{codegoni2023tinycd}; Corley \emph{et al.}~\cite{corley2024change} caution that well-trained simple baselines remain competitive. We propose no new architecture: our contribution is a training signal and an
 evaluation protocol.
 
 \subsection{Foundation Models for Remote Sensing and Change Detection}
-Remote-sensing foundation models are pre-trained on large archives, by masked image modelling as in SatMAE~\cite{cong2022satmae} or by contrastive objectives as in SeCo~\cite{manas2021seasonal} and PerA~\cite{shen2026contrastive}. For change detection they are usually fine-tuned and kept inside the deployed network~\cite{shen2026foundation,ding2024adapting,li2026dual}. A benchmarking study reports that such comparisons are sensitive to preprocessing, in particular resizing and normalisation~\cite{corley2024revisiting}; we encountered the same sensitivity when reproducing a published teacher (Section~\ref{sec:teachers}). Here the foundation model is used only at training
+Remote-sensing foundation models are pre-trained on large archives, by masked image modeling as in SatMAE~\cite{cong2022satmae} or by contrastive objectives as in SeCo~\cite{manas2021seasonal} and PerA~\cite{shen2026contrastive}. For change detection they are usually fine-tuned and kept inside the deployed network~\cite{shen2026foundation,ding2024adapting,li2026dual}. A benchmarking study reports that such comparisons are sensitive to preprocessing, in particular resizing and normalization~\cite{corley2024revisiting}; we encountered the same sensitivity when reproducing a published teacher (Section~\ref{sec:teachers}). Here the foundation model is used only at training
 time.
 
 \subsection{Knowledge Distillation}
 Output distillation~\cite{hinton2015distilling} and feature-based variants such as
 FitNets~\cite{romero2014fitnets} are surveyed in~\cite{gou2021knowledge}. Two lines of results bear on our
-setting. First, the \emph{capacity gap}: larger teachers do not always make better teachers for small students~\cite{cho2019efficacy,mirzadeh2020improved}, although
+setting. First, the \emph{capacity gap}: larger models do not always make better teachers for small students~\cite{cho2019efficacy,mirzadeh2020improved}, although
 Beyer \emph{et al.}~\cite{beyer2022knowledge} show that consistent teaching (teacher and
-student see the same view) and long schedules close much of the gap. Our D4 cache makes teaching
+student see the same view) and long schedules close much of the gap. Our $D_4$ cache makes teaching
 geometrically consistent, akin to the stored per-crop soft labels of FKD~\cite{shen2022fast};
 photometric jitter is applied to the student only, so teaching is not fully consistent in their
-sense. Second, students can outperform their teachers~\cite{furlanello2018born,yuan2020revisiting}, and students that generalise well
+sense. Second, students can outperform their teachers~\cite{furlanello2018born,yuan2020revisiting}, and students that generalize well
 may match their teachers poorly~\cite{stanton2021knowledge}; Yuan \emph{et al.}
 \cite{yuan2020revisiting} interpret part of KD as a learned label smoothing
 \cite{szegedy2016rethinking,muller2019label}. For dense prediction, structured and channel-wise distillation transfer spatial structure for segmentation~\cite{liu2019structured,shu2021channel}. Closest to our
@@ -180,11 +180,11 @@ a vision foundation model on the target task before distilling it into a small t
 
 \subsection{Distillation in Remote Sensing and Change Detection}
 KD in remote sensing is surveyed in~\cite{himeur2025applications}. For change detection, CDKD
-\cite{wang2024knowledge} distils a large teacher's output probabilities, with contrastive and
-normalised terms, into a lightweight on-board binary detector, and feature alignment between large and small binary change detectors has also been explored~\cite{yang2026intrascale}. Burden-free distillation (BFD)~\cite{wang2025burden} is the closest in
+\cite{wang2024knowledge} distills a large teacher's output probabilities, with contrastive and
+normalized terms, into a lightweight on-board binary detector, and feature alignment between large and small binary change detectors has also been explored~\cite{yang2026intrascale}. Burden-free distillation (BFD)~\cite{wang2025burden} is the closest in
 aim: it transfers features of generic vision foundation models into binary change detectors
 and removes the foundation model at inference. Other teacher--student work targets robustness rather than compression: SCDistill~\cite{qu2026semantic} uses self-distillation to make change detectors robust to semantic perturbations, and GUIDE~\cite{huang2026guide} is a teacher--student framework for SCD under cross-temporal domain shift. Relative to these works, we study \emph{semantic} change
-detection on SECOND and Landsat-SCD, distil only the \emph{outputs} of a task-fine-tuned
+detection on SECOND and Landsat-SCD, distill only the \emph{outputs} of a task-fine-tuned
 remote-sensing foundation model, and test where the gain comes from with self-distillation and
 ground-truth target controls, two teachers and location-disjoint folds.
 
@@ -194,7 +194,7 @@ Random splits of spatially or temporally dependent samples inflate accuracy; blo
 leakage unless the scientific claim concerns a distribution with the same dependence
 structure. That qualification frames our treatment of Landsat-SCD: its random split is a valid
 protocol for change recognition over one already-seen area, and we change the question to
-generalisation to unseen locations. Reusing a test set for model selection can bias reported
+generalization to unseen locations. Reusing a test set for model selection can bias reported
 accuracy~\cite{dwork2015reusable}, which motivates reporting a
 selection-free number next to the field's convention, and seed variance motivates paired
 multi-seed comparisons~\cite{bouthillier2021accounting}.
@@ -203,7 +203,7 @@ multi-seed comparisons~\cite{bouthillier2021accounting}.
 \section{Method}
 \label{sec:method}
 
-Fig.~\ref{fig:method} summarises DistilSCD. We use the name for the training recipe and, in tables
+Fig.~\ref{fig:method} summarizes DistilSCD. We use the name for the training recipe and, in tables
 and figures, for the student trained with it.
 
 \begin{figure*}[t]
@@ -214,7 +214,7 @@ every training pair; its $2C+1$ output channels (class logits of both dates, cla
 and a change logit) are stored at $128\times128$ in half precision. During training, the cache
 entry of the view drawn by the student's augmentation is upsampled bilinearly and supervises the
 student through a soft-target BCE on the change logit ($\lambda_{\mathrm{chg}}=8$) and a
-temperature-scaled KL on the class distributions renormalised over the real classes
+temperature-scaled KL on the class distributions renormalized over the real classes
 ($T_{\mathrm{s}}=2$, $\lambda_{\mathrm{sem}}=1$, all pixels), in addition to the task losses. Only
 the student is used at inference. Blocks inherited from the student's earlier design with no
 detectable effect are omitted (supplementary material).}
@@ -233,7 +233,7 @@ pixels. SECOND has $C=7$ (six land-cover classes); Landsat-SCD has $C=5$ (four c
 The student is a compact siamese network developed by the first author before this study and
 kept frozen in design and recipe throughout. A shared VMamba encoder~\cite{liu2024vmamba} with
 depths $(2,2,5,2)$, widths $(96,192,384,768)$ and the MLP sub-blocks disabled (``mini'',
-\num{13.84}\,M parameters) processes each date and is initialised from ImageNet VMamba-T
+\num{13.84}\,M parameters) processes each date and is initialized from ImageNet VMamba-T
 weights. Features of the two dates are fused per stage by concatenation and a $1\times1$
 projection; a binary decoder predicts change logits $b\in\mathbb{R}^{2\times H\times W}$, and
 a semantic decoder shared between the dates, conditioned on a learned temporal embedding and
@@ -242,7 +242,7 @@ on the change maps of the binary decoder, predicts class logits $s^{1},s^{2}\in\
 upsampling~\cite{liu2023upsample}. The model has \StudentParams\,M parameters and
 \StudentGmacs\ GMACs per $512\times512$ pair (\StudentGmacsFvcore\ with fvcore).
 Two blocks inherited from the student's earlier design (a frequency branch and a change-guided
-attention) have no detectable effect on SECOND; they are kept unchanged and documented in the
+attention module) have no detectable effect on SECOND; they are kept unchanged and documented in the
 supplementary material, together with the design experiments, which selected epochs on the
 SECOND test set as is customary on this dataset.
 
@@ -282,8 +282,9 @@ the 2\,968 SECOND pairs, computed in 26 GPU-minutes). During training, the cache
 drawn view $g$ supervises the augmented sample, so teacher and student always see the same
 geometry; when the two dates are swapped (temporal-swap augmentation), the two semantic
 blocks of the target are swapped and the symmetric change logit is kept. Photometric jitter is
-applied to the student's input only, which adds a radiometric invariance constraint and makes
-teaching photometrically inconsistent. The
+applied only to the student's input, which encourages invariance to radiometric differences with
+respect to the clean teacher targets but makes teaching photometrically inconsistent in the sense
+of~\cite{beyer2022knowledge}. The
 cached logits are upsampled bilinearly to the student's resolution, exactly as in the teacher's
 own last operation. We did not ablate the eight-view cache against a single view.
 
@@ -299,7 +300,7 @@ averaged over all pixels (the change map is supervised everywhere). We use
 $T_{\mathrm{c}}=1$.
 
 \emph{Semantic distillation.} Class 0 is never a target of the teacher's cross-entropy, so its
-logit carries no supervised meaning. We renormalise both distributions over the real classes
+logit carries no supervised meaning. We renormalize both distributions over the real classes
 $1,\dots,C-1$:
 \begin{equation}
 \mathcal{L}_{\mathrm{sem}} = \frac{T_{\mathrm{s}}^{2}}{2}\sum_{t\in\{1,2\}}
@@ -311,8 +312,8 @@ with
 q^{t}=\mathrm{softmax}(z^{t}_{1:C-1}/T_{\mathrm{s}}),\qquad
 p^{t}=\mathrm{softmax}(s^{t}_{1:C-1}/T_{\mathrm{s}}).
 \]
-The mask $\mathcal{M}$ is either the
-whole image or the pixels labelled changed in the ground truth or predicted changed by the teacher; on SECOND,
+The mask $\mathcal{M}$ covers either all pixels or the union of pixels labeled changed in the
+ground truth and those predicted changed by the teacher; on SECOND,
 about 80\,\% of pixels have no semantic label, so the first option asks the student to follow
 the teacher's semantics where neither model was supervised.
 
@@ -320,8 +321,8 @@ the teacher's semantics where neither model was supervised.
 \mathcal{L}_{\mathrm{chg}}+\lambda_{\mathrm{sem}}\mathcal{L}_{\mathrm{sem}}$. The retained
 configuration, selected as described in Section~\ref{sec:screening}, is
 $\lambda_{\mathrm{chg}}=8$, $\lambda_{\mathrm{sem}}=1$, $T_{\mathrm{s}}=2$ and
-$\mathcal{M}=$ all pixels. We also screened one feature-distillation term (cosine similarity after channel-wise
-normalisation between $1\times1$-projected student features and the teacher's encoder features at
+$\mathcal{M}=$ all pixels. We also screened one feature-distillation term (cosine distance after channel-wise
+normalization between $1\times1$-projected student features and the teacher's encoder features at
 two or three scales) on top of output distillation; it requires running the teacher online.
 
 \subsection{Training Recipe}
@@ -331,7 +332,7 @@ micro-batch 2 with 4 accumulation steps (effective batch 8), AdamW (learning rat
 $10^{-4}$, weight decay $0.01$) with a 1\,500-iteration linear warm-up and a constant rate
 afterwards, bfloat16 autocast, an exponential moving average of the weights (decay 0.9998)
 used for evaluation, flips, $90^\circ$ rotations, photometric jitter (strength 0.2) and
-temporal swap (probability 0.5). The budget is 120 epochs on SECOND (44\,520 optimiser steps)
+temporal swap (probability 0.5). The budget is 120 epochs on SECOND (44\,520 optimizer steps)
 and 100 epochs on Landsat-SCD (Section~\ref{sec:landsat-protocol}). The constant rate comes from the student's design campaign. With it, a shorter run is exactly a
 prefix of a longer one, so the seven SECOND seeds of the undistilled student, trained for 200
 epochs, are read at epoch 120; a cosine schedule is evaluated in Section~\ref{sec:controls}. Distillation adds no measurable student training time, since the teacher never runs during
@@ -341,7 +342,7 @@ Landsat-SCD, when the fold teachers are trained).
 % =====================================================================================
 \section{Datasets and Evaluation Protocol}
 \label{sec:protocol}
-Table~\ref{tab:datasets} summarises the datasets, splits and model-selection rules.
+Table~\ref{tab:datasets} summarizes the datasets, splits and model-selection rules.
 
 \input{tables_tex/table1_datasets}
 
@@ -364,8 +365,8 @@ pairs split at random into 1\,431/477/477 for training, validation and test.
 Pair names encode two years and a tile index $k$ taking only 12 values. A name-independent,
 pixel-level verification (Table~\ref{tab:leakage}) shows that the 2\,385 pairs are built from
 \LkDistinct\ distinct images, i.e.,\ 12 tiles observed at about 28 dates, and that each
-(tile, year) group contains exactly one image. As a consequence, all \LkTest\ test pairs, and
-all \LkVal\ validation pairs, have both of their images in the training set, with identical
+(tile, year) group contains exactly one image. As a consequence, all \LkTest\ test pairs and
+all \LkVal\ validation pairs have both of their images in the training set, with identical
 class labels on the \LkPixels\,M annotated pixels they share. A learning-free lookup that
 copies, for each test pixel, the classes annotated for the same tile and year in the training
 set reaches \LkOracleSek\ SeK on the test set (Fscd \LkOracleFscd, mIoU \LkOracleMiou), higher
@@ -379,7 +380,7 @@ This is not an error of a particular paper. The original authors split pairs at 
 design~\cite[p.~11]{yuan2022transformer}, for a dataset built as a long time series of one
 area, and name the extension to several regions as future work~\cite[p.~19]{yuan2022transformer}.
 The random split measures change recognition on an area already seen at other dates; it does
-not measure generalisation to a new area. Our student illustrates the difference
+not measure generalization to a new area. Our student illustrates the difference
 (Fig.~\ref{fig:leakage}b): on the random split its test SeK keeps rising, from
 \RndTwoFifty\ at 250 epochs to \RndSixHundred\ at 600 epochs, with the validation curve still
 climbing by \RndLastSlope\ points per 10 epochs at the end, whereas on unseen tiles it
@@ -393,7 +394,7 @@ plateaus below 30 SeK within 100 epochs.
 \caption{Landsat-SCD: train--test image overlap of the released random pair split, and location-disjoint
 protocol. (a) The
 12 tile indices $k$ drawn as a $4\times3$ grid (row = first digit, column = second digit; the
-layout is inferred from the indices, not from georeferencing), coloured by the fold in which the
+layout is inferred from the indices, not from georeferencing), colored by the fold in which the
 tile is a test tile; ``val F$i$'' marks the validation tile of fold $i$. Fold 0 is exploratory.
 (b) Test (solid) and validation (dashed) SeK per epoch of the same undistilled student on the
 released random split (mean of five seeds; \RndSixHundred\ at epoch 600, still rising) and on
@@ -426,7 +427,7 @@ test SeK over epochs~\cite{chen2024changemamba,shen2026foundation}. We report th
 next to it, the SeK at the last epoch, which involves no selection. On Landsat-SCD we report
 the test SeK at the epoch of best validation SeK of the fold.
 
-\emph{Statistics.} Each arm is trained with several seeds; a seed fixes initialisation, data
+\emph{Statistics.} Each arm is trained with several seeds; a seed fixes initialization, data
 order and augmentation draws, so arms with the same seed share their first mini-batch exactly.
 On SECOND we report Welch tests and 95\,\% confidence intervals for differences of means, paired
 tests across seeds, and one-sample tests against the single-run teacher. On Landsat-SCD, the
@@ -442,7 +443,7 @@ difference.
 
 \subsection{Screening Specified in Advance}
 \label{sec:screening}
-All distillation hyper-parameters were chosen on SECOND before any distillation run was evaluated
+All distillation hyperparameters were chosen on SECOND before any distillation run was evaluated
 on the test set. The 2\,968 training pairs were split into 2\,671 for training and 297 for
 validation (a fixed, hashed split). With two seeds per arm and 120 epochs, three waves fixed in
 turn the change weight $\lambda_{\mathrm{chg}}$, the semantic term ($T_{\mathrm{s}}\in\{2,4\}$, two
@@ -452,9 +453,9 @@ project's lab journal, which is versioned with the code; it is not a public regi
 0.36-point threshold was derived for five test seeds and serves here as a ranking threshold, not
 as a test. The $\lambda_{\mathrm{chg}}$ grid started at $\{0.5,1,2\}$ and was extended to $\{4,8\}$,
 then to 16, because the best value lay at the edge of the grid. Two controls, run at
-$\lambda_{\mathrm{chg}}=2$, replaced the teacher's change target by the ground truth, either binary
-or average-pooled to the teacher's resolution and upsampled like it. The SECOND teacher was trained
-by its authors on all 2\,968 training pairs, including our 297 validation pairs, which can favour
+$\lambda_{\mathrm{chg}}=2$, replaced the teacher's change target with the ground truth, either kept binary
+or average-pooled to the teacher's resolution and bilinearly upsampled. The SECOND teacher was trained
+by its authors on all 2\,968 training pairs, including our 297 validation pairs, which can favor
 distillation over the controls on validation; Section~\ref{sec:control-arms} repeats the
 ground-truth control at the retained configuration on the location-disjoint Landsat-SCD folds,
 which played no role in its selection. The retained configuration was then retrained on all
@@ -465,8 +466,8 @@ which played no role in its selection. The retained configuration was then retra
 \label{sec:teachers}
 Re-evaluated with our code, the published PerASCD checkpoint gives \TeacherVitgSekExact\ SeK
 on the SECOND test set (published: 26.11). The published VMamba-B checkpoint gives 23.73 with
-the PerA normalisation used by the released evaluation code, and exactly its stored score,
-\TeacherVmbSekExact, with ImageNet normalisation, which we therefore use. Both checkpoints were
+the PerA normalization used by the released evaluation code, and exactly its stored score,
+\TeacherVmbSekExact, with ImageNet normalization, which we therefore use. Both checkpoints were
 selected by their authors on the test set and are single runs; the training log of the ViT-G
 checkpoint reads 26.13 at its best-SeK epoch (the checkpoint itself was selected on test Fscd) and
 25.85 at its last epoch. No Landsat-SCD teacher trained
@@ -479,20 +480,20 @@ students of that fold.
 \subsection{Control Arms}
 \label{sec:control-arms}
 After an internal review of a first draft, we added three controls; their comparisons, selection
-rules and statistics were written in the lab journal before any of these runs was evaluated. All
+rules and statistics were written in the lab journal before any of these runs were evaluated. All
 other settings are those of DistilSCD, including both loss terms and their weights.
-(i)~\emph{Self-distillation.} The teacher is replaced by the undistilled student of seed~1 (on
+(i)~\emph{Self-distillation.} The teacher is replaced with the undistilled student of seed~1 (on
 SECOND its best test epoch, \RevSelfTeacherSec\ SeK, the selection used for the published teacher;
 on Landsat-SCD its best validation epoch on each fold), cached under the same eight views and in the
 same format. Students use seeds 2--4 on SECOND and 2--3 on each fold, so that none shares its
-teacher's initialisation. The student predicts at full resolution; its logits are average-pooled
+teacher's initialization. The student predicts at full resolution; its logits are average-pooled
 by $4\times4$ to the cache resolution of the teacher, which lowers the training-set SeK of the
 cached targets by \RevCacheSecDrop\ points on SECOND and by \RevCacheLanDropMin--\RevCacheLanDropMax\
 points on the folds.
 (ii)~\emph{Ground truth only} (Landsat-SCD folds 1--3, seeds 1--3). The change target is the ground
 truth average-pooled to the cache resolution and upsampled, as in the screening controls. The
 semantic target is the label distribution smoothed across classes,
-$(1-\varepsilon)\,\mathbf{e}_y+\varepsilon\,\mathbf{1}/(C-1)$ on labelled changed pixels and uniform elsewhere,
+$(1-\varepsilon)\,\mathbf{e}_y+\varepsilon\,\mathbf{1}/(C-1)$ on labeled changed pixels and uniform elsewhere,
 smoothed spatially in the same way, with $\varepsilon$ chosen so that the true class receives the
 mean probability that the fold teacher assigns to it at $T_{\mathrm{s}}=2$ on the training set
 ($\varepsilon=\RevEpsMin$--$\RevEpsMax$). This scalar is the only quantity taken from the teacher.
@@ -505,8 +506,8 @@ decay to $10^{-6}$ after the same warm-up (seeds 1--3).
 \label{sec:second}
 
 \subsection{Screening on the Validation Split}
-Table~\ref{tab:screening} and Fig.~\ref{fig:screening} summarise the screening. Change
-distillation alone raises the validation SeK with its weight up to $\lambda_{\mathrm{chg}}=8$
+Table~\ref{tab:screening} and Fig.~\ref{fig:screening} summarize the screening. Change
+distillation alone raises the validation SeK as its weight increases up to $\lambda_{\mathrm{chg}}=8$
 (\ScrLEight\ against \ScrWit\ without distillation; the differences between 2, 4 and 8 are within
 two-seed noise) and plateaus beyond (\IncLSixteen\ at $\lambda_{\mathrm{chg}}=16$). The two ground-truth controls at
 $\lambda_{\mathrm{chg}}=2$ give \ScrCtlGtDelta\ and \ScrCtlGtsDelta\ points, against
@@ -528,7 +529,7 @@ output distillation adds \IncFeatA, \IncFeatB\ and
 \caption{Screening on the SECOND internal validation split (2\,671/297 pairs;
 the test set was not used); points are seeds (two per arm), ticks are means, $y$ is the best
 validation SeK over 120 epochs. (a) Weight of the change term; the two controls at
-$\lambda_{\mathrm{chg}}=2$ replace the teacher's target by the binary or the smoothed ground truth.
+$\lambda_{\mathrm{chg}}=2$ replace the teacher's target with the binary or the smoothed ground truth.
 (b) Semantic KL on top of change distillation ($\lambda_{\mathrm{chg}}=8$, dashed line): temperature
 and pixel mask. (c) Feature distillation on top of the retained output distillation: increment
 paired by seed versus training time per run.}
@@ -608,14 +609,12 @@ batch size 8 is \StudentMem\ against \TeacherMem\,GB.
 \subsection{Comparison with Published Results}
 Fig.~\ref{fig:pitch} and Table~\ref{tab:published} place the distilled student among published
 SECOND results obtained on the official split. Published values are taken from the papers.
-ChangeMamba and Mamba-FCS report fvcore counts labelled ``GFLOPs'', which count
+ChangeMamba and Mamba-FCS report fvcore counts labeled ``GFLOPs'', which count
 multiply--accumulates, so we plot them as GMACs; conventions are not uniform across papers
 (PerASCD reports 2853 ``GFLOPs'' for the model we measure at \TeacherGmacs\ GMACs), so cross-paper
 costs are indicative only. The distilled student reaches the accuracy level of the foundation-model
 teacher at the lowest compute in the table. Published accuracies are single numbers whose
 selection rules are not always stated.
-
-
 
 \input{tables_tex/table3_published}
 
@@ -630,7 +629,7 @@ it on fold 0, where the teacher's validation SeK (21.85) is below that of the un
 students (22.50). On the test tiles, the teachers lead the undistilled students by \FOneTMinusB,
 \FTwoTMinusB\ and \FThreeTMinusB\ SeK on folds 1--3, whereas the difference is \FZeroTMinusB\ on
 fold 0; the mean lead, \LTeacherMinusBMean\ points, is far below the 2.2-point lead on SECOND. Because the rule fixed before training the teachers
-caches only teachers that pass the gate, folds 1--3 form the primary analysis. We also ran fold 0 with the gate explicitly lifted and
+only caches models that pass the gate, folds 1--3 form the primary analysis. We also ran fold 0 with the gate explicitly lifted and
 marked as exploratory, and report it as a secondary analysis.
 
 \emph{Distillation.} Distillation improves the student on every fold and every seed. On the
@@ -694,7 +693,7 @@ born-again effect~\cite{furlanello2018born}. The PerASCD targets add \RevKdSelfS
 accounts for about \RevSelfShare\,\% of the gain on the same seeds. On the location-disjoint folds,
 self-distillation gives no measurable gain (\RevSelfLan\ [\RevSelfLanLo, \RevSelfLanHi]; \RevSelfLanPos\
 fold--seed pairs positive), and the PerASCD targets exceed it by \RevKdSelfLanAbs\ [\RevKdSelfLanLo,
-\RevKdSelfLanHi] (\RevKdSelfLanPos). Pooling degrades the student's cached targets more on
+\RevKdSelfLanHi] (\RevKdSelfLanPos\ pairs positive). Pooling degrades the student's cached targets more on
 Landsat-SCD than on SECOND (Section~\ref{sec:control-arms}), which may contribute to this null
 result; the next control does not share that limitation.
 
@@ -702,7 +701,7 @@ result; the next control does not share that limitation.
 teacher's and across classes to the teacher's mean confidence, do not improve the student
 (\RevCtlLan\ [\RevCtlLanLo, \RevCtlLanHi], \RevCtlLanPos\ pairs positive; last epoch
 \RevCtlLanFinal). With the same losses, weights and cache, the PerASCD targets exceed them by
-\RevKdCtlLanAbs\ [\RevKdCtlLanLo, \RevKdCtlLanHi] SeK, on \RevKdCtlLanPos\ fold--seed pairs. This
+\RevKdCtlLanAbs\ [\RevKdCtlLanLo, \RevKdCtlLanHi] SeK, across \RevKdCtlLanPos\ fold--seed pairs. This
 extends the screening controls, which concerned the change term only at
 $\lambda_{\mathrm{chg}}=2$ on validation data seen by the teacher, to both terms at the retained
 configuration, on data that played no role in its selection.
@@ -744,11 +743,11 @@ location-disjoint folds, neither the student's own outputs nor labels softened t
 confidence help, whereas the foundation-model targets add more than two SeK over both, which indicates that the
 benefit is tied to the teacher's predictions rather than to the form of the loss, the softness of
 the targets or the caching. On SECOND, about a third of the gain is obtained without a stronger
-model, as in born-again networks and the regularisation account of
+model, as in born-again networks and the regularization account of
 distillation~\cite{furlanello2018born,yuan2020revisiting,muller2019label}; the rest requires the
 foundation model. A teacher of the student's own accuracy (self-distillation: \RevSelfTeacherSec\
-against \SecBaseSek\ SeK on SECOND) yields much less than PerASCD, whereas on the exploratory
-fold~0 a PerASCD teacher no better than the student on the test tiles yields a gain of the same size
+against \SecBaseSek\ SeK on SECOND) yields a much smaller gain than PerASCD, whereas on the exploratory
+fold~0 a PerASCD teacher no better than the student on the test tiles still yields a gain of the same size
 (+\FZeroGain). This
 suggests that what matters is less the teacher's score than information in its predictions that the
 student does not obtain from the labels. One candidate is the semantic term on the 80\,\% of SECOND pixels
@@ -757,18 +756,18 @@ own training set). Which parts of the predictions carry the benefit remains to b
 
 \subsection{Output Distillation and Our Feature Term}
 Feature distillation is often reported to help dense prediction~\cite{liu2019structured,
-shu2021channel}, and BFD~\cite{wang2025burden} distils foundation-model features into binary
+shu2021channel}, and BFD~\cite{wang2025burden} distills foundation-model features into binary
 change detectors. In our setting, once outputs are distilled, our feature term (cosine alignment of projected
 student features with the ViT-G encoder features) adds nothing at the tested weights and scales,
 and a larger weight hurts. We did not test feature distillation alone, other feature losses, or
-the generic foundation-model features that BFD distils. Output distillation also has a practical advantage: it can be
+the generic foundation-model features that BFD distills. Output distillation also has a practical advantage: it can be
 computed offline, so the student's training cost is unchanged, whereas feature distillation
 needs the teacher online (2.3--2.4$\times$ the training time and four times the memory here).
 
 \subsection{What the Landsat-SCD Analysis Implies}
 Landsat-SCD numbers computed on random pair splits, ours included, answer a recognition question
 over a single, already-seen area. They remain meaningful for that question, but they should not be
-read as generalisation to new areas: on the released split, a lookup table exceeds the published
+read as generalization to new areas: on the released split, a lookup table exceeds the published
 models we compared. Under the location-disjoint protocol, scores drop to 18--31 SeK depending on the
 fold, the fold-to-fold variation is large, and conclusions require paired designs. We release
 the folds and the verification script so that future work can report both numbers.
@@ -811,7 +810,7 @@ and extend location-disjoint evaluation to other change detection benchmarks.
 \label{sec:availability}
 Code, training scripts, the SECOND internal validation split, the Landsat-SCD location-disjoint
 folds, the overlap-verification script and the per-run logs are available at
-\url{https://github.com/mathismagron/distilscd}. Student weights will be released once the licence
+\url{https://github.com/mathismagron/distilscd}. Student weights will be released once the license
 of the teacher weights has been clarified with their authors. The teacher checkpoints are those released by
 the PerASCD authors; we do not redistribute them or the teachers we retrained from them.
 
@@ -823,7 +822,7 @@ data and checkpoints. Computations were enabled by the Digital Research Alliance
 % be disclosed here, naming the AI system, the sections concerned and the level of use.
 % TODO (author): name the tool and version, adjust the description to what was actually done,
 % and keep the last sentence true (read the cited works first: paper/notes/reading_list.md).
-\textbf{[TODO: AI-use disclosure, to be finalised by the authors.]} An AI assistant
+\textbf{[TODO: AI-use disclosure, to be finalized by the authors.]} An AI assistant
 ([TODO: name and version]) was used by the first author to write and test the training, caching
 and analysis code, to search and verify the literature, to generate the figures from the run logs,
 and to draft and edit the text of all sections and of the supplementary material. The authors

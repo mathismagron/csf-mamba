@@ -74,7 +74,7 @@ p = pd.read_csv(T / "teacher_precision_normalisation.csv")
 rows = [[x.teacher, x.setting, x.normalisation, f(x.sek, 3), f(x.fscd, 3), f(x.miou, 3), f(x.latency_b8_ms, 1)]
         for x in p.itertuples()]
 table("supp_teacher_repro", "Re-evaluation of the published SECOND teachers on the full test set (1\\,694 pairs).",
-      "tab:s-teacher-repro", ["Teacher", "Setting", "Normalisation", "SeK", "Fscd", "mIoU", "ms (b8)"], rows,
+      "tab:s-teacher-repro", ["Teacher", "Setting", "Normalization", "SeK", "Fscd", "mIoU", "ms (b8)"], rows,
       "lllrrrr", star=True,
       note="Published: ViT-G 26.11 (training log 26.1087); VMamba-B 25.31 (stored in the checkpoint: 0.25314). "
            "Latency at batch 8 on one A100 (the VMamba-B job ran on a different node).")

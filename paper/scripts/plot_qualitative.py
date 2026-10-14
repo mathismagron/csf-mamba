@@ -106,7 +106,7 @@ def main():
         handles = [Patch(fc=c, ec="#888888", lw=0.3, label=n) for n, c in zip(names, colours)]
         handles += [Patch(fc="white", ec="#888888", lw=0.3, label="unchanged")]
         if dname == "second":
-            handles += [Patch(fc="black", ec="#888888", lw=0.3, label="unlabelled")]
+            handles += [Patch(fc="black", ec="#888888", lw=0.3, label="unlabeled")]
         fig.legend(handles=handles, loc="center left", bbox_to_anchor=(0.35 * tile / COL2, (y + legend_h / 2) / H),
                    ncol=len(handles), fontsize=7, handlelength=1.0, columnspacing=0.9, handletextpad=0.3)
         y -= band_gap

@@ -459,7 +459,7 @@ def table8():
              "undistilled student of seed 1 (best test epoch on SECOND, best validation epoch on each fold); its students "
              "use other seeds. Ground truth only: change target = ground truth average-pooled to the cache resolution and "
              "upsampled; semantic target = label smoothing with $\\varepsilon$ matched to the teacher's mean confidence in "
-             f"the true class ({n(float(misc['eps_fold1']))}--{n(float(misc['eps_fold3']))} across folds), uniform on unlabelled "
+             f"the true class ({n(float(misc['eps_fold1']))}--{n(float(misc['eps_fold3']))} across folds), uniform on unlabeled "
              "pixels. $\\Delta$: arm $-$ no KD (constant LR), paired by seed (SECOND) or by fold and seed (Landsat-SCD); "
              "on SECOND, DistilSCD $-$ no KD is paired over the five common seeds (unpaired over all seeds: Table~\\ref{tab:second}).")
     body = float_env("Control experiments: source of the distillation targets and learning-rate schedule (SeK).",
