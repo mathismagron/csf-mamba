@@ -1,0 +1,8 @@
+model,params_M,gmacs,sek,fscd,miou,source,verification
+PerASCD (ViT-G/16 PerA + ViT-Adapter + CG-Decoder),548.17,1509.74,26.11,66.41,74.33,arXiv 2602.13780v3 Table I (SeK/Fscd/mIoU); params and GMACs measured by us (aten counter),paper values checked; reproduced by us to 26.1079 (job 4026049). Paper reports 2853.05 G 'FLOPs' (counter unstated) - not used
+VMamba-B + CG-Decoder (PerASCD authors),113.01,352.9,25.31,65.61,74.01,released checkpoint (file name and stored metrics); params and aten GMACs measured by us,reproduced by us to 25.314 with ImageNet normalisation (job 4265829)
+Mamba-FCS,189.54,263.15,25.5,65.78,74.07,"Mamba-FCS arXiv 2508.08232v2 (JSTARS, doi 10.1109/JSTARS.2026.3663066): Table V (accuracy), Table VI (params, 'GFLOPs')",checked against the paper (published_numbers_check.csv)
+MambaSCD-Base (ChangeMamba),89.99,211.55,22.92,55.32,73.68,"ChangeMamba arXiv 2404.03425v7 (= TGRS 2024): Table VII (accuracy; Fscd column labelled F1), Table VIII (params, 'GFLOPs')",checked against the paper (published_numbers_check.csv)
+MambaSCD-Tiny (ChangeMamba),21.51,73.42,22.08,54.51,73.33,ChangeMamba arXiv 2404.03425v7: Tables VII and VIII,checked against the paper (published_numbers_check.csv)
+"MambaSCD-Tiny, released checkpoint, our metric code",37.13,115.44,23.34,,,measured by us (README section 2),measured by us
+SCanNet (retrained on the official split by PerASCD),27.9,264.95,23.18,63.53,73.03,PerASCD arXiv 2602.13780v3 Table I (accuracy); params/'GFLOPs' from ChangeMamba Table VIII,checked; SCanNet's own 23.94 uses a 593-pair split of the training set and is NOT comparable

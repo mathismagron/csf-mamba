@@ -1,0 +1,14 @@
+check,value
+image slots (2 images x 2385 pairs),4770
+distinct images by pixel hash,333
+tile indices k (locations),12
+val pairs with both images present in train,477/477
+test pairs with both images present in train,477/477
+"(k, year) groups with a single distinct image",333/333
+annotated pixels compared across duplicates,198829642
+class agreement on those pixels (%),100.0
+lookup oracle SeK on test (no learning),77.87
+lookup oracle Fscd on test,95.04
+lookup oracle mIoU on test,94.25
+test changed pixels whose two classes are known from train (%),90.8
+"SECOND exact train/test duplicates (5936 train, 3388 test images)",0

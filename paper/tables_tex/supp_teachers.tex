@@ -1,0 +1,17 @@
+\begin{table*}[!t]
+\centering
+\footnotesize
+\caption{Retrained PerASCD ViT-G teachers, one per Landsat-SCD fold (50 epochs, authors' recipe).}
+\label{tab:s-teachers}
+\begin{tabular}{rlrrrlrrrrr}
+\toprule
+Fold & Test tiles & Val & Ep. & Gate & Pass & Test & Test final & Test max & A100-h & GB \\
+\midrule
+0 & 00, 02, 20 & 21.85 & 28 & 22.50 & no & 28.61 & 29.12 & 29.99 & 6.4 & 28.5 \\
+1 & 01, 21, 30 & 25.74 & 42 & 23.36 & yes & 26.02 & 25.47 & 26.35 & 6.4 & 21.0 \\
+2 & 10, 12, 22 & 16.89 & 31 & 14.90 & yes & 22.48 & 23.00 & 23.10 & 6.7 & 23.5 \\
+3 & 11, 31, 32 & 23.25 & 11 & 20.70 & yes & 20.18 & 20.19 & 20.74 & 6.4 & 23.5 \\
+\bottomrule
+\end{tabular}
+\par\smallskip\parbox{\linewidth}{\scriptsize Val/Test: SeK at the best-validation epoch; Gate: mean best validation SeK of the three no-KD students of the fold; Test max is shown for information only (never used for selection).}
+\end{table*}

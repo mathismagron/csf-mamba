@@ -1,0 +1,4 @@
+split,n_pairs,both_images_in_train,n_locations
+test,477,477,12
+train,1431,1431,12
+val,477,477,12

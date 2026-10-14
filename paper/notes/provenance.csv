@@ -1,0 +1,241 @@
+kind,name_or_number,value,source
+macro,ComputeLandsatTeachers,25.8,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,ComputeTotal,479,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,CorrN,6,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,CorrR,0.09,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,ExtInc,0.12,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,ExtIncHi,0.19,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,ExtIncLo,0.05,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,ExtIncP,=0.008,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,FOneGain,2.48,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,FOneTMinusB,+0.45,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,FThreeGain,3.28,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,FThreeTMinusB,+1.75,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,FTwoGain,1.84,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,FTwoTMinusB,+1.00,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,FZeroGain,2.46,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,FZeroTMinusB,$-$0.14,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,IncFeatA,+0.01,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,IncFeatB,+0.12,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,IncFeatC,$-$0.45,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,IncLSixteen,$-$0.07,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,IncSemFourAll,+0.45,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,IncSemFourChg,+0.51,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,IncSemTwoAll,+0.80,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,IncSemTwoChg,+0.75,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LFoldSd,4.54,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LKdMinusTMaxMin,0.22,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LKdSlopeMax,0.10,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LPrimFscd,1.30,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LPrimGain,2.53,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LPrimGainFinal,2.48,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LPrimGainHi,4.32,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LPrimGainLo,0.74,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LPrimGainP,=0.03,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LPrimKdMinusT,1.46,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LPrimKdMinusTP,=0.05,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LPrimMiou,1.46,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LPrimPos,9/9,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LSecGain,2.51,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LSecGainHi,3.45,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LSecGainLo,1.58,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LSecGainP,=0.003,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LSecKdMinusT,1.75,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LSecKdMinusTP,=0.02,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LSecPos,12/12,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LTeacherMinusBMean,0.77,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LkDistinct,333,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LkOracleFscd,95.04,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LkOracleMiou,94.25,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LkOracleSek,77.87,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LkPixels,198.8,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LkTest,477/477,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,LkVal,477/477,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,PerascdLandsat,65.21,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,RatioGmacs,51.2,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,RatioLatBf,4.9,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,RatioLatFpThirtyTwo,12.5,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,RatioLatOneBf,4.2,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,RatioLatOneFpThirtyTwo,10.2,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,RatioParams,33.3,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,RndLastSlope,0.18,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,RndSixHundred,69.42,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,RndTwoFifty,59.85,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,ScrCtlGtDelta,+0.04,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,ScrCtlGtsDelta,$-$0.02,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,ScrLEight,25.95,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,ScrLTwoDelta,+1.83,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,ScrWit,23.61,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecBaseBestEpMax,100,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecBaseBestEpMin,47,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecBaseN,7,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecBaseSek,23.90,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecBaseSekFinal,23.65,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecBaseSekFinalTwoHundred,23.30,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecBaseSekSd,0.15,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecChgGain,1.69,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecChgGainHi,1.88,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecChgGainLo,1.51,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecChgSek,25.59,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecChgSekSd,0.13,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullBestEpMax,119,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullBestEpMin,108,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullFscd,66.29,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullGain,2.30,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullGainFinal,2.55,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullGainFinalHi,2.77,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullGainFinalLo,2.33,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullGainHi,2.47,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullGainLo,2.13,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullGainP,<10^{-4},numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullMaxFinalGap,0.02,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullMiou,74.57,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullSek,26.20,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullSekFinal,26.20,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullSekSd,0.11,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullTwoHundredGain,2.42,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullTwoHundredGainFinal,2.96,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullTwoHundredSek,26.32,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullTwoHundredSekSd,0.11,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullTwoHundredVsT,+0.22,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullTwoHundredVsTHi,+0.35,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullTwoHundredVsTLo,+0.08,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullTwoHundredVsTP,=0.01,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullVsT,+0.09,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullVsTHi,+0.23,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecFullVsTLo,$-$0.04,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecVmbSek,25.69,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecVmbSekSd,0.17,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecVmbVsT,+0.38,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecVmbVsTHi,+0.59,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecVmbVsTLo,+0.16,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SecVmbVsTP,=0.009,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SemInc,0.61,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SemIncHi,0.80,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SemIncLo,0.42,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SemIncP,=0.0009,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,SemIncPos,5/5,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,StudentGmacs,29.48,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,StudentGmacsFvcore,31.42,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,StudentMem,1.96,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,StudentParams,16.48,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherAdvVitg,2.21,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherAdvVmb,1.41,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherDiff,0.51,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherDiffHi,0.76,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherDiffLo,0.27,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherDiffP,=0.004,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherDiffPos,5/5,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherGmacs,1509.74,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherMem,25.09,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherParams,548.17,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherVitgSek,26.11,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherVitgSekExact,26.1079,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherVmbSek,25.31,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TeacherVmbSekExact,25.314,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TostHi,+0.20,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TostLo,$-$0.01,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TostMargin,0.25,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+macro,TostP,=0.02,numbers.tex <- tables/*.csv (scripts/make_numbers.py)
+literal,0.0,0.0,"documentation/distillation.md (faisabilite, 9-11 oct.)"
+literal,0.004,0.004,documentation/distillation.md (etape 0)
+literal,0.01,0.01,scripts/train.py (AdamW weight_decay=0.01)
+literal,0.05,0.05,"documentation/distillation.md (pilote pli 0, 10 oct.)"
+literal,0.1,0.1,scripts/train_kd_second.sbatch (--lambda-sc 0.1)
+literal,0.184,0.184,"documentation/distillation.md (protocole disjoint, 9 oct.)"
+literal,0.188,0.188,"documentation/distillation.md (protocole disjoint, 9 oct.)"
+literal,0.191,0.191,"documentation/distillation.md (protocole disjoint, 9 oct.)"
+literal,0.2,0.2,scripts/train_kd_second.sbatch (--photometric 0.2)
+literal,0.3,0.3,"documentation/distillation.md (recette du professeur, sec. 2)"
+literal,0.36,0.36,"documentation/distillation.md (sec. 3-4, criterion +0.36)"
+literal,0.4,0.4,"documentation/distillation.md (fuite, 11 oct.)"
+literal,0.5,0.5,"train_kd_second.sbatch (--temporal-swap 0.5); documentation/distillation.md (12 baselines, 11 oct.)"
+literal,0.9,0.9,documentation/distillation.md (sec. 2)
+literal,0.9998,0.9998,train_kd_second.sbatch (--ema-decay 0.9998)
+literal,1.5,1.5,documentation/distillation.md (sec. 2) | tables/efficiency.csv
+literal,1.8,1.8,tables/gain_vs_teacher_advantage.csv
+literal,10,10,tables/efficiency.csv protocol (job 4181178)
+literal,100,100,"documentation/distillation.md (pilote, 10 oct.)"
+literal,1024,1024,documentation/distillation.md (sec. 2)
+literal,113.01,113.01,tables/published_second.csv
+literal,12,12,tables/landsat_leakage_checks.csv
+literal,120,120,documentation/distillation.md (sec. 2bis)
+literal,128,128,"documentation/distillation.md (cache, 26 sept.)"
+literal,13,13,"documentation/distillation.md (fuite, 11 oct.)"
+literal,13.84,13.84,"logs/efficiency_4181178.json student_breakdown.encoder = 13,837,248"
+literal,14,14,"documentation/distillation.md (fuite, 11 oct.)"
+literal,1431,1431,tables_tex/table1_datasets.tex / splits
+literal,150,150,documentation/distillation.md (prolongation 200 ep)
+literal,1500,1500,scripts/train.py default --warmup-iters 1500
+literal,15400,15400,"documentation/distillation.md (protocole disjoint, 9 oct.)"
+literal,16,16,documentation/distillation.md (vague 3)
+literal,1694,1694,tables_tex/table1_datasets.tex
+literal,18,18,tables/landsat_loc_kd_folds.csv
+literal,192,192,distilscd/backbone/encoder.py
+literal,2.2,2.2,"documentation/distillation.md (cache, 26 sept.); tables/gain_vs_teacher_advantage.csv"
+literal,2.21,2.21,tables/gain_vs_teacher_advantage.csv
+literal,2.3,2.3,"documentation/distillation.md (etape 4, 29 sept.)"
+literal,2.4,2.4,tables/training_cost.csv
+literal,2.5,2.5,"documentation/distillation.md (cache, 26 sept.)"
+literal,2.7,2.7,"documentation/distillation.md (cache, 26 sept.)"
+literal,20,20,"documentation/distillation.md (sec. 4, zones non changees)"
+literal,200,200,documentation/distillation.md (prolongation 200 ep)
+literal,21.85,21.85,tables/landsat_loc_teachers.csv (T_val)
+literal,22.50,22.50,tables/landsat_loc_teachers.csv (gate)
+literal,23.73,23.73,documentation/distillation.md (job 4223414 / 4263826)
+literal,2385,2385,tables/landsat_leakage_summary.csv (1431+477+477)
+literal,24,24,tables/landsat_loc_kd_runs.csv
+literal,25,25,tables/efficiency.csv (25.09 GB)
+literal,25.85,25.85,documentation/distillation.md (sec. 2)
+literal,250,250,tables/landsat_random_split.csv
+literal,256,256,documentation/distillation.md (job 4257053)
+literal,26,26,"documentation/distillation.md (cache job 4027028, 26 min)"
+literal,26.11,26.11,tables/published_second.csv
+literal,26.13,26.13,documentation/distillation.md (sec. 2)
+literal,2671,2671,splits/SECOND/train.txt
+literal,28,28,Yuan et al. 2022 p.7; documentation/distillation.md
+literal,2853,2853,paper/notes/published_numbers_check.csv
+literal,2968,2968,tables_tex/table1_datasets.tex
+literal,297,297,splits/SECOND/val.txt
+literal,3,3,splits/LandsatSCD_loc
+literal,3.0,3.0,"documentation/distillation.md (cache, 26 sept.)"
+literal,3.3,3.3,tables/gain_vs_teacher_advantage.csv
+literal,30,30,Yuan et al. 2022; tables/landsat_loc_base_folds.csv (pilot 29.33)
+literal,31,31,tables/landsat_loc_kd_folds.csv
+literal,32,32,tables/screening_runs.csv
+literal,33,33,tables/efficiency.csv
+literal,33.24,33.24,"logs/cache/meta.json; documentation/distillation.md (cache, 26 sept.)"
+literal,3388,3388,"documentation/distillation.md (controle SECOND, 1er oct.)"
+literal,384,384,distilscd/backbone/encoder.py
+literal,4,4,tables/training_cost.csv
+literal,40,40,documentation/distillation.md (sec. 2)
+literal,444,444,logs/step_0_4026049.json data_checks.pixels = 444071936
+literal,44520,44520,"documentation/distillation.md (Landsat budget en pas, 30 sept.)"
+literal,4662,4662,Yang et al.; 2968+1694
+literal,47,47,"documentation/distillation.md (baseline 26 sept., epochs 47-100)"
+literal,477,477,tables/landsat_leakage_summary.csv
+literal,486,486,documentation/distillation.md (job 5160760)
+literal,5,5,tables/second_arms.csv (n)
+literal,50,50,documentation/distillation.md
+literal,512,512,datasets
+literal,51205,51205,documentation/distillation.md (28 sept.)
+literal,580,580,"documentation/distillation.md (protocole disjoint, 9 oct.)"
+literal,5936,5936,"documentation/distillation.md (controle SECOND, 1er oct.)"
+literal,60,60,"PerASCD split_train_val.py 60/20/20; documentation/distillation.md (fuite, 11 oct.)"
+literal,600,600,tables/landsat_random_split.csv
+literal,606,606,"documentation/distillation.md (protocole disjoint, 9 oct.)"
+literal,66.41,66.41,tables/published_second.csv
+literal,7,7,dataset
+literal,70,70,tables/landsat_loc_kd_folds.csv (kd_val_slope_70_99)
+literal,71.50,71.50,"logs/cache/meta.json; documentation/distillation.md (cache, 26 sept.)"
+literal,74.33,74.33,tables/published_second.csv
+literal,768,768,distilscd/backbone/encoder.py
+literal,77.77,77.77,"logs/cache/meta.json; documentation/distillation.md (cache, 26 sept.)"
+literal,8,8,method
+literal,80,80,documentation/distillation.md (zones non changees)
+literal,90,90,-
+literal,945879,945879,documentation/distillation.md (29 sept.)
+literal,95,95,-
+literal,96,96,distilscd/backbone/encoder.py
+literal,99,99,tables/landsat_loc_kd_folds.csv
+literal,99.9994,99.9994,"documentation/distillation.md (etape 0, 26 sept.)"

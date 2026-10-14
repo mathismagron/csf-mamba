@@ -1,0 +1,5 @@
+setting,n,sek_test_mean,sek_test_sd
+"student, no KD, random pair split, 250 epochs",5,59.85060000000001,0.14598047814690862
+"student, no KD, random pair split, 600 epochs",5,69.4242,0.17067132155110815
+"lookup oracle without learning (verify_landsat_leakage.py, job JSON)",1,77.87,
+"PerASCD, published (arXiv 2602.13780, random split)",1,65.21,

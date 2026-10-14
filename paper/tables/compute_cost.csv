@@ -1,0 +1,13 @@
+study,runs,a100_h,source
+"SECOND: KD screening, 3 logit waves (26 runs)",26,126.8,sacct
+SECOND: feature-KD screening (6 runs),6,66.4,sacct
+"SECOND: test confirmation, ViT-G teacher (10 runs)",10,66.0,sacct
+SECOND: end-to-end trial,1,0.5,sacct
+SECOND: VMamba-B teacher study (5 runs + teacher eval/cache),5,32.6,sacct
+SECOND: 200-epoch extension (5 resumes),5,21.7,sacct
+"Landsat random split: student baseline, 600 epochs (5 runs, incl. first 250)",5,70.47341666666665,timing.csv
+Landsat fold 0: 600-epoch budget pilot (stopped at epoch 477),1,11.220027777777775,timing.csv
+Landsat folds: student baselines (12 runs),12,28.199416666666664,timing.csv
+Landsat folds: PerASCD ViT-G teachers (4 runs),4,25.809749999999998,timing.csv
+Landsat folds: KD students (12 runs),12,28.984527777777785,timing.csv
+"TOTAL (excluding teacher caches and checks, about 10 A100-h)",87,478.68713888888885,sum

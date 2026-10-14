@@ -1,0 +1,11 @@
+teacher,setting,normalisation,sek,fscd,miou,latency_b8_ms,source
+PerASCD ViT-G,precision fp32,PerA,26.107864700372346,66.4103733803136,74.33095670184788,1613.4,step_0_4026049.json
+PerASCD ViT-G,precision fp16,PerA,26.108186053130993,66.41061616947765,74.33116620726011,489.7,step_0_4026049.json
+PerASCD ViT-G,precision bf16,PerA,26.104902496305645,66.40937359897188,74.33014774472282,562.6,step_0_4026049.json
+VMamba-B,precision fp32,imagenet,25.31367045087493,65.61404754760203,74.0143329369648,504.6,step_0_vmambab_4265829.json
+VMamba-B,precision fp16,imagenet,23.658974146914204,64.41898846453016,72.95640079565067,182.4,step_0_vmambab_4265829.json
+VMamba-B,precision bf16,imagenet,25.312018597282275,65.61496482396633,74.01303285367332,187.4,step_0_vmambab_4265829.json
+VMamba-B,"normalisation, fp32",PerA (released evaluation code),23.732,,,,"job 4263826 (documentation/distillation.md, 29 Sep)"
+VMamba-B,"normalisation, fp32",ImageNet,25.314,,,,"job 4263826 (documentation/distillation.md, 29 Sep)"
+VMamba-B,"normalisation, fp32",dataset statistics (commented in released code),24.528,,,,"job 4263826 (documentation/distillation.md, 29 Sep)"
+VMamba-B,"normalisation, fp32",per-date 0-255,24.469,,,,"job 4263826 (documentation/distillation.md, 29 Sep)"

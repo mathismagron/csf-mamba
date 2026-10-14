@@ -1,0 +1,154 @@
+\documentclass[journal,onecolumn,11pt]{IEEEtran}
+% Supplementary material for the DistilSCD manuscript (IEEE JSTARS).
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs,array}
+\usepackage{siunitx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{cite}
+\usepackage{url}
+\input{numbers}
+\renewcommand{\thetable}{S\Roman{table}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\thesection}{S\arabic{section}}
+
+\begin{document}
+\title{Supplementary Material for ``DistilSCD: Foundation-Model Accuracy at Lightweight Cost for
+Semantic Change Detection through Output Distillation, with a Location-Disjoint Landsat-SCD
+Protocol''}
+\author{Mathis~Magron, Eric~Hervet, and~Andy~Couturier}
+\maketitle
+\sloppy
+
+All numbers below are generated from the run logs by the scripts in \texttt{paper/scripts/} of
+the code repository; SeK, Fscd and mIoU are in percentage points.
+
+\section{SECOND: Per-Seed Results and the 200-Epoch Extension}
+Table~\ref{tab:s-second-runs} lists every SECOND test run. Arms with the same seed share their
+initialisation, data order and augmentation draws; their losses at the first optimiser step are
+identical, which we checked for every arm. Without distillation, the best epoch falls between
+47 and 100 and the SeK then declines under the constant learning rate; with distillation, the
+best epoch is at or near the end of the 120-epoch budget. Because the distilled runs were still
+improving, we resumed them from epoch 120 to 200 after seeing the curves, a decision we report
+as post hoc. The extension adds +\ExtInc\ [\ExtIncLo, \ExtIncHi] points to the best-epoch SeK
+(paired, $p\ExtIncP$), reaching \SecFullTwoHundredSek\,$\pm$\,\SecFullTwoHundredSekSd, i.e.
+\SecFullTwoHundredVsT\ [\SecFullTwoHundredVsTLo, \SecFullTwoHundredVsTHi] above the teacher
+($p\SecFullTwoHundredVsTP$); the curves are flat after epoch 150. Over the same 200 epochs, the
+undistilled student's best epoch is unchanged and its final SeK falls to
+\SecBaseSekFinalTwoHundred; the distillation gain at 200 epochs is +\SecFullTwoHundredGain\ on
+the best epoch and +\SecFullTwoHundredGainFinal\ on the final epoch.
+
+\input{tables_tex/supp_second_runs}
+
+\section{Screening Runs}
+Table~\ref{tab:s-screening-runs} lists the 32 screening runs (16 arms, two seeds) on the
+internal validation split. The split (2\,671 training and 297 validation pairs from the official
+training set) is fixed and hashed and is released with the code. The decision rule (``best mean
+validation SeK; an increment counts if it exceeds 0.36 points'') was written in the versioned lab journal before each of the three waves (waves 1--3 were trained at commits \texttt{2f8ece0}, \texttt{51205c5} and \texttt{8de169a}, the feature wave at \texttt{945879a}; see documentation/distillation.md). It is a record specified in advance, not a public registration. The change-weight grid was extended twice, from $\{0.5,1,2\}$ to $\{4,8\}$ and then to 16, because the best value lay at its edge. Two caveats apply to the screening only. First, the SECOND teacher was trained
+by its authors on all 2\,968 training pairs, including our 297 validation pairs, which can favour
+distillation over the ground-truth controls on validation; it cannot explain the gap of about
+1.8 points between distillation and the controls at the same weight, but the controls were not run on the test set, so the test confirms the distillation gain, not the control comparison. Second, two seeds detect only large increments; the screening
+ranks configurations, and the test confirmation with five seeds supports the conclusions.
+
+\input{tables_tex/supp_screening_runs}
+
+\section{Teachers}
+\subsection{Reproduction of the Published SECOND Checkpoints}
+Table~\ref{tab:s-teacher-repro} reports the two published teachers re-evaluated with our code.
+For the ViT-G teacher, the authors' evaluation code and ours agree to $10^{-8}$ on the same
+predictions; the deformable-attention CUDA operator and its PyTorch reference agree on
+99.9994\,\% of the arg-max decisions; our SECOND copy and the authors' pre-processed copy are
+equivalent for evaluation (no pixel where the change map and the semantic labels disagree, among
+444\,M pixels, and identical class order). Half precision changes the ViT-G score by less than
+0.01 point, so the cache was computed in float16. The VMamba-B checkpoint is sensitive to the
+input normalisation: with the PerA statistics used by the released evaluation code it scores
+23.73, and with ImageNet statistics it reproduces exactly the score stored in the checkpoint;
+its float16 inference is also degraded, so its cache was computed in float32 and stored in
+float16. We verified that the selective-scan kernels were not the cause (compiled kernel,
+PyTorch reference scan, and TF32 disabled give the same SeK on a 256-pair subset).
+
+\input{tables_tex/supp_teacher_repro}
+
+\subsection{Teacher Equivariance and the D4 Cache}
+Between $T(g\cdot x)$ and $g\cdot T(x)$, the ViT-G teacher's change decision differs on
+2.2--2.5\,\% of the pixels of the SECOND training set and its class decision on 2.7--3.0\,\% of
+the changed pixels. With about 20\,\% of pixels changed, a single-view cache would have given
+targets inconsistent with the student's augmentation on roughly a tenth of the changed area.
+On its own training set, read back from the half-precision cache, the teacher scores 33.24 SeK
+(Fscd 71.50, mIoU 77.77): the soft targets are far from a copy of the labels.
+
+\subsection{Landsat-SCD Fold Teachers}
+Table~\ref{tab:s-teachers} summarises the four retrained ViT-G teachers. They follow the authors'
+recipe (SGD, learning rate 0.1, momentum 0.9, polynomial decay, 10\,\% warm-up, 50 epochs, batch
+4 with 2 accumulation steps, float16 autocast, gradient clipping 1.5, drop-path 0.3, D4 and
+photometric augmentation), with two declared differences: the checkpoint is selected on the fold's
+validation SeK instead of the test Fscd, and activation checkpointing of the 40 ViT blocks is used
+to fit a 40\,GB A100. On CPU with a ViT-B and drop-path 0.3, checkpointing gives gradients
+identical to the reference (maximum difference 0.0). The 486 PerA pre-trained tensors are loaded
+and checked before training.
+
+\input{tables_tex/supp_teachers}
+
+\section{Landsat-SCD Protocol}
+\subsection{Overlap Verification}
+\url{scripts/verify_landsat_leakage.py} hashes the pixels of every image slot of the
+released LandsatSCD512 archive (two images per pair), independently of file names. It reports
+the number of distinct images, the pairs of each split whose two images exist identically in the
+training set, the consistency of the class labels across duplicates, the hypothesis that the tile
+index of the name identifies a location (every (index, year) group holds a single distinct image,
+and no image is shared by two indices in the same year), and the SeK of a lookup oracle that
+labels each test pixel with the classes annotated for the same image in the training set.
+Table~II of the paper reports the results. The same hash check finds no exact duplicate between
+the SECOND training (5\,936 images) and test (3\,388 images) sets; partial spatial overlap without
+exact duplicates is not tested.
+
+\subsection{Fold Construction and Budget}
+The folds (\texttt{splits/LandsatSCD\_loc/fold\{0..3\}}) result from an exhaustive search over
+the 15\,400 partitions of the 12 tiles into four groups of three, scored on the balance of the nine
+transition types and of the change ratio; in each fold, one non-test tile serves as validation.
+Table~\ref{tab:s-pilot} reports the budget pilot on fold 0: the rule fixed before the run, read on
+validation only, selects the window of epochs 50--99, hence the 100-epoch budget used for every
+arm and fold.
+
+\input{tables_tex/supp_pilot}
+
+\subsection{All Runs}
+Table~\ref{tab:s-landsat-runs} lists the 24 Landsat-SCD runs. Fold-0 distilled runs read the cache
+\url{perascd_landsat_f0_train_exploratory}, written only because the gate was lifted
+explicitly; the lift is recorded in the cache directory and in each run's configuration.
+
+\input{tables_tex/supp_landsat_runs}
+
+\section{Student Design Before This Study}
+The student was designed earlier by the first author as an efficient SCD model and its recipe was
+frozen before the distillation study. Table~\ref{tab:s-student-design} summarises the design
+results that fixed the recipe, for transparency. Three blocks inherited from that design (the
+checkerboard state-space fusion, the frequency branch and the change-guided attention) have no
+detectable effect; the fusion block was removed, the other two remain in the network that is
+distilled here. These design experiments selected epochs on the SECOND test set, as is customary
+on this dataset; their effects were required to hold on both the best and the final epoch.
+
+\input{tables_tex/supp_student_design}
+
+\section{Compute}
+Table~\ref{tab:s-compute} lists the GPU time used by this study, about \ComputeTotal\ A100-hours
+in total, excluding teacher caches and checks (about 10 A100-hours).
+
+\input{tables_tex/supp_compute}
+
+\section{Reproducibility}
+The repository contains the training and evaluation code (\texttt{distilscd/}), the scripts for
+teacher evaluation and caching (\texttt{scripts/teacher/}), the SLURM launchers used on the
+Narval cluster (\url{scripts/train_kd_second.sbatch}, \url{scripts/train_kd_landsat.sbatch},
+\url{scripts/teacher/teacher_landsat.sbatch}), the splits (\texttt{splits/}), the per-run logs
+used for every table, and the scripts that regenerate the tables, numbers and figures of the paper
+from those logs (\url{paper/scripts/build_tables.py}, \url{make_numbers.py},
+\url{make_tables_tex.py}, \url{make_figures.py}). Each run directory stores the full
+configuration and the commit it was trained with; a launcher refuses to reuse a run directory for
+a different configuration. GPU training is not bit-reproducible, so replays differ by up to
+0.5 SeK on Landsat-SCD; the path without distillation was verified to be bit-identical on CPU
+before and after the distillation code was added.
+
+\end{document}

@@ -1,0 +1,47 @@
+\begin{table}[!t]
+\centering
+\footnotesize
+\caption{SECOND test results per seed.}
+\label{tab:s-second-runs}
+\begin{tabular}{lrrrrrrr}
+\toprule
+Arm & Epochs & Seed & SeK max & Best ep. & SeK final & Fscd & mIoU \\
+\midrule
+change KD (ViT-G) & 120 & 1 & 25.61 & 118 & 25.61 & 65.64 & 74.37 \\
+change KD (ViT-G) & 120 & 2 & 25.50 & 115 & 25.47 & 65.53 & 74.33 \\
+change KD (ViT-G) & 120 & 3 & 25.41 & 119 & 25.41 & 65.44 & 74.31 \\
+change KD (ViT-G) & 120 & 4 & 25.69 & 117 & 25.68 & 65.72 & 74.43 \\
+change KD (ViT-G) & 120 & 5 & 25.74 & 114 & 25.70 & 65.77 & 74.42 \\
+DistilSCD (ViT-G) & 120 & 1 & 26.39 & 119 & 26.39 & 66.47 & 74.64 \\
+DistilSCD (ViT-G) & 120 & 2 & 26.18 & 108 & 26.16 & 66.23 & 74.59 \\
+DistilSCD (ViT-G) & 120 & 3 & 26.11 & 119 & 26.11 & 66.23 & 74.52 \\
+DistilSCD (ViT-G) & 120 & 4 & 26.14 & 116 & 26.13 & 66.23 & 74.55 \\
+DistilSCD (ViT-G) & 120 & 5 & 26.19 & 119 & 26.19 & 66.28 & 74.54 \\
+DistilSCD (VMamba-B) & 120 & 1 & 25.69 & 118 & 25.68 & 65.74 & 74.37 \\
+DistilSCD (VMamba-B) & 120 & 2 & 25.59 & 119 & 25.59 & 65.62 & 74.34 \\
+DistilSCD (VMamba-B) & 120 & 3 & 25.46 & 105 & 25.45 & 65.56 & 74.25 \\
+DistilSCD (VMamba-B) & 120 & 4 & 25.90 & 118 & 25.89 & 65.92 & 74.47 \\
+DistilSCD (VMamba-B) & 120 & 5 & 25.82 & 119 & 25.82 & 65.78 & 74.46 \\
+no KD & 120 & 1 & 23.87 & 100 & 23.73 & 64.45 & 73.18 \\
+no KD & 120 & 2 & 23.77 & 94 & 23.61 & 64.35 & 73.14 \\
+no KD & 120 & 3 & 23.91 & 62 & 23.48 & 64.45 & 73.20 \\
+no KD & 120 & 4 & 23.94 & 66 & 23.55 & 64.39 & 73.31 \\
+no KD & 120 & 5 & 23.76 & 47 & 23.37 & 64.19 & 73.25 \\
+no KD & 120 & 6 & 24.20 & 62 & 24.04 & 64.72 & 73.36 \\
+no KD & 120 & 42 & 23.84 & 72 & 23.73 & 64.38 & 73.18 \\
+DistilSCD (ViT-G) & 200 & 1 & 26.45 & 182 & 26.39 & -- & -- \\
+DistilSCD (ViT-G) & 200 & 2 & 26.36 & 151 & 26.28 & -- & -- \\
+DistilSCD (ViT-G) & 200 & 3 & 26.19 & 143 & 26.08 & -- & -- \\
+DistilSCD (ViT-G) & 200 & 4 & 26.25 & 196 & 26.24 & -- & -- \\
+DistilSCD (ViT-G) & 200 & 5 & 26.37 & 191 & 26.35 & -- & -- \\
+no KD & 200 & 1 & 23.87 & 100 & 23.26 & 64.45 & 73.18 \\
+no KD & 200 & 2 & 23.77 & 94 & 23.23 & 64.35 & 73.14 \\
+no KD & 200 & 3 & 23.91 & 62 & 23.24 & 64.45 & 73.20 \\
+no KD & 200 & 4 & 23.94 & 66 & 23.28 & 64.39 & 73.31 \\
+no KD & 200 & 5 & 23.76 & 47 & 23.33 & 64.19 & 73.25 \\
+no KD & 200 & 6 & 24.20 & 62 & 23.52 & 64.72 & 73.37 \\
+no KD & 200 & 42 & 23.84 & 72 & 23.28 & 64.38 & 73.18 \\
+\bottomrule
+\end{tabular}
+\par\smallskip\parbox{\linewidth}{\scriptsize Fscd and mIoU at the best epoch. The 200-epoch DistilSCD rows resume the 120-epoch runs (post-hoc extension); the 200-epoch no-KD rows are the full runs whose first 120 epochs give the 120-epoch rows.}
+\end{table}

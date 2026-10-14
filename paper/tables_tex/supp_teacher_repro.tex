@@ -1,0 +1,23 @@
+\begin{table*}[!t]
+\centering
+\footnotesize
+\caption{Re-evaluation of the published SECOND teachers on the full test set (1\,694 pairs).}
+\label{tab:s-teacher-repro}
+\begin{tabular}{lllrrrr}
+\toprule
+Teacher & Setting & Normalisation & SeK & Fscd & mIoU & ms (b8) \\
+\midrule
+PerASCD ViT-G & precision fp32 & PerA & 26.108 & 66.410 & 74.331 & 1613.4 \\
+PerASCD ViT-G & precision fp16 & PerA & 26.108 & 66.411 & 74.331 & 489.7 \\
+PerASCD ViT-G & precision bf16 & PerA & 26.105 & 66.409 & 74.330 & 562.6 \\
+VMamba-B & precision fp32 & imagenet & 25.314 & 65.614 & 74.014 & 504.6 \\
+VMamba-B & precision fp16 & imagenet & 23.659 & 64.419 & 72.956 & 182.4 \\
+VMamba-B & precision bf16 & imagenet & 25.312 & 65.615 & 74.013 & 187.4 \\
+VMamba-B & normalisation, fp32 & PerA (released evaluation code) & 23.732 & -- & -- & -- \\
+VMamba-B & normalisation, fp32 & ImageNet & 25.314 & -- & -- & -- \\
+VMamba-B & normalisation, fp32 & dataset statistics (commented in released code) & 24.528 & -- & -- & -- \\
+VMamba-B & normalisation, fp32 & per-date 0-255 & 24.469 & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\par\smallskip\parbox{\linewidth}{\scriptsize Published: ViT-G 26.11 (training log 26.1087); VMamba-B 25.31 (stored in the checkpoint: 0.25314). Latency at batch 8 on one A100 (the VMamba-B job ran on a different node).}
+\end{table*}

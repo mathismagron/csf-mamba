@@ -1,0 +1,8 @@
+setting,n_runs,hours_per_run,train_s_per_epoch,peak_train_gb
+"confirm (2968 train, test val) kdchg-l8",5,6.38,149.32,4.23
+"confirm (2968 train, test val) kdlogits",5,6.43,150.52,4.23
+"screen (2671 train, 297 val) witness",2,4.84,138.7,4.23
+"screen (2671 train, 297 val) kdsem-l8-t2-all",2,4.67,133.45,4.23
+"screen (2671 train, 297 val) kdfeat-s12-l1",2,11.19,319.95,17.42
+"screen (2671 train, 297 val) kdfeat-s123-l1",2,10.71,316.3,17.43
+"screen (2671 train, 297 val) kdfeat-s12-l4",2,10.76,317.45,17.42

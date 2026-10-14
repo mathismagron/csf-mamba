@@ -1,0 +1,22 @@
+\begin{table*}[!t]
+\centering
+\footnotesize
+\caption{Student design results obtained before this study (SECOND, SeK points).}
+\label{tab:s-student-design}
+\begin{tabular}{p{0.5\linewidth}rrl}
+\toprule
+Component & Contribution & 95\,\% CI & Verdict \\
+\midrule
+C2S2 block (checkerboard + MCA-SF + S6 scan), removed & 0.16 & [-0.04, 0.36] & not detectable \\
+MCA-SF alone & 0.15 & [-0.24, 0.52] & not detectable \\
+change-guided attention (CGA), kept & -0.01 & -- & not detectable \\
+FFT frequency branch, kept & -0.46 & -- & not established \\
+wider decoder (+3.5 M, +12 GMACs) & -0.07 & -- & not detectable \\
+removing the SeK loss term of Mamba-FCS & 1.25 & -- & established \\
+temporal-swap augmentation & 0.96 & -- & established \\
+EMA of weights & 0.74 & -- & established (0.74-0.87) \\
+DySample instead of bilinear upsampling & 0.75 & -- & established \\
+\bottomrule
+\end{tabular}
+\par\smallskip\parbox{\linewidth}{\scriptsize From the design campaign of the student (about 150 runs, 4--8 seeds per configuration, SECOND test with best-epoch and final-epoch readings). These results fixed the student recipe that is then frozen in this paper; they are reported for transparency and are not part of the distillation evidence.}
+\end{table*}

@@ -1,0 +1,11 @@
+quantity,student,teacher,ratio
+Parameters (M),16.484,548.172,33.3
+"GMACs / pair, aten counter",29.48,1509.74,51.2
+"GMACs / pair, fvcore",31.42,,
+latency b8 fp32 (ms),129.4,1613.4,12.5
+latency b8 bf16 (ms),113.7,561.1,4.9
+latency b8 fp16 (ms),112.6,487.1,4.3
+latency b1 fp32 (ms),26.3,268.5,10.2
+latency b1 bf16 (ms),30.2,125.6,4.2
+peak memory b8 fp32 (GB),1.96,25.09,12.8
+peak memory b8 bf16 (GB),1.82,26.09,14.3

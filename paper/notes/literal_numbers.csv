@@ -1,0 +1,106 @@
+number,meaning,source
+0.01,AdamW weight decay,scripts/train.py (AdamW weight_decay=0.01)
+0.05,Landsat budget rule: val slope threshold (pt / 10 ep),"documentation/distillation.md (pilote pli 0, 10 oct.)"
+0.1,lambda_sc,scripts/train_kd_second.sbatch (--lambda-sc 0.1)
+0.184,Landsat test change ratio min,"documentation/distillation.md (protocole disjoint, 9 oct.)"
+0.188,Landsat overall change ratio,"documentation/distillation.md (protocole disjoint, 9 oct.)"
+0.191,Landsat test change ratio max,"documentation/distillation.md (protocole disjoint, 9 oct.)"
+0.2,photometric jitter strength,scripts/train_kd_second.sbatch (--photometric 0.2)
+0.36,screening increment criterion (pt),"documentation/distillation.md (sec. 3-4, criterion +0.36)"
+0.5,temporal-swap probability; GPU replay difference (pt),"train_kd_second.sbatch (--temporal-swap 0.5); documentation/distillation.md (12 baselines, 11 oct.)"
+0.9998,EMA decay,train_kd_second.sbatch (--ema-decay 0.9998)
+1.8,min KD gain over 6 configs (1.79),tables/gain_vs_teacher_advantage.csv
+10,efficiency warm-up runs; per-10-epoch slope unit,tables/efficiency.csv protocol (job 4181178)
+100,Landsat epoch budget; epoch range,"documentation/distillation.md (pilote, 10 oct.)"
+1024,ViT-G width,documentation/distillation.md (sec. 2)
+113.01,VMamba-B teacher params (M),tables/published_second.csv
+12,number of Landsat tiles,tables/landsat_leakage_checks.csv
+120,SECOND epoch budget,documentation/distillation.md (sec. 2bis)
+128,cache resolution,"documentation/distillation.md (cache, 26 sept.)"
+13.84,student encoder params (M),"logs/efficiency_4181178.json student_breakdown.encoder = 13,837,248"
+14,pairs per Landsat image (~),"documentation/distillation.md (fuite, 11 oct.)"
+1431,Landsat train pairs,tables_tex/table1_datasets.tex / splits
+150,epoch where the 200-ep extension plateaus,documentation/distillation.md (prolongation 200 ep)
+1500,warm-up iterations,scripts/train.py default --warmup-iters 1500
+15400,number of 4x3 partitions,"documentation/distillation.md (protocole disjoint, 9 oct.)"
+16,lambda_chg grid value,documentation/distillation.md (vague 3)
+1694,SECOND test pairs,tables_tex/table1_datasets.tex
+18,lowest location-disjoint test SeK (18.42),tables/landsat_loc_kd_folds.csv
+189.54,Mamba-FCS params (M),tables/published_second.csv
+192,VMamba stage width,distilscd/backbone/encoder.py
+2.2,teacher equivariance gap low (%) / SECOND teacher lead (2.21),"documentation/distillation.md (cache, 26 sept.); tables/gain_vs_teacher_advantage.csv"
+2.21,SECOND ViT-G teacher advantage,tables/gain_vs_teacher_advantage.csv
+2.3,feature-KD training-time factor,"documentation/distillation.md (etape 4, 29 sept.)"
+2.5,teacher equivariance gap high (%),"documentation/distillation.md (cache, 26 sept.)"
+2.7,class-decision equivariance gap low (%),"documentation/distillation.md (cache, 26 sept.)"
+200,extended epochs,documentation/distillation.md (prolongation 200 ep)
+21.85,fold-0 teacher val SeK,tables/landsat_loc_teachers.csv (T_val)
+22.50,fold-0 gate (student val SeK),tables/landsat_loc_teachers.csv (gate)
+23.73,VMamba-B with PerA normalisation,documentation/distillation.md (job 4223414 / 4263826)
+2385,Landsat pairs in LandsatSCD512,tables/landsat_leakage_summary.csv (1431+477+477)
+25,teacher peak memory > 25 GB,tables/efficiency.csv (25.09 GB)
+25.50,Mamba-FCS SeK,tables/published_second.csv
+250,random-split epochs,tables/landsat_random_split.csv
+26,cache generation GPU-minutes,"documentation/distillation.md (cache job 4027028, 26 min)"
+26.11,PerASCD published SeK,tables/published_second.csv
+2671,internal train split,splits/SECOND/train.txt
+28,Landsat dates,Yuan et al. 2022 p.7; documentation/distillation.md
+2968,SECOND train pairs,tables_tex/table1_datasets.tex
+297,internal val split,splits/SECOND/val.txt
+3,folds / tiles per fold,splits/LandsatSCD_loc
+3.0,class-decision equivariance gap high (%),"documentation/distillation.md (cache, 26 sept.)"
+3.3,max KD gain over 6 configs (3.28),tables/gain_vs_teacher_advantage.csv
+30,Landsat GSD (m); plateau below 30 SeK,Yuan et al. 2022; tables/landsat_loc_base_folds.csv (pilot 29.33)
+31,highest location-disjoint test SeK (31.21),tables/landsat_loc_kd_folds.csv
+33,size ratio (33.3x),tables/efficiency.csv
+33.24,teacher SeK on its SECOND training set,"logs/cache/meta.json; documentation/distillation.md (cache, 26 sept.)"
+384,VMamba stage width,distilscd/backbone/encoder.py
+4,folds; accumulation steps; memory factor (17.4/4.2 GB),tables/training_cost.csv
+40,ViT-G blocks; GPU memory GB,documentation/distillation.md (sec. 2)
+44520,SECOND optimiser steps at 120 epochs,"documentation/distillation.md (Landsat budget en pas, 30 sept.)"
+4662,SECOND pairs,Yang et al.; 2968+1694
+47,earliest no-KD best epoch,"documentation/distillation.md (baseline 26 sept., epochs 47-100)"
+477,Landsat val/test pairs,tables/landsat_leakage_summary.csv
+5,seeds per KD arm,tables/second_arms.csv (n)
+50,teacher epochs; median runs; 50-epoch window,documentation/distillation.md
+512,tile size,datasets
+580,fold-0 test pairs,"documentation/distillation.md (protocole disjoint, 9 oct.)"
+600,random-split epochs,tables/landsat_random_split.csv
+606,fold-2/3 test pairs,"documentation/distillation.md (protocole disjoint, 9 oct.)"
+66.41,PerASCD published Fscd,tables/published_second.csv
+7,SECOND classes (C),dataset
+70,slope window start epoch,tables/landsat_loc_kd_folds.csv (kd_val_slope_70_99)
+74.33,PerASCD published mIoU,tables/published_second.csv
+768,VMamba stage width,distilscd/backbone/encoder.py
+8,D4 views; batch; lambda_chg,method
+80,share of SECOND pixels without semantic label (%),documentation/distillation.md (zones non changees)
+90,not used as result (check),-
+95,confidence level (%),-
+96,VMamba stage width,distilscd/backbone/encoder.py
+99,slope window end epoch,tables/landsat_loc_kd_folds.csv
+0.0,max gradient difference with checkpointing,"documentation/distillation.md (faisabilite, 9-11 oct.)"
+0.3,teacher drop-path,"documentation/distillation.md (recette du professeur, sec. 2)"
+0.9,teacher SGD momentum,documentation/distillation.md (sec. 2)
+1.5,teacher gradient clipping / poly power,documentation/distillation.md (sec. 2)
+20,share of changed pixels on SECOND (%),"documentation/distillation.md (sec. 4, zones non changees)"
+24,number of Landsat runs (12 + 12),tables/landsat_loc_kd_runs.csv
+256,subset for kernel diagnosis,documentation/distillation.md (job 4257053)
+32,screening runs,tables/screening_runs.csv
+3388,SECOND test images (2 x 1694),"documentation/distillation.md (controle SECOND, 1er oct.)"
+444,pixels checked in SECOND data equivalence (M),logs/step_0_4026049.json data_checks.pixels = 444071936
+486,PerA tensors loaded,documentation/distillation.md (job 5160760)
+5936,SECOND train images (2 x 2968),"documentation/distillation.md (controle SECOND, 1er oct.)"
+71.50,teacher Fscd on its training set,"logs/cache/meta.json; documentation/distillation.md (cache, 26 sept.)"
+77.77,teacher mIoU on its training set,"logs/cache/meta.json; documentation/distillation.md (cache, 26 sept.)"
+99.9994,CUDA vs reference deformable op argmax agreement (%),"documentation/distillation.md (etape 0, 26 sept.)"
+945879,commit hash 945879a (feature wave),documentation/distillation.md (29 sept.)
+51205,commit hash 51205c5 (wave 2),documentation/distillation.md (28 sept.)
+60,share of pairs in training for the random split (%),"PerASCD split_train_val.py 60/20/20; documentation/distillation.md (fuite, 11 oct.)"
+0.4,"1 - 0.6, probability argument","documentation/distillation.md (fuite, 11 oct.)"
+13,other pairs of an image (14 - 1),"documentation/distillation.md (fuite, 11 oct.)"
+0.004,metric reproduction tolerance (Fscd 66.4104 vs 66.4138),documentation/distillation.md (etape 0)
+2853,PerASCD reported GFLOPs,paper/notes/published_numbers_check.csv
+26.13,ViT-G teacher best-epoch SeK in its training log,documentation/distillation.md (sec. 2)
+25.85,ViT-G teacher last-epoch SeK in its training log,documentation/distillation.md (sec. 2)
+1.5,TMACs per pair (1509.74 GMACs),tables/efficiency.csv
+2.4,feature-KD training-time factor upper (2.29-2.40),tables/training_cost.csv

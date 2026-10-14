@@ -1,0 +1,10 @@
+component,contribution,ci_lo,ci_hi,verdict,source
+"C2S2 block (checkerboard + MCA-SF + S6 scan), removed",0.16,-0.04,0.36,not detectable,"README.md sections 4-5 (pre-study design campaign, ~150 runs, SECOND test, max and final epoch)"
+MCA-SF alone,0.15,-0.24,0.52,not detectable,"README.md sections 4-5 (pre-study design campaign, ~150 runs, SECOND test, max and final epoch)"
+"change-guided attention (CGA), kept",-0.01,,,not detectable,"README.md sections 4-5 (pre-study design campaign, ~150 runs, SECOND test, max and final epoch)"
+"FFT frequency branch, kept",-0.46,,,not established,"README.md sections 4-5 (pre-study design campaign, ~150 runs, SECOND test, max and final epoch)"
+"wider decoder (+3.5 M, +12 GMACs)",-0.07,,,not detectable,"README.md sections 4-5 (pre-study design campaign, ~150 runs, SECOND test, max and final epoch)"
+removing the SeK loss term of Mamba-FCS,1.25,,,established,"README.md sections 4-5 (pre-study design campaign, ~150 runs, SECOND test, max and final epoch)"
+temporal-swap augmentation,0.96,,,established,"README.md sections 4-5 (pre-study design campaign, ~150 runs, SECOND test, max and final epoch)"
+EMA of weights,0.74,,,established (0.74-0.87),"README.md sections 4-5 (pre-study design campaign, ~150 runs, SECOND test, max and final epoch)"
+DySample instead of bilinear upsampling,0.75,,,established,"README.md sections 4-5 (pre-study design campaign, ~150 runs, SECOND test, max and final epoch)"
