@@ -87,7 +87,7 @@ def semantic_change_ce(
     return nn.functional.cross_entropy(logits, masked, ignore_index=IGNORE_INDEX)
 
 
-class CSFMambaLoss(nn.Module):
+class DistilSCDLoss(nn.Module):
     """Assemble les cinq termes. `scd_target` est la carte SCD (0 = no-change)."""
 
     def __init__(
@@ -200,3 +200,7 @@ class CSFMambaLoss(nn.Module):
 
         terms["total"] = sum(terms.values())
         return terms
+
+
+# Ancien nom (renommage CSF-Mamba -> DistilSCD, cf. documentation/rename.md).
+CSFMambaLoss = DistilSCDLoss

@@ -18,7 +18,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from csf_mamba.losses.sek_mambafcs import SeKLossMambaFCS
+from distilscd.losses.sek_mambafcs import SeKLossMambaFCS
 
 _ORIG = (
     Path(__file__).resolve().parents[1]

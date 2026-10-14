@@ -26,8 +26,8 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-from csf_mamba.datasets import DATASETS
-from csf_mamba.model import CSFMamba, count_parameters
+from distilscd.datasets import DATASETS
+from distilscd.model import DistilSCDStudent, count_parameters
 from scripts.train import validate
 
 SEEDS = (1, 2, 3, 4, 5, 6, 42)
@@ -53,7 +53,7 @@ def best_row(metrics_csv: Path) -> dict:
 
 
 def build_model(device):
-    return CSFMamba(
+    return DistilSCDStudent(
         num_semantic_classes=DATASETS["second"][1], encoder="vmamba_mini",
         core="chess", backend="mamba", decoder_refine="dw", fft_stages=(0, 1),
         fusion="concat", cga=True, mcasf=True, upsample="dysample",

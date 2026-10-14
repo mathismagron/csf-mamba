@@ -42,9 +42,9 @@ _spec = importlib.util.spec_from_file_location("eval_perascd", HERE / "eval_pera
 ev = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ev)
 
-# Convention D4 unique, partagée avec l'élève (csf_mamba.distill.d4). Le cache du
+# Convention D4 unique, partagée avec l'élève (distilscd.distill.d4). Le cache du
 # 26 septembre a été écrit avec une copie locale identique de ces fonctions.
-from csf_mamba.distill.d4 import D4, apply_d4, canonical_d4  # noqa: E402
+from distilscd.distill.d4 import D4, apply_d4, canonical_d4  # noqa: E402
 
 CHANNELS = 15                                     # SECOND : 7 sem T1 + 7 sem T2 + 1 changement (2C + 1)
 NATIVE = 128

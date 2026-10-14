@@ -1,6 +1,6 @@
 """Vérifie l'association indice -> classe sémantique de SECOND.
 
-Pourquoi : nos `CLASS_NAMES` (`csf_mamba/datasets/second.py`) suivent l'ordre de
+Pourquoi : nos `CLASS_NAMES` (`distilscd/datasets/second.py`) suivent l'ordre de
 l'article SECOND, mais le code de ChangeMamba utilise un ordre différent pour les
 indices 1, 2 et 4 (eau / sol / arbre permutés). Les deux ne peuvent pas être
 justes. Aucune métrique n'en dépend — tout est calculé sur des indices, de façon
@@ -35,15 +35,15 @@ def log(msg: str) -> None:
 
 
 def read_class_names() -> tuple[str, ...]:
-    """Lit CLASS_NAMES dans le source, SANS importer csf_mamba.
+    """Lit CLASS_NAMES dans le source, SANS importer distilscd.
 
-    `csf_mamba.datasets.second` importe torch, dont le chargement depuis le venv
+    `distilscd.datasets.second` importe torch, dont le chargement depuis le venv
     sur Lustre est ce qui a fait échouer le premier job : 20 minutes sans même
     atteindre le premier print. Ce script n'a besoin que d'un tuple de chaînes —
     on l'extrait par analyse syntaxique. Pas de duplication, pas de torch, et le
     script ne dépend plus que de numpy et Pillow.
     """
-    src = Path(__file__).resolve().parents[1] / "csf_mamba" / "datasets" / "second.py"
+    src = Path(__file__).resolve().parents[1] / "distilscd" / "datasets" / "second.py"
     for node in ast.parse(src.read_text()).body:
         if (isinstance(node, ast.Assign)
                 and any(getattr(t, "id", None) == "CLASS_NAMES" for t in node.targets)):
@@ -130,7 +130,7 @@ def main():
               f"{ours:<22} | {'✓' if match else '✗'}")
 
     print("\n" + ("✓ nos CLASS_NAMES sont corrects" if verdict else
-                  "✗ nos CLASS_NAMES sont FAUX — corriger csf_mamba/datasets/second.py"))
+                  "✗ nos CLASS_NAMES sont FAUX — corriger distilscd/datasets/second.py"))
     print("(la pureté doit être ~100 % : une valeur basse signalerait des cartes "
           "colorées désynchronisées des cartes d'indices)")
 

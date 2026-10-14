@@ -60,7 +60,7 @@ find "$HOME" "$SCRATCH" "$PROJ/$USER" -maxdepth 3 -name .git 2>/dev/null | while
     git -C "$r" status --porcelain 2>/dev/null | head -15
     git -C "$r" stash list 2>/dev/null | head -5
     git -C "$r" worktree list 2>/dev/null
-    grep -rn "out_indices" "$r"/csf_mamba 2>/dev/null | head -3
+    grep -rn "out_indices" "$r"/distilscd "$r"/csf_mamba 2>/dev/null | head -3
 done
 
 T "5. Tous les runs : époques écrites, nombre de .pt, taille"

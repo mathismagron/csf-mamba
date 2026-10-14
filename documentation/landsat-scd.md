@@ -1,5 +1,7 @@
 # Landsat-SCD — troisième jeu de données
 
+> **Note (13 oct. 2026)** : projet renommé **DistilSCD** (paquet `csf_mamba` → `distilscd`, cf. `documentation/rename.md`) ; ce document daté est conservé tel quel.
+
 **Pourquoi.** L'énoncé d'efficience du projet ne repose que sur SECOND, et le
 résultat principal — le retrait de la loss SeK — **ne transfère pas** à Hi-UCD.
 C'est la réserve n° 1 du README et la seule qui bloque une publication. Un

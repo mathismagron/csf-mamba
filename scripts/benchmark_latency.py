@@ -1,4 +1,4 @@
-"""Latence et mémoire crête à l'inférence — CSF-Mamba face à MambaSCD.
+"""Latence et mémoire crête à l'inférence — DistilSCD face à MambaSCD.
 
 Pourquoi ce script existe. Toute la thèse d'efficience du projet repose sur des
 **paramètres** et des **GMACs**. Aucun des deux ne dit combien de temps le modèle
@@ -39,8 +39,8 @@ from pathlib import Path
 
 import torch
 
-from csf_mamba.datasets import DATASETS
-from csf_mamba.model import CSFMamba, count_parameters
+from distilscd.datasets import DATASETS
+from distilscd.model import DistilSCDStudent, count_parameters
 
 
 def parse_args():
@@ -168,7 +168,7 @@ def main():
     _, num_classes = DATASETS[args.dataset]
     fft_stages = tuple(int(x) for x in args.fft_stages.split(",") if x.strip())
 
-    model = CSFMamba(
+    model = DistilSCDStudent(
         num_semantic_classes=num_classes, encoder=args.encoder, core=args.core,
         backend="auto", decoder_refine=args.decoder_refine, fft_stages=fft_stages,
         fusion=args.fusion, cga=args.cga, mcasf=args.mcasf, upsample=args.upsample,
@@ -182,7 +182,7 @@ def main():
         raise SystemExit(f"⛔ --fusion {args.fusion} demandé mais le modèle "
                          f"contient {obtenu}")
 
-    nom = f"CSF-Mamba {args.encoder} / fusion={args.fusion} / dec={args.decoder_refine}"
+    nom = f"DistilSCD {args.encoder} / fusion={args.fusion} / dec={args.decoder_refine}"
     rapport(nom, count_parameters(model)["total"], batches, args.size,
             args.iters, args.warmup, model)
 

@@ -32,7 +32,7 @@ BASE = re.compile(r"^(.*_\d+)(.*)$")
 import numpy as np
 from PIL import Image
 
-from csf_mamba.datasets.landsat_scd import apparier_dossiers
+from distilscd.datasets.landsat_scd import apparier_dossiers
 
 # ⚠️ LA LITTÉRATURE NE CORRESPOND PAS AU DUMP, et c'est le dump qui fait foi.
 # Elle annonce 2 425 paires, « 1 908 pour l'entraînement et 477 pour le test » —

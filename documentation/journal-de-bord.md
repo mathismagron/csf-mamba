@@ -1,5 +1,7 @@
 # Journal de bord — CSF-Mamba
 
+> **Note (13 oct. 2026)** : projet renommé **DistilSCD** (paquet `csf_mamba` → `distilscd`, cf. `documentation/rename.md`) ; ce document daté est conservé tel quel.
+
 Chronologie du projet : ce qui a été fait, **pourquoi**, et ce que ça a donné.
 Destiné à servir de matière première au rapport de stage.
 

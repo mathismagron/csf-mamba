@@ -1,4 +1,4 @@
-"""Boucle d'entraînement CSF-Mamba.
+"""Boucle d'entraînement DistilSCD.
 
 Squelette minimal et honnête : il câble modèle + loss + données et fait tourner
 une époque. Ce qui reste à brancher avant les vrais runs est marqué TODO — pas
@@ -13,15 +13,15 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-from csf_mamba.datasets import DATASETS
-from csf_mamba.datasets.oversample import build_change_index, make_change_sampler
-from csf_mamba.datasets.teacher_cache import TeacherCacheDataset
-from csf_mamba.datasets.transforms import train_transform
-from csf_mamba.ema import ModelEMA
-from csf_mamba.evaluation.metrics import SCDEvaluator, SCDMetrics
-from csf_mamba.losses.composite import CSFMambaLoss
-from csf_mamba.losses.distill import DistillLoss, FeatureDistillLoss
-from csf_mamba.model import CSFMamba, count_parameters
+from distilscd.datasets import DATASETS
+from distilscd.datasets.oversample import build_change_index, make_change_sampler
+from distilscd.datasets.teacher_cache import TeacherCacheDataset
+from distilscd.datasets.transforms import train_transform
+from distilscd.ema import ModelEMA
+from distilscd.evaluation.metrics import SCDEvaluator, SCDMetrics
+from distilscd.losses.composite import DistilSCDLoss
+from distilscd.losses.distill import DistillLoss, FeatureDistillLoss
+from distilscd.model import DistilSCDStudent, count_parameters
 
 
 def parse_args():
@@ -148,6 +148,10 @@ def parse_args():
                    help="Contrôles : cible du terme de changement remplacée par la vérité "
                         "(gt) ou la vérité lissée à la résolution du professeur (gt_smooth).")
     # Étape 4 : KD de features, professeur en ligne (encodeur seul).
+    p.add_argument("--kd-sem-target", default="teacher", choices=["teacher", "gt_ls"],
+                   help="Contrôle : cible sémantique = professeur (KD) ou vérité lissée (gt_ls).")
+    p.add_argument("--kd-sem-eps", type=float, default=0.1,
+                   help="ε du lissage d'étiquettes de gt_ls (scripts/kd_control_eps.py).")
     p.add_argument("--lambda-kd-feat", type=float, default=0.0)
     p.add_argument("--kd-feat-stages", default="1,2",
                    help="Étages 0..3 (1/4, 1/8, 1/16, 1/32) distillés, séparés par des virgules.")
@@ -207,7 +211,7 @@ def main():
 
     fft_stages = tuple(int(x) for x in args.fft_stages.split(",") if x.strip())
     attn_stages = tuple(int(x) for x in args.attn_stages.split(",") if x.strip())
-    model = CSFMamba(
+    model = DistilSCDStudent(
         num_semantic_classes=num_classes,
         encoder=args.encoder, core=args.core, backend=args.backend,
         decoder_refine=args.decoder_refine, fft_stages=fft_stages,
@@ -224,7 +228,7 @@ def main():
     print("Stages FFT :", fft_stages if fft_stages else "aucun (branche retirée)")
     print("Paramètres :", count_parameters(model))
 
-    criterion = CSFMambaLoss(
+    criterion = DistilSCDLoss(
         num_semantic_classes=num_classes,
         bcd_change_weight=args.bcd_change_weight,
         lambda_dice=args.lambda_dice,
@@ -236,7 +240,8 @@ def main():
     ).to(device)
     kd_loss = DistillLoss(args.lambda_kd_change, args.kd_t_change,
                           args.lambda_kd_sem, args.kd_t_sem, args.kd_sem_mask,
-                          change_target=args.kd_change_target).to(device)
+                          change_target=args.kd_change_target,
+                          sem_target=args.kd_sem_target, sem_eps=args.kd_sem_eps).to(device)
     if kd_loss.active and not args.kd_cache:
         raise SystemExit("λ de distillation > 0 sans --kd-cache")
     if args.kd_cache and not kd_loss.active:
@@ -245,7 +250,7 @@ def main():
     if args.lambda_kd_feat > 0:
         if not (args.teacher_root and args.teacher_ckpt):
             raise SystemExit("λ_feat > 0 sans --teacher-root / --teacher-ckpt")
-        from csf_mamba.distill.online_teacher import OnlineTeacherEncoder
+        from distilscd.distill.online_teacher import OnlineTeacherEncoder
         # Construire le professeur (initialisation aléatoire avant chargement) et les
         # adaptateurs consomme les générateurs aléatoires ; sans restauration, l'ordre
         # des données et les tirages d'augmentation différeraient des autres bras de
@@ -264,7 +269,9 @@ def main():
     if kd_loss.active:
         print(f"Distillation : changement λ={args.lambda_kd_change} T={args.kd_t_change} "
               f"cible={args.kd_change_target} | "
-              f"sémantique λ={args.lambda_kd_sem} T={args.kd_t_sem} masque={args.kd_sem_mask} | "
+              f"sémantique λ={args.lambda_kd_sem} T={args.kd_t_sem} masque={args.kd_sem_mask} "
+              f"cible={args.kd_sem_target}"
+              f"{f' ε={args.kd_sem_eps}' if args.kd_sem_target == 'gt_ls' else ''} | "
               f"cache {args.kd_cache}")
     optimizer = _build_optimizer(model, args)
     if feat_loss is not None:
@@ -276,7 +283,7 @@ def main():
         print(f"EMA active : decay {args.ema_decay}, warmup {args.ema_warmup} itérations")
 
     if args.dataset == "landsat_perascd" and (args.train_ids or args.val_ids or args.test_ids):
-        from csf_mamba.datasets.landsat_perascd import assert_location_disjoint
+        from distilscd.datasets.landsat_perascd import assert_location_disjoint
         lists = {n: [l.strip() for l in Path(f).read_text().splitlines() if l.strip()]
                  for n, f in (("train", args.train_ids), ("val", args.val_ids), ("test", args.test_ids)) if f}
         locs = assert_location_disjoint(**lists)
@@ -383,7 +390,8 @@ def main():
             outputs = {k: _to_fp32(v) for k, v in outputs.items()}
             losses = criterion(outputs, _targets_from_batch(batch), apply_sek=apply_sek)
             if kd_loss.active:
-                kd_terms = kd_loss(outputs, batch["kd_teacher"], batch["change"])
+                kd_terms = kd_loss(outputs, batch["kd_teacher"], batch["change"],
+                                   sem_gt=(batch["sem_t1"], batch["sem_t2"]))
                 losses.update(kd_terms)
                 losses["total"] = losses["total"] + sum(kd_terms.values())
             if feat_loss is not None:

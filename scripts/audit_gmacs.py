@@ -37,8 +37,8 @@ from pathlib import Path
 import torch
 from fvcore.nn import flop_count, parameter_count
 
-from csf_mamba.datasets import DATASETS
-from csf_mamba.model import CSFMamba
+from distilscd.datasets import DATASETS
+from distilscd.model import DistilSCDStudent
 from scripts.count_gmacs import supported_ops
 
 _CHANGEMAMBA = Path(__file__).resolve().parents[1] / "third_party" / "ChangeMamba"
@@ -220,9 +220,9 @@ def main():
     print("AUDIT 2, 3, 4 — notre modèle")
     print("=" * 78)
     _, num_classes = DATASETS[args.dataset]
-    model = CSFMamba(num_semantic_classes=num_classes, encoder=args.encoder,
+    model = DistilSCDStudent(num_semantic_classes=num_classes, encoder=args.encoder,
                      backend="mamba", fusion=args.fusion).cuda().eval()
-    total, params, non_comptes, par_op = trace(model, args.size, f"CSF-Mamba {args.fusion}")
+    total, params, non_comptes, par_op = trace(model, args.size, f"DistilSCD {args.fusion}")
 
     print(f"\n  Paramètres : {params:.2f} M     GMACs : {total:.2f}")
     print("\n  Répartition :")

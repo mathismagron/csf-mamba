@@ -36,7 +36,7 @@ from PIL import Image
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
-from csf_mamba.evaluation.metrics import fast_hist, metrics_from_hist  # noqa: E402
+from distilscd.evaluation.metrics import fast_hist, metrics_from_hist  # noqa: E402
 
 NAME = re.compile(r"^From(\d{4})To(\d{4})_(\d+)\.png$")
 NC = 5

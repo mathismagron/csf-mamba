@@ -27,7 +27,7 @@ from PIL import Image
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
-from csf_mamba.datasets.landsat_perascd import (  # noqa: E402
+from distilscd.datasets.landsat_perascd import (  # noqa: E402
     CLASS_NAMES, NUM_SEMANTIC_CLASSES, SPLIT_SIZES,
 )
 

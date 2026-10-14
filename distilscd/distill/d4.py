@@ -20,7 +20,7 @@ def apply_d4(x: torch.Tensor, h: int, k: int) -> torch.Tensor:
 
 def canonical_d4(h: int, v: int, k: int) -> int:
     """Index de cache de « hflip^h, puis vflip^v, puis rot90^k » — l'ordre de
-    `csf_mamba.datasets.transforms` (RandomFlip puis RandomRot90). Déterminé par
+    `distilscd.datasets.transforms` (RandomFlip puis RandomRot90). Déterminé par
     une sonde asymétrique plutôt que par une table écrite à la main."""
     probe = torch.arange(9.0).view(3, 3)
     x = probe

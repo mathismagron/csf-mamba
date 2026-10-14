@@ -12,7 +12,7 @@ Les deux conventions de labellisation sont couvertes :
 
 import torch
 
-from csf_mamba.evaluation.metrics import IGNORE_INDEX, SCDEvaluator
+from distilscd.evaluation.metrics import IGNORE_INDEX, SCDEvaluator
 
 B, C, H, W = 2, 7, 64, 64
 

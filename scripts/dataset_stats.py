@@ -22,7 +22,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Subset
 
-from csf_mamba.datasets import DATASETS
+from distilscd.datasets import DATASETS
 
 
 def parse_args():

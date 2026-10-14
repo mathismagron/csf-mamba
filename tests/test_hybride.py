@@ -19,16 +19,16 @@ Trois garanties, dans l'ordre d'importance :
 
 import torch
 
-from csf_mamba.datasets.hi_ucd import NUM_SEMANTIC_CLASSES
-from csf_mamba.experimental import BiTemporalAttention
-from csf_mamba.model import CSFMamba, count_parameters
+from distilscd.datasets.hi_ucd import NUM_SEMANTIC_CLASSES
+from distilscd.experimental import BiTemporalAttention
+from distilscd.model import DistilSCDStudent, count_parameters
 
 B, H, W = 2, 32, 32
 
 
 def _model(**kw):
     torch.manual_seed(0)
-    return CSFMamba(num_semantic_classes=NUM_SEMANTIC_CLASSES, encoder="conv",
+    return DistilSCDStudent(num_semantic_classes=NUM_SEMANTIC_CLASSES, encoder="conv",
                     backend="ref", fusion="concat", **kw).eval()
 
 

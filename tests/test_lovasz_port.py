@@ -11,7 +11,7 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 
-from csf_mamba.losses.lovasz import lovasz_softmax
+from distilscd.losses.lovasz import lovasz_softmax
 
 _ORIG = (
     Path(__file__).resolve().parents[1]

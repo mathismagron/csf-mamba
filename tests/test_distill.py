@@ -23,11 +23,11 @@ import numpy as np
 import torch
 from PIL import Image
 
-from csf_mamba.datasets.second import SECONDDataset
-from csf_mamba.datasets.teacher_cache import TeacherCacheDataset
-from csf_mamba.datasets.transforms import AUG_KEY, train_transform
-from csf_mamba.distill.d4 import D4, apply_d4
-from csf_mamba.losses.distill import DistillLoss
+from distilscd.datasets.second import SECONDDataset
+from distilscd.datasets.teacher_cache import TeacherCacheDataset
+from distilscd.datasets.transforms import AUG_KEY, train_transform
+from distilscd.distill.d4 import D4, apply_d4
+from distilscd.losses.distill import DistillLoss
 
 TILE, NATIVE, N = 32, 8, 6
 
@@ -113,7 +113,7 @@ def _check(ds, draws, force_view0=False):
     for t in range(draws):
         random.seed(t)
         if force_view0:
-            import csf_mamba.datasets.teacher_cache as tc
+            import distilscd.datasets.teacher_cache as tc
             orig = tc.canonical_d4
             tc.canonical_d4 = lambda h, v, k: 0
         try:

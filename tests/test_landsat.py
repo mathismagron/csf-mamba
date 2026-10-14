@@ -22,11 +22,11 @@ import numpy as np
 import torch
 from PIL import Image
 
-from csf_mamba.datasets import DATASETS
-from csf_mamba.datasets.landsat_scd import (
+from distilscd.datasets import DATASETS
+from distilscd.datasets.landsat_scd import (
     CLASS_NAMES, CLASS_NAMES_VERIFIED, NUM_SEMANTIC_CLASSES, LandsatSCDDataset,
 )
-from csf_mamba.losses.composite import IGNORE_INDEX
+from distilscd.losses.composite import IGNORE_INDEX
 
 TAILLE = 32
 

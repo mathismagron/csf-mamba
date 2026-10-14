@@ -1,9 +1,24 @@
-# CSF-Mamba
+# DistilSCD
 
-Architecture Mamba **efficiente** pour la **détection sémantique de changements**
-(SCD) sur imagerie aérienne : à partir de deux images d'une même zone prises à
-deux dates, produire la carte des zones changées **et** la classe d'occupation du
-sol avant et après.
+**Distillation d'un modèle de fondation dans un élève compact** pour la
+**détection sémantique de changements** (SCD) sur imagerie aérienne : à partir de
+deux images d'une même zone prises à deux dates, produire la carte des zones
+changées **et** la classe d'occupation du sol avant et après.
+
+**Le résultat principal (§10).** En distillant hors ligne les seules *sorties* de
+**PerASCD** (548 M paramètres, meilleur SeK publié sur SECOND : 0,2611) dans un
+élève VMamba siamois de 16,48 M paramètres, l'élève atteint **SeK 0,2620 ± 0,0011**
+sur le test de SECOND (5 graines) : il **égale le professeur** avec **33 fois moins
+de paramètres, 51 fois moins de calcul et 12,5 fois moins de latence**, sans rien
+changer à son architecture ni à son coût d'inférence. Le même élève sert aussi
+d'étude sur Landsat-SCD sous un protocole sans fuite (plis disjoints par
+localisation, cf. `documentation/landsat-scd.md`).
+
+L'élève est le « point d'efficience » de l'architecture Mamba efficiente
+développée auparavant dans ce dépôt sous le nom **CSF-Mamba** (§1–9, conservés
+tels quels). Le projet a été renommé **DistilSCD** le 13 octobre 2026 ; le paquet
+Python s'appelle désormais `distilscd` (l'ancien import `csf_mamba` reste
+accepté), cf. `documentation/rename.md`.
 
 Stage de recherche, Université de Moncton — Mathis Magron, encadré par
 Prof. Eric Hervet et Prof. Andy Couturier. Entraînements sur Narval
@@ -12,6 +27,7 @@ Prof. Eric Hervet et Prof. Andy Couturier. Entraînements sur Narval
 - **Journal de bord** : `documentation/journal-de-bord.md` — chronologie complète,
   décisions, résultats de tous les runs. Matière première du rapport.
 - **Conception de l'architecture** : `documentation/plan_recap_CSF-Mamba2.md`
+- **Article (IEEE JSTARS, en préparation)** : `paper/` — manuscrit, matériel supplémentaire, tables canoniques et scripts de régénération (`paper/README.md`)
 - **Lancer un entraînement ou une évaluation** : `RUN.md`
 
 ---
@@ -61,8 +77,8 @@ classification sémantique à l'intérieur des zones changées. Plus haut = mieu
 | MambaSCD-Base | 89,99 M | 211,55 | **0,2292** | article **ChangeMamba** |
 | MambaSCD-Tiny | 21,51 M | 73,42 | **0,2208** | article **ChangeMamba** |
 | **MambaSCD-Tiny, leur checkpoint publié** | **37,13 M** | **115,44** | **0,2334** | **mesuré par nous, même code** |
-| **CSF-Mamba — performance** | **32,58 M** | **58,06** | **0,2485** | mesuré, n = 6 |
-| **CSF-Mamba — efficience** | **16,48 M** | **31,42** | **0,2390** | mesuré, n = 7 |
+| **DistilSCD — performance** | **32,58 M** | **58,06** | **0,2485** | mesuré, n = 6 |
+| **DistilSCD — efficience** | **16,48 M** | **31,42** | **0,2390** | mesuré, n = 7 |
 
 ⚠️ **Les deux lignes MambaSCD-Tiny ne décrivent pas le même modèle.** La première
 reprend leur table publiée. La seconde est **leur propre checkpoint publié**,
@@ -92,7 +108,7 @@ code de métriques des deux côtés** — et elle ne dépend d'aucun chiffre pub
 | | SeK | Params | GMACs |
 |---|---:|---:|---:|
 | Leur checkpoint publié, évalué par nous | 0,2334 | 37,13 M | 115,44 |
-| **CSF-Mamba — efficience** | **0,2390** | **16,48 M** | **31,42** |
+| **DistilSCD — efficience** | **0,2390** | **16,48 M** | **31,42** |
 | | **102,4 %** | **44,4 %** | **27,2 %** |
 
 C'est aussi la comparaison **la moins favorable pour nous** : face à leur chiffre
@@ -157,8 +173,8 @@ donc le **régime réel** ; n'en rapporter qu'un des deux cacherait quelque chos
 
 | Modèle | fp32 | bf16 | Mémoire crête |
 |---|---:|---:|---:|
-| **CSF-Mamba — efficience** (16,48 M) | **129 ms** · 62 paires/s | **114 ms** · 70 paires/s | 1,9–2,0 Go |
-| **CSF-Mamba — performance** (32,58 M) | 144 ms · 56 paires/s | 125 ms · 64 paires/s | 1,9–2,1 Go |
+| **DistilSCD — efficience** (16,48 M) | **129 ms** · 62 paires/s | **114 ms** · 70 paires/s | 1,9–2,0 Go |
+| **DistilSCD — performance** (32,58 M) | 144 ms · 56 paires/s | 125 ms · 64 paires/s | 1,9–2,1 Go |
 | MambaSCD, variante publiée (19,57 M) ‖ | 252 ms · 32 paires/s | 187 ms · 43 paires/s | 4,0–5,3 Go |
 
 Le point d'efficience est **1,95× plus rapide en fp32, 1,65× en bf16**, pour **2,1
@@ -424,7 +440,7 @@ entraînés avec le réglage du reste du modèle (LR constant, pas de warmup dé
 alors qu'ils y sont réputés plus sensibles. C'est la seule objection qui pourrait
 renverser ce résultat, et elle n'a pas été testée.
 
-Le code vit dans `csf_mamba/experimental/`, se lance par
+Le code vit dans `distilscd/experimental/`, se lance par
 `scripts/train_hybrid.sbatch`, tague ses runs `hyb-*` et se documente en détail
 dans **`documentation/hybride.md`**. Sans `--attn-stages`, le modèle de référence
 est inchangé à l'octet près — `tests/test_hybride.py` le vérifie.
@@ -548,13 +564,13 @@ l'identique.
 
 | Modèle | Params | GMACs | **SeK** | Origine des chiffres |
 |---|---:|---:|---:|---|
-| **CSF-Mamba efficience + KD de PerASCD** | **16,48 M** | **31,42** | **0,2620 ± 0,0011** | mesuré, n = 5 |
+| **DistilSCD efficience + KD de PerASCD** | **16,48 M** | **31,42** | **0,2620 ± 0,0011** | mesuré, n = 5 |
 | PerASCD (ViT-G PerA + ViT-Adapter + CG-Decoder) | 548,17 M | ≥ 1 509,7 ¹ | 0,2611 | article PerASCD ; checkpoint reproduit par nous à l'identique |
-| **CSF-Mamba efficience + KD de VMamba-B** | **16,48 M** | **31,42** | **0,2569 ± 0,0018** | mesuré, n = 5 |
+| **DistilSCD efficience + KD de VMamba-B** | **16,48 M** | **31,42** | **0,2569 ± 0,0018** | mesuré, n = 5 |
 | Mamba-FCS | 189,54 M | 263,15 | 0,2550 | article Mamba-FCS, table VI |
 | VMamba-B + CG-Decoder (auteurs de PerASCD) | 113,01 M | ≥ 352,9 ¹ | 0,2531 | checkpoint publié, reproduit (normalisation ImageNet) |
-| CSF-Mamba performance, sans KD | 32,58 M | 58,06 | 0,2485 | mesuré, n = 6 |
-| CSF-Mamba efficience, sans KD | 16,48 M | 31,42 | 0,2390 ± 0,0015 | mesuré, n = 7 |
+| DistilSCD performance, sans KD | 32,58 M | 58,06 | 0,2485 | mesuré, n = 6 |
+| DistilSCD efficience, sans KD | 16,48 M | 31,42 | 0,2390 ± 0,0015 | mesuré, n = 7 |
 | MambaSCD-Tiny, leur checkpoint publié | 37,13 M | 115,44 | 0,2334 | mesuré par nous, même code |
 | MambaSCD-Base | 89,99 M | 211,55 | 0,2292 | article ChangeMamba |
 | MambaSCD-Tiny | 21,51 M | 73,42 | 0,2208 | article ChangeMamba |
@@ -604,7 +620,7 @@ GMACs vérifiés.
 **Pour aller plus loin :** `documentation/distillation.md` contient le plan
 pré-enregistré, le journal daté de chaque vague, tous les chiffres et les
 diagnostics. Les tables finales sont dans `logs/final_tables/`. Le code tient dans
-`scripts/train.py` (options `--kd-*`), `csf_mamba/losses/distill.py`,
+`scripts/train.py` (options `--kd-*`), `distilscd/losses/distill.py`,
 `scripts/teacher/` (évaluation et cache du professeur),
 `scripts/train_kd_second.sbatch` et `scripts/train_kd_landsat.sbatch`.
 
@@ -616,16 +632,17 @@ diagnostics. Les tables finales sont dans `logs/final_tables/`. Le code tient da
 `RUN.md`.**
 
 ```
-csf_mamba/
+distilscd/
   modules/     chessboard, mca_sf, ssm (+fallback), fusion (FFT/CGA), c2s2, cssm
   backbone/    encoder (ConvEncoder CPU + VMambaEncoder cluster)
   decoders/    dysample, binary (Y_BCD + cartes de changement), semantic (partagé + τ)
   losses/      composite (CE + Dice + SeK + L_sc + Lovász)
   datasets/    second, hi_ucd, landsat_scd, transforms (augmentations), oversample
   ema.py       moyenne mobile exponentielle des poids
-  model.py     assemblage CSF-Mamba
+  model.py     assemblage DistilSCDStudent (alias déprécié : CSFMamba)
+csf_mamba/     cale de compatibilité -> distilscd (anciens imports et checkpoints)
 scripts/       train, evaluate, aggregate_seeds, count_gmacs, benchmark_latency, …
-tests/         8 fichiers de tests de non-régression
+tests/         12 fichiers de tests de non-régression
 ```
 
 **Le point qui dé-risque tout : le backend SSM est interchangeable.** `mamba-ssm`

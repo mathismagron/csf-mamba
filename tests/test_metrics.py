@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 from scipy import stats
 
-from csf_mamba.evaluation.metrics import fast_hist, metrics_from_hist
+from distilscd.evaluation.metrics import fast_hist, metrics_from_hist
 
 _ORIG = (
     Path(__file__).resolve().parents[1]

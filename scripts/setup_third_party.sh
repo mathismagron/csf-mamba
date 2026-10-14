@@ -1,7 +1,7 @@
 #!/bin/bash
 # Clone les dépôts de référence dans third_party/ (git-ignoré).
 #
-# Ces dépôts ne font PAS partie du code propre de csf-mamba. Ils servent à :
+# Ces dépôts ne font PAS partie du code propre de DistilSCD. Ils servent à :
 #   - fournir VMamba-Tiny (backbone) via ChangeMamba,
 #   - reproduire les baselines Mamba-FCS / ChessMamba à protocole identique,
 #   - lever verbatim la SeK-loss de Mamba-FCS (§12.1) et le module L1 de CSSM.

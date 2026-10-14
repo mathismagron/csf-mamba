@@ -7,9 +7,9 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from csf_mamba.datasets import DATASETS
-from csf_mamba.datasets.landsat_perascd import LandsatPerASCDDataset
-from csf_mamba.losses.composite import IGNORE_INDEX
+from distilscd.datasets import DATASETS
+from distilscd.datasets.landsat_perascd import LandsatPerASCDDataset
+from distilscd.losses.composite import IGNORE_INDEX
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -127,7 +127,7 @@ def test_fold_list_rejects_bare_names(tmp_path):
 
 
 def test_location_guard():
-    from csf_mamba.datasets.landsat_perascd import assert_location_disjoint, location_of
+    from distilscd.datasets.landsat_perascd import assert_location_disjoint, location_of
     assert location_of("val/From1993To1996_07.png") == "07"
     ok = assert_location_disjoint(train=["train/From1990To1993_00.png"], test=["test/From1994To1999_02.png"])
     assert ok == {"train": {"00"}, "test": {"02"}}

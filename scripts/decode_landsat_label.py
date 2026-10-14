@@ -41,7 +41,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from csf_mamba.datasets.landsat_scd import apparier_dossiers
+from distilscd.datasets.landsat_scd import apparier_dossiers
 
 
 def parse_args():
@@ -255,7 +255,7 @@ def main():
         ok = False
 
     if ok:
-        print(f"\n  TABLE À REPORTER dans csf_mamba/datasets/landsat_scd.py :")
+        print(f"\n  TABLE À REPORTER dans distilscd/datasets/landsat_scd.py :")
         print(f"    TRANSITIONS = {table}")
 
     return 0 if ok else 1

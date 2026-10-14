@@ -11,11 +11,11 @@ sans dataset, sans kernel CUDA.
 
 import torch
 
-from csf_mamba.datasets.hi_ucd import NUM_SEMANTIC_CLASSES
-from csf_mamba.losses.composite import CSFMambaLoss
-from csf_mamba.model import CSFMamba, count_parameters
-from csf_mamba.modules.c2s2 import C2S2Block
-from csf_mamba.modules.chessboard import deinterleave, interleave
+from distilscd.datasets.hi_ucd import NUM_SEMANTIC_CLASSES
+from distilscd.losses.composite import DistilSCDLoss
+from distilscd.model import DistilSCDStudent, count_parameters
+from distilscd.modules.c2s2 import C2S2Block
+from distilscd.modules.chessboard import deinterleave, interleave
 
 B, H, W = 2, 64, 64  # petit pour rester rapide sur CPU
 
@@ -52,7 +52,7 @@ def test_c2s2_preserves_shape():
 
 def test_model_output_shapes():
     """Formes conformes à la spec §7 pour l'encodeur conv (CPU)."""
-    model = CSFMamba(num_semantic_classes=NUM_SEMANTIC_CLASSES, encoder="conv", backend="ref")
+    model = DistilSCDStudent(num_semantic_classes=NUM_SEMANTIC_CLASSES, encoder="conv", backend="ref")
     batch = _dummy_batch()
     out = model(batch["img_t1"], batch["img_t2"])
 
@@ -64,8 +64,8 @@ def test_model_output_shapes():
 
 def test_forward_backward_and_budget():
     """Le backward passe (loss différentiable) et on affiche le budget params."""
-    model = CSFMamba(num_semantic_classes=NUM_SEMANTIC_CLASSES, encoder="conv", backend="ref")
-    criterion = CSFMambaLoss(num_semantic_classes=NUM_SEMANTIC_CLASSES)
+    model = DistilSCDStudent(num_semantic_classes=NUM_SEMANTIC_CLASSES, encoder="conv", backend="ref")
+    criterion = DistilSCDLoss(num_semantic_classes=NUM_SEMANTIC_CLASSES)
     batch = _dummy_batch()
     out = model(batch["img_t1"], batch["img_t2"])
 
@@ -94,7 +94,7 @@ def test_vmamba_constructs_within_budget():
     câblage et le budget paramètres. Skip propre si ChangeMamba n'est pas cloné.
     """
     try:
-        model = CSFMamba(num_semantic_classes=NUM_SEMANTIC_CLASSES, encoder="vmamba_mini")
+        model = DistilSCDStudent(num_semantic_classes=NUM_SEMANTIC_CLASSES, encoder="vmamba_mini")
     except ImportError as exc:
         print(f"⊘ VMamba non disponible (attendu si third_party absent) : {exc}")
         return

@@ -26,7 +26,7 @@ OUT="$SCRATCH/csf-distill/cache/perascd_second_train"
 module load python/3.11 cuda/12.2
 source "$SCRATCH/perascd-venv/bin/activate"
 cd "$REPO"
-echo "== csf-mamba $(git rev-parse --short HEAD) | PerASCD $(git -C "$PERASCD" rev-parse --short HEAD)"
+echo "== distilscd $(git rev-parse --short HEAD) | PerASCD $(git -C "$PERASCD" rev-parse --short HEAD)"
 python -c "import torch, MultiScaleDeformableAttention" \
     || { echo "opérateur déformable absent : lancer d'abord eval_perascd.sbatch"; exit 1; }
 

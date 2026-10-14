@@ -1,4 +1,4 @@
-"""Évaluation d'un checkpoint csf-mamba.
+"""Évaluation d'un checkpoint DistilSCD.
 
 Charge un `best.pt` (ou `last.pt`), calcule le tableau complet des métriques SCD
 sur un split, affiche un diagnostic (fraction de changement prédite vs vérité —
@@ -20,10 +20,10 @@ import torch
 from PIL import Image
 from torch.utils.data import DataLoader
 
-from csf_mamba.datasets import DATASETS
-from csf_mamba.losses.composite import IGNORE_INDEX
-from csf_mamba.evaluation.metrics import SCDEvaluator
-from csf_mamba.model import CSFMamba
+from distilscd.datasets import DATASETS
+from distilscd.losses.composite import IGNORE_INDEX
+from distilscd.evaluation.metrics import SCDEvaluator
+from distilscd.model import DistilSCDStudent
 
 # Palette RGB par classe sémantique (0 = réservé/noir, 1..9 = classes réelles).
 PALETTE = np.array([
@@ -153,7 +153,7 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     dataset_cls, num_classes = DATASETS[args.dataset]
-    model = CSFMamba(num_semantic_classes=num_classes,
+    model = DistilSCDStudent(num_semantic_classes=num_classes,
                      encoder=args.encoder, core=args.core, backend=args.backend,
                      decoder_refine=args.decoder_refine, fusion=args.fusion,
                      cga=args.cga, mcasf=args.mcasf,

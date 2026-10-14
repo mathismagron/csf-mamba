@@ -1,5 +1,7 @@
 # Plan de recherche — architecture Mamba efficiente pour la détection sémantique de changements
 
+> **Note (13 oct. 2026)** : projet renommé **DistilSCD** (paquet `csf_mamba` → `distilscd`, cf. `documentation/rename.md`) ; ce document daté est conservé tel quel.
+
 ### Document de synthèse pour relecture et avis
 
 > Objet : proposer une architecture SCD (Semantic Change Detection) **efficiente** dérivée de Mamba-FCS, en intégrant les idées de quatre travaux récents (CSSM, CDMamba, AtrousMamba, ChessMamba). Ce document résume l'analyse, le raisonnement de conception, l'architecture retenue, la spécification technique, le plan d'ablation, et les points ouverts qui appellent votre avis.

@@ -1,5 +1,7 @@
 # Piste hybride Mamba / Transformer
 
+> **Note (13 oct. 2026)** : projet renommé **DistilSCD** (paquet `csf_mamba` → `distilscd`, cf. `documentation/rename.md`) ; ce document daté est conservé tel quel.
+
 ⚗️ **Hors du cadre initial du stage.** Ce document est séparé du journal de bord,
 et le code correspondant vit dans `csf_mamba/experimental/`. Rien n'est actif par
 défaut : sans `--attn-stages`, le modèle de référence construit exactement les

@@ -28,7 +28,7 @@ mkdir -p "$OUT"
 module load python/3.11 cuda/12.2
 source "$SCRATCH/perascd-venv/bin/activate"
 cd "$REPO"
-echo "== csf-mamba $(git rev-parse --short HEAD) | PerASCD $(git -C "$PERASCD" rev-parse --short HEAD)"
+echo "== distilscd $(git rev-parse --short HEAD) | PerASCD $(git -C "$PERASCD" rev-parse --short HEAD)"
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
 echo "== opérateur déformable"

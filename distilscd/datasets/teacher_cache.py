@@ -55,7 +55,7 @@ class TeacherCacheDataset(Dataset):
             raise ValueError(f"cache inattendu : {lay}")
         self.slices = layout_slices(lay["shape"][1])
         if [tuple(e) for e in self.meta["d4"]["elements_hflip_then_rot90k"]] != D4:
-            raise ValueError("la convention D4 du cache diffère de csf_mamba.distill.d4")
+            raise ValueError("la convention D4 du cache diffère de distilscd.distill.d4")
         self.native = lay["shape"][2]
         ids = [l.strip() for l in (self.dir / "ids.txt").read_text().splitlines() if l.strip()]
         self.row = {name: i for i, name in enumerate(ids)}

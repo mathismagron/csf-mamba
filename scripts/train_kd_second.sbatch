@@ -27,6 +27,10 @@
 #   # même recette, professeur VMamba-B (cache : scripts/teacher/vmambab.sbatch)
 #   MODE=confirm SEED=1 LKD_CHG=8 LKD_SEM=1 KD_T_SEM=2 KD_MASK=all KD_TEACHER=vmambab TAG=kdlogits-vmb \
 #       sbatch --export=ALL,MODE,SEED,LKD_CHG,LKD_SEM,KD_T_SEM,KD_MASK,KD_TEACHER,TAG scripts/train_kd_second.sbatch
+#   # révision (vague A) : baseline sans KD à LR cosinus ; auto-distillation (cache de l'élève)
+#   MODE=confirm SEED=1 LR_SCHED=cosine TAG=nokd-cos sbatch --export=ALL,MODE,SEED,LR_SCHED,TAG scripts/train_kd_second.sbatch
+#   MODE=confirm SEED=2 LKD_CHG=8 LKD_SEM=1 KD_T_SEM=2 KD_MASK=all KD_TEACHER=student TAG=selfkd \
+#       sbatch --export=ALL,MODE,SEED,LKD_CHG,LKD_SEM,KD_T_SEM,KD_MASK,KD_TEACHER,TAG scripts/train_kd_second.sbatch
 #   # + KD de features, professeur en ligne (étape 4) : ≈11 h en criblage (330 s/époque,
 #   # job 4176343) -> walltime allongé ; compiler d'abord MSDA une fois :
 #   #   sbatch scripts/teacher/build_msda_student.sbatch
@@ -50,25 +54,33 @@ KD_MASK="${KD_MASK:-changed}"  # changed | all
 KD_TGT="${KD_TGT:-teacher}"    # cible du terme de changement : teacher | gt | gt_smooth (contrôles)
 LKD_FEAT="${LKD_FEAT:-0}"      # λ KD de features (professeur en ligne)
 KD_FEAT_STAGES="${KD_FEAT_STAGES:-1,2}"  # étages 0..3 = 1/4, 1/8, 1/16, 1/32
-KD_TEACHER="${KD_TEACHER:-perascd}"      # cache des logits : perascd (ViT-G, 548 M) | vmambab (≈113 M)
+KD_TEACHER="${KD_TEACHER:-perascd}"      # cache des logits : perascd (ViT-G, 548 M) | vmambab (≈113 M) | student (auto-distillation)
+KD_SEM_TGT="${KD_SEM_TGT:-teacher}"      # cible sémantique : teacher | gt_ls (contrôle, vérité lissée)
+KD_SEM_EPS="${KD_SEM_EPS:-0.1}"          # ε de gt_ls
+LR_SCHED="${LR_SCHED:-constant}"         # constant (recette) | cosine (baseline de révision)
 TAG="${TAG:?donner un TAG explicite (witness, kdchg-l1, ...)}"
 
 REPO="$HOME/csf-mamba"
 case "$KD_TEACHER" in
     perascd) CACHE_SRC="$SCRATCH/csf-distill/cache/perascd_second_train" ;;
     vmambab) CACHE_SRC="$SCRATCH/csf-distill/cache/vmambab_second_train" ;;
+    student) CACHE_SRC="$SCRATCH/csf-distill/cache/student_second_train" ;;   # scripts/teacher/cache_student.sbatch
     *) echo "⛔ KD_TEACHER inconnu : $KD_TEACHER"; exit 1 ;;
 esac
 OUT="$SCRATCH/csf-distill/runs/${MODE}_${TAG}-s${SEED}"
 mkdir -p "$OUT"
 
 # Recette d'efficience, figée : ligne `== config` des 7 graines de référence.
-RECIPE="weight=1 dice=0 lovasz=0 crop=512 batch=2 x accum=4 enc=vmamba_mini dec=dw fusion=concat cga=1 mcasf=1 up=dysample core=chess deep=0 sek=0 sc=0.1 fft=[0,1] lr=constant rot90=1 photo=0.2 tswap=0.5 ema=0.9998"
+RECIPE="weight=1 dice=0 lovasz=0 crop=512 batch=2 x accum=4 enc=vmamba_mini dec=dw fusion=concat cga=1 mcasf=1 up=dysample core=chess deep=0 sek=0 sc=0.1 fft=[0,1] lr=$LR_SCHED rot90=1 photo=0.2 tswap=0.5 ema=0.9998"
 CONF="$RECIPE seed=$SEED epochs=$EPOCHS mode=$MODE kd_chg=$LKD_CHG t_chg=$KD_T_CHG kd_sem=$LKD_SEM t_sem=$KD_T_SEM mask=$KD_MASK"
 # Ajouté seulement hors défaut : les config.txt de la vague 1 restent valides.
 if [ "$KD_TGT" != "teacher" ]; then
     [ "$LKD_CHG" != "0" ] || { echo "⛔ KD_TGT=$KD_TGT sans LKD_CHG"; exit 1; }
     CONF="$CONF tgt=$KD_TGT"
+fi
+if [ "$KD_SEM_TGT" != "teacher" ]; then
+    [ "$LKD_SEM" != "0" ] || { echo "⛔ KD_SEM_TGT=$KD_SEM_TGT sans LKD_SEM"; exit 1; }
+    CONF="$CONF sem_tgt=$KD_SEM_TGT sem_eps=$KD_SEM_EPS"
 fi
 if [ "$LKD_FEAT" != "0" ]; then
     CONF="$CONF kd_feat=$LKD_FEAT feat_stages=$KD_FEAT_STAGES"
@@ -128,7 +140,7 @@ if [ "$LKD_CHG" != "0" ] || [ "$LKD_SEM" != "0" ]; then
     KD_ARGS=(--kd-cache "$SLURM_TMPDIR/kdcache"
              --lambda-kd-change "$LKD_CHG" --kd-t-change "$KD_T_CHG"
              --lambda-kd-sem "$LKD_SEM" --kd-t-sem "$KD_T_SEM" --kd-sem-mask "$KD_MASK"
-             --kd-change-target "$KD_TGT")
+             --kd-change-target "$KD_TGT" --kd-sem-target "$KD_SEM_TGT" --kd-sem-eps "$KD_SEM_EPS")
 fi
 
 FEAT_ARGS=()
@@ -173,6 +185,6 @@ python -m scripts.train \
     --bcd-change-weight 1 --lambda-dice 0 --lambda-lovasz 0 --lambda-sem-change 0 \
     --rot90 --photometric 0.2 --temporal-swap 0.5 --ema-decay 0.9998 \
     --sek-warmup-iters 0 --lambda-deep 0 --lambda-sek 0 --lambda-sc 0.1 --fft-stages 0,1 \
-    --lr-schedule constant --epochs "$EPOCHS" --seed "$SEED" \
+    --lr-schedule "$LR_SCHED" --epochs "$EPOCHS" --seed "$SEED" \
     "${KD_ARGS[@]}" "${FEAT_ARGS[@]}" \
     --resume auto --output "$OUT"

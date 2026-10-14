@@ -13,6 +13,15 @@ de l'élève — exactement l'opération finale du professeur.
   Masque : `changed` = changé selon la vérité OU selon le professeur ; `all` = toute
   l'image (y compris les zones non-changées, sans étiquette sémantique).
 
+Contrôle de la cible sémantique (`sem_target="gt_ls"`, révision de l'article) : la
+distribution du professeur est remplacée par la vérité terrain lissée en classe et en
+espace — sur un pixel changé étiqueté, (1 − ε)·one-hot + ε/(C − 1) sur les classes 1..C−1 ;
+ailleurs (non-changé ou non étiqueté), la loi uniforme ; puis moyenne à la résolution native
+du professeur et suréchantillonnage bilinéaire, comme `gt_smooth` pour le changement. Même
+masque, même T sur l'élève, même λ : seule l'information du professeur disparaît. ε est
+choisi pour égaler la confiance moyenne du professeur sur la classe vraie
+(`scripts/kd_control_eps.py`).
+
 Les valeurs rapportées sont des divergences (≥ 0, nulles quand l'élève reproduit le
 professeur) : on retranche l'entropie du professeur à la BCE, ce qui ne change pas
 le gradient mais rend le terme lisible dans les logs.
@@ -26,6 +35,8 @@ EPS = 1e-8
 
 
 CHANGE_TARGETS = ("teacher", "gt", "gt_smooth")
+SEM_TARGETS = ("teacher", "gt_ls")
+IGNORE = 255
 
 
 class DistillLoss(nn.Module):
@@ -43,8 +54,13 @@ class DistillLoss(nn.Module):
 
     def __init__(self, lambda_change: float = 0.0, t_change: float = 1.0,
                  lambda_sem: float = 0.0, t_sem: float = 2.0, sem_mask: str = "changed",
-                 change_target: str = "teacher"):
+                 change_target: str = "teacher", sem_target: str = "teacher", sem_eps: float = 0.1):
         super().__init__()
+        if sem_target not in SEM_TARGETS:
+            raise ValueError(sem_target)
+        if not 0.0 <= sem_eps <= 1.0:
+            raise ValueError(f"sem_eps hors de [0, 1] : {sem_eps}")
+        self.sem_target, self.sem_eps = sem_target, sem_eps
         if sem_mask not in ("changed", "all"):
             raise ValueError(sem_mask)
         if change_target not in CHANGE_TARGETS:
@@ -65,11 +81,29 @@ class DistillLoss(nn.Module):
         low = F.adaptive_avg_pool2d(gt[:, None], native)
         return F.interpolate(low, size=size, mode="bilinear", align_corners=False)[:, 0].clamp(0, 1)
 
+    def _sem_gt_target(self, sem_gt, C, native, size):
+        """Cible GT lissée (classes 1..C−1), (B, C−1, H, W), somme 1 par pixel."""
+        k = C - 1
+        lab = sem_gt.long()
+        if lab.shape[-2:] != size:
+            lab = F.interpolate(lab[:, None].float(), size=size, mode="nearest")[:, 0].long()
+        valid = (lab >= 1) & (lab <= k)
+        onehot = F.one_hot((lab - 1).clamp(0, k - 1), k).permute(0, 3, 1, 2).float()
+        eps = self.sem_eps
+        q = (1 - eps) * onehot + eps / k
+        q = torch.where(valid[:, None], q, torch.full_like(q, 1.0 / k))
+        low = F.adaptive_avg_pool2d(q, native)
+        q = F.interpolate(low, size=size, mode="bilinear", align_corners=False).clamp(min=0)
+        return q / q.sum(1, keepdim=True).clamp(min=EPS)
+
     @property
     def active(self) -> bool:
         return self.lambda_change > 0 or self.lambda_sem > 0
 
-    def forward(self, outputs: dict, teacher: torch.Tensor, change_gt: torch.Tensor) -> dict:
+    def forward(self, outputs: dict, teacher: torch.Tensor, change_gt: torch.Tensor,
+                sem_gt: tuple | None = None) -> dict:
+        """`sem_gt` = (sem_t1, sem_t2) de la vérité (1..C−1, 255 ignoré) : requis par
+        `sem_target="gt_ls"`, ignoré sinon."""
         size = outputs["bcd"].shape[-2:]
         tz = F.interpolate(teacher.float(), size=size, mode="bilinear", align_corners=False)
         # 2C + 1 canaux : C classes par date (0 = non-changé), puis le logit de changement.
@@ -94,10 +128,17 @@ class DistillLoss(nn.Module):
                 mask = ((change_gt == 1) | (tz[:, ch] > 0)).float()
             denom = mask.sum().clamp(min=1.0)
             total = 0.0
-            for key, sl in (("sem_t1", slice(1, C)), ("sem_t2", slice(C + 1, 2 * C))):
-                logq = F.log_softmax(tz[:, sl] / T, dim=1)
+            if self.sem_target == "gt_ls" and sem_gt is None:
+                raise ValueError("sem_target='gt_ls' sans sem_gt")
+            for i, (key, sl) in enumerate((("sem_t1", slice(1, C)), ("sem_t2", slice(C + 1, 2 * C)))):
+                if self.sem_target == "teacher":
+                    logq = F.log_softmax(tz[:, sl] / T, dim=1)
+                    q = logq.exp()
+                else:
+                    q = self._sem_gt_target(sem_gt[i], C, teacher.shape[-2:], size)
+                    logq = torch.log(q + EPS)
                 logp = F.log_softmax(outputs[key][:, 1:C] / T, dim=1)
-                kl = (logq.exp() * (logq - logp)).sum(1)
+                kl = (q * (logq - logp)).sum(1)
                 total = total + (kl * mask).sum() / denom
             terms["kd_sem"] = self.lambda_sem * T * T * total / 2
         return terms

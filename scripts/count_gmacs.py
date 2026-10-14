@@ -46,9 +46,9 @@ from fvcore.nn import flop_count, parameter_count
 from fvcore.nn.jit_handles import einsum_flop_jit, get_shape
 log("fvcore importé")
 
-from csf_mamba.datasets import DATASETS
-from csf_mamba.model import CSFMamba
-log("csf_mamba importé")
+from distilscd.datasets import DATASETS
+from distilscd.model import DistilSCDStudent
+log("distilscd importé")
 
 _CHANGEMAMBA = Path(__file__).resolve().parents[1] / "third_party" / "ChangeMamba"
 
@@ -147,7 +147,7 @@ def main():
     log(f"CUDA disponible : {torch.cuda.get_device_name(0)}")
 
     _, num_classes = DATASETS[args.dataset]
-    model = CSFMamba(num_semantic_classes=num_classes,
+    model = DistilSCDStudent(num_semantic_classes=num_classes,
                      encoder=args.encoder, core=args.core, backend="mamba",
                      decoder_refine=args.decoder_refine, fusion=args.fusion,
                      cga=args.cga, mcasf=args.mcasf, upsample=args.upsample)

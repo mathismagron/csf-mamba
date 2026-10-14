@@ -18,7 +18,7 @@ import torch
 
 # Enregistrement des tirages géométriques, pour la distillation hors ligne.
 # Si l'échantillon contient la clé AUG_KEY (tenseur long de 6 entiers, mis par
-# `csf_mamba.datasets.teacher_cache.TeacherCacheDataset`), chaque transform y
+# `distilscd.datasets.teacher_cache.TeacherCacheDataset`), chaque transform y
 # écrit ce qu'il a tiré : [hflip, vflip, k_rot90, swap, top, left]. Sans cette
 # clé, rien n'est écrit et le tirage aléatoire est strictement le même : les runs
 # sans KD restent reproductibles à l'identique.

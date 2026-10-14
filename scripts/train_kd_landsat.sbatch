@@ -8,7 +8,7 @@
 #SBATCH --output=logs/csf-kd-lsat-%j.out
 #
 # Distillation, deuxième jeu : Landsat-SCD dans la version prétraitée de PerASCD
-# (LandsatSCD512, csf_mamba/datasets/landsat_perascd.py). Même élève, même recette
+# (LandsatSCD512, distilscd/datasets/landsat_perascd.py). Même élève, même recette
 # que scripts/train_kd_second.sbatch — seuls changent les données et le protocole de
 # sélection, parce que ce jeu a un vrai split de validation :
 #
@@ -34,6 +34,15 @@
 # de référence. Les runs de l'étude utilisent FOLD=0..3 (splits/LandsatSCD_loc, disjoints par
 # emplacement) ; sortie landsat_f<F>_<TAG>-s<SEED>, cache <teacher>_landsat_f<F>_train.
 #   FOLD=0 SEED=1 EPOCHS=600 TAG=pilot sbatch --time=14:00:00 --export=ALL,FOLD,SEED,EPOCHS,TAG scripts/train_kd_landsat.sbatch
+#
+# Révision (vague A), plis 1–3, 100 époques :
+#   # auto-distillation : professeur = élève sans KD du pli (graine 1) -> cache student_landsat_f<F>_train
+#   FOLD=1 SEED=2 EPOCHS=100 LKD_CHG=8 LKD_SEM=1 KD_T_SEM=2 KD_MASK=all KD_TEACHER=student TAG=selfkd \
+#       sbatch --export=ALL,FOLD,SEED,EPOCHS,LKD_CHG,LKD_SEM,KD_T_SEM,KD_MASK,KD_TEACHER,TAG scripts/train_kd_landsat.sbatch
+#   # contrôle « vérité seule » : mêmes λ/T/masque, cibles = vérité lissée (changement) et
+#   # lissage d'étiquettes apparié (sémantique) ; cache PerASCD lu mais jamais utilisé comme cible
+#   FOLD=1 SEED=1 EPOCHS=100 LKD_CHG=8 LKD_SEM=1 KD_T_SEM=2 KD_MASK=all KD_TGT=gt_smooth KD_SEM_TGT=gt_ls TAG=ctl-gt \
+#       sbatch --export=ALL,FOLD,SEED,EPOCHS,LKD_CHG,LKD_SEM,KD_T_SEM,KD_MASK,KD_TGT,KD_SEM_TGT,TAG scripts/train_kd_landsat.sbatch
 # Reprise automatique sur last.pt : si le walltime tombe, resoumettre la même ligne.
 set -euo pipefail
 
@@ -45,6 +54,9 @@ LKD_SEM="${LKD_SEM:-0}"
 KD_T_SEM="${KD_T_SEM:-2}"
 KD_MASK="${KD_MASK:-changed}"
 KD_TEACHER="${KD_TEACHER:-perascd}"   # cache : $SCRATCH/csf-distill/cache/<teacher>_landsat[_f<F>]_train
+KD_TGT="${KD_TGT:-teacher}"            # cible du changement : teacher | gt | gt_smooth (contrôles)
+KD_SEM_TGT="${KD_SEM_TGT:-teacher}"    # cible sémantique : teacher | gt_ls (contrôle)
+KD_SEM_EPS="${KD_SEM_EPS:-auto}"       # ε de gt_ls ; auto = apparié au professeur (scripts/kd_control_eps.py)
 FOLD="${FOLD:-}"                       # 0..3 : pli disjoint par emplacement ; vide = split d'origine (fuit)
 TAG="${TAG:?donner un TAG explicite (base, kdlogits, ...)}"
 
@@ -73,6 +85,12 @@ if [ "$LKD_CHG" != "0" ] || [ "$LKD_SEM" != "0" ]; then
     CACHE_SRC="$SCRATCH/csf-distill/cache/$CACHE_NAME"
     [ -f "$CACHE_SRC/meta.json" ] || { echo "⛔ cache professeur absent : $CACHE_SRC"; exit 1; }
     CONF="$CONF kd_chg=$LKD_CHG t_chg=$KD_T_CHG kd_sem=$LKD_SEM t_sem=$KD_T_SEM mask=$KD_MASK teacher=$KD_TEACHER"
+    # Ajoutés seulement hors défaut : les config.txt des runs existants restent valides.
+    if [ "$KD_TGT" != "teacher" ]; then CONF="$CONF tgt=$KD_TGT"; fi
+    if [ "$KD_SEM_TGT" != "teacher" ]; then
+        [ "$LKD_SEM" != "0" ] || { echo "⛔ KD_SEM_TGT=$KD_SEM_TGT sans LKD_SEM"; exit 1; }
+        CONF="$CONF sem_tgt=$KD_SEM_TGT sem_eps=$KD_SEM_EPS"
+    fi
 fi
 echo "== config : $CONF -> $OUT =="
 STAMP="$OUT/config.txt"
@@ -104,9 +122,24 @@ if [ -n "${CACHE_SRC:-}" ]; then
     t0=$(date +%s)
     cp -r "$CACHE_SRC" "$SLURM_TMPDIR/kdcache"
     echo "   $(( $(date +%s) - t0 )) s"
+    EPS_ARG=()
+    if [ "$KD_SEM_TGT" = "gt_ls" ]; then
+        if [ "$KD_SEM_EPS" = "auto" ]; then
+            [ -n "$FOLD" ] || { echo "⛔ KD_SEM_EPS=auto n'est prévu que pour les plis"; exit 1; }
+            python scripts/kd_control_eps.py --cache "$SLURM_TMPDIR/kdcache" --dataset landsat_perascd \
+                --data-root "$DATA_ROOT" --ids-file "$FD/train.txt" --t-sem "$KD_T_SEM" \
+                --out "$OUT/kd_control_eps.json"
+            KD_SEM_EPS_VAL=$(python -c "import json,sys; print(json.load(open(sys.argv[1]))['eps'])" "$OUT/kd_control_eps.json")
+        else
+            KD_SEM_EPS_VAL="$KD_SEM_EPS"
+        fi
+        echo "   contrôle gt_ls : ε = $KD_SEM_EPS_VAL"
+        EPS_ARG=(--kd-sem-eps "$KD_SEM_EPS_VAL")
+    fi
     KD_ARGS=(--kd-cache "$SLURM_TMPDIR/kdcache"
              --lambda-kd-change "$LKD_CHG" --kd-t-change "$KD_T_CHG"
-             --lambda-kd-sem "$LKD_SEM" --kd-t-sem "$KD_T_SEM" --kd-sem-mask "$KD_MASK")
+             --lambda-kd-sem "$LKD_SEM" --kd-t-sem "$KD_T_SEM" --kd-sem-mask "$KD_MASK"
+             --kd-change-target "$KD_TGT" --kd-sem-target "$KD_SEM_TGT" "${EPS_ARG[@]}")
 fi
 
 python -m scripts.train \

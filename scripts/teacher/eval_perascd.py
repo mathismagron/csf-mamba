@@ -44,8 +44,8 @@ from torch.utils.data import DataLoader, Dataset
 
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
-from csf_mamba.datasets.second import _map_semantic  # noqa: E402
-from csf_mamba.evaluation.metrics import SCDEvaluator, metrics_from_hist  # noqa: E402
+from distilscd.datasets.second import _map_semantic  # noqa: E402
+from distilscd.evaluation.metrics import SCDEvaluator, metrics_from_hist  # noqa: E402
 
 NUM_CLASSES = 7                      # 0 = non-changé, 1..6 = classes réelles
 PERA_MEAN = (0.3585, 0.3741, 0.3155)  # legacy/datasets/RS_ST.py, DataPerAAUG

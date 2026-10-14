@@ -49,8 +49,8 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO))
 import eval_perascd as ev  # noqa: E402
-from csf_mamba.datasets.landsat_perascd import assert_location_disjoint  # noqa: E402
-from csf_mamba.evaluation.metrics import metrics_from_hist  # noqa: E402
+from distilscd.datasets.landsat_perascd import assert_location_disjoint  # noqa: E402
+from distilscd.evaluation.metrics import metrics_from_hist  # noqa: E402
 
 NUM_CLASSES = 5
 RECIPE = {

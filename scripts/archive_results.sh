@@ -58,7 +58,7 @@ python -m scripts.aggregate_seeds --ref second_mini_chess_crop512-nosek --min-ep
 
 echo "== manifeste =="
 {
-    echo "Archive CSF-Mamba — $(date -Iseconds)"
+    echo "Archive DistilSCD — $(date -Iseconds)"
     echo "Dépôt git : $(git -C "$HOME/csf-mamba" rev-parse HEAD 2>/dev/null || echo inconnu)"
     echo
     echo "Runs archivés :"

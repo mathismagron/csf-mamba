@@ -19,11 +19,11 @@ import random
 import torch
 from torch import nn
 
-from csf_mamba.datasets.transforms import (
+from distilscd.datasets.transforms import (
     Compose, PhotometricJitter, RandomCrop, RandomFlip, RandomRot90,
     RandomTemporalSwap, train_transform,
 )
-from csf_mamba.ema import ModelEMA
+from distilscd.ema import ModelEMA
 
 H = W = 16
 

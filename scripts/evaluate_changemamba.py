@@ -33,8 +33,8 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-from csf_mamba.datasets import DATASETS
-from csf_mamba.evaluation.metrics import SCDEvaluator
+from distilscd.datasets import DATASETS
+from distilscd.evaluation.metrics import SCDEvaluator
 
 _CHANGEMAMBA = Path(__file__).resolve().parents[1] / "third_party" / "ChangeMamba"
 

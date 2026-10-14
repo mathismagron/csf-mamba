@@ -1,4 +1,9 @@
-# Lancer csf-mamba sur Narval (Alliance Canada)
+# Lancer DistilSCD sur Narval (Alliance Canada)
+
+> Projet renommé CSF-Mamba -> DistilSCD le 13 oct. 2026 (paquet Python `distilscd`).
+> Les chemins du cluster gardent volontairement leur ancien nom (`$HOME/csf-mamba`,
+> `$SCRATCH/csf-venv-cu12`, `$SCRATCH/csf-mamba-runs`) : les sbatch et les runs
+> existants en dépendent. Détails et commandes de migration : `documentation/rename.md`.
 
 Cluster GPU **A100**. Allocation classique **`def-hervete`** (Prof. Eric Hervet).
 
@@ -15,7 +20,8 @@ Cluster GPU **A100**. Allocation classique **`def-hervete`** (Prof. Eric Hervet)
 ## Installation (une fois, sur un nœud de CONNEXION — internet requis)
 
 ```bash
-cd $HOME && git clone <url-du-repo> csf-mamba && cd csf-mamba
+# garder le nom de dossier csf-mamba : les sbatch utilisent REPO=$HOME/csf-mamba
+cd $HOME && git clone https://github.com/mathismagron/distilscd.git csf-mamba && cd csf-mamba
 bash scripts/setup_third_party.sh                       # VMamba (ChangeMamba)
 bash scripts/setup_env.sh                               # venv cu12 + kernels
 bash scripts/download_pretrained.sh $SCRATCH/pretrained_weight
@@ -53,7 +59,7 @@ Vérifier le loader sur les vraies données (attendu : **2 968** train / **1 694
 test, soit le split officiel) :
 ```bash
 python -c "
-from csf_mamba.datasets import DATASETS
+from distilscd.datasets import DATASETS
 cls, n = DATASETS['second']
 for s in ['train','test']:
     ds = cls('$SCRATCH/SECOND', s); print(s, len(ds), 'paires')

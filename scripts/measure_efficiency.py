@@ -33,7 +33,7 @@ from pathlib import Path
 
 import torch
 
-from csf_mamba.model import CSFMamba, count_parameters
+from distilscd.model import DistilSCDStudent, count_parameters
 
 DTYPES = {"fp32": None, "bf16": torch.bfloat16, "fp16": torch.float16}
 PERA_MEAN = (0.3585, 0.3741, 0.3155)
@@ -42,7 +42,7 @@ PERA_STD = (0.1483, 0.1283, 0.1198)
 
 def build_student():
     # Point d'efficience : recette figée de train_kd_second.sbatch.
-    m = CSFMamba(num_semantic_classes=7, encoder="vmamba_mini", core="chess", backend="mamba",
+    m = DistilSCDStudent(num_semantic_classes=7, encoder="vmamba_mini", core="chess", backend="mamba",
                  decoder_refine="dw", fft_stages=(0, 1), fusion="concat", cga=True, mcasf=True,
                  upsample="dysample")
     assert type(m.c2s2[0]).__name__ == "ConcatFusion"
@@ -54,7 +54,7 @@ class TeacherWrapper(torch.nn.Module):
 
     def __init__(self, root, ckpt):
         super().__init__()
-        from csf_mamba.distill.online_teacher import _eval_module
+        from distilscd.distill.online_teacher import _eval_module
         ev = _eval_module()
         PerASCD, _, _, compiled = ev.import_legacy(Path(root).resolve(), "cuda")
         self.model = PerASCD(in_channels=3, num_classes=ev.NUM_CLASSES, input_size=448,

@@ -1,4 +1,4 @@
-"""CSF-Mamba : assemblage de bout en bout (spec §7 du plan).
+"""DistilSCD : assemblage de bout en bout (spec §7 du plan).
 
     encodeur siamois  ->  {X^T1_i}, {X^T2_i}
     C²S²-Block/stage  ->  Z_i  (fusion bi-temporelle)
@@ -11,7 +11,7 @@ Note SCD/SeK : le réseau produit les logits sémantiques par date. La carte SCD
 la carte de changement (comme Mamba-FCS). Cette construction n'est pas encore
 câblée ici — elle doit être reprise verbatim du dépôt Mamba-FCS pour garantir la
 comparabilité (§12.1). Tant qu'elle manque, la loss saute proprement les termes
-SeK/mIoU (voir CSFMambaLoss).
+SeK/mIoU (voir DistilSCDLoss).
 """
 
 import torch
@@ -24,7 +24,7 @@ from .modules.c2s2 import C2S2Block, ConcatFusion
 from .modules.fusion import FFTBranch
 
 
-class CSFMamba(nn.Module):
+class DistilSCDStudent(nn.Module):
     def __init__(
         self,
         num_semantic_classes: int = 10,  # convention A : 0 réservé, 1..9 réelles
@@ -142,3 +142,9 @@ def count_parameters(model: nn.Module) -> dict:
         breakdown[name] = sum(p.numel() for p in child.parameters())
     breakdown["total"] = sum(p.numel() for p in model.parameters())
     return breakdown
+
+
+# Ancien nom (projet renommé CSF-Mamba -> DistilSCD le 13 oct. 2026, cf.
+# documentation/rename.md). Alias conservé pour le code et les checkpoints
+# existants ; préférer `DistilSCDStudent` dans tout nouveau code.
+CSFMamba = DistilSCDStudent

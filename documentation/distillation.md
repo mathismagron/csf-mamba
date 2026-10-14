@@ -1,5 +1,7 @@
 # Distillation PerASCD → CSF-Mamba — état des lieux et plan
 
+> **Note (13 oct. 2026)** : projet renommé **DistilSCD** (paquet `csf_mamba` → `distilscd`, cf. `documentation/rename.md`) ; ce document daté est conservé tel quel.
+
 Rédigé le 25 septembre 2026, **avant toute ligne de code**. Même méthode que
 `landsat-scd.md` et `hybride.md` : ce qui a été vérifié, ce qui ne l'a pas été,
 le plan chiffré, et les critères de lecture fixés d'avance.
@@ -716,6 +718,20 @@ Plis 1–3 relancés après l'erreur `$$F` (≈ 6,4 h chacun, pic 21–24 Go ; t
 - Fichiers : `logs/landsat_loc/analyse/landsat_loc_kd_{runs,folds,stats}.csv` (non suivis par git : `logs/` est ignoré) ; figure `documentation/distillation_landsat_folds.{png,pdf}`.
 
 ![KD sur Landsat par pli ; gain contre avance du professeur](distillation_landsat_folds.png)
+
+### Article JSTARS : premier brouillon et relecture interne (13 oct.)
+
+- **Renommage** : CSF-Mamba devient **DistilSCD** (paquet `distilscd/`, cale `csf_mamba/` pour les anciens imports ; chemins Narval inchangés) — `documentation/rename.md`. 60 tests passent.
+- **Revue visée** : IEEE JSTARS (accès ouvert, frais de publication de 1 800 à 2 160 USD selon la source, à confirmer ; numéro spécial « Foundation Models and Agents in Earth Observation » ouvert jusqu'au 31 déc. 2026) — `paper/venue.md`.
+- **Chaîne de provenance** : `paper/scripts/build_tables.py` (logs → `paper/tables/*.csv`), `make_numbers.py` (CSV → 272 macros LaTeX), `make_tables_tex.py`, `make_supp_tables.py`, `make_figures.py`, `check_numbers.py` (chaque nombre du texte est une macro ou un littéral sourcé dans `paper/notes/literal_numbers.csv` ; 0 problème).
+- **Bibliographie** : 108 entrées vérifiées (CrossRef / arXiv) ; travail le plus proche : BFD (TGRS 2025, distillation de features de modèles de fondation pour la CD binaire) et CDKD (JSTARS 2024). Vérification des chiffres publiés : le 23,94 de SCanNet est sur un découpage non officiel (593 paires) → remplacé par le réentraînement de PerASCD (23,18) ; la colonne « F1 » de ChangeMamba n'est pas le Fscd → omise.
+- **Brouillon** : `paper/main.tex` (13 pages, 6 figures, 7 tables) et `paper/supplement.tex` (6 pages). Fig. 7 (cartes qualitatives) en attente du job `paper/scripts/qualitative.sbatch`.
+- **Relecture interne** (3 relecteurs indépendants) : **révision majeure** à l'unanimité. Corrigé dans le texte : équivalence TOST à ±0,25 SeK (au lieu de « égale », p = 0,02) ; « pré-enregistré » → « spécifié à l'avance » ; corrélation gain/avance du professeur ramenée à « un professeur n'a pas besoin de battre l'élève » ; « pas de pénalité d'écart de capacité » retiré ; Wilcoxon sur paires pli×graine retiré (pseudo-réplication) ; vocabulaire « fuite » → « recouvrement train/test ». Synthèse : `paper/notes/internal_review_round1.md`.
+- **Expériences demandées, non lancées** : (1) contrôle d'auto-distillation (l'élève comme son propre professeur) — jugé potentiellement rédhibitoire ; (2) contrôles vérité terrain à λ_chg = 8 + lissage d'étiquettes sur les plis Landsat ; (3) baseline à LR cosinus ; (4) cartes qualitatives. ≈ 85 A100-h pour (1)–(3).
+
+### Révision : vague A d'expériences (14 oct.)
+
+Décision : lancer les contrôles demandés par les trois relecteurs internes — auto-distillation (professeur = élève sans KD), contrôle « vérité seule » à la configuration retenue sur les plis Landsat 1–3 (vérité lissée + lissage d'étiquettes apparié au professeur), baseline à LR cosinus, cartes qualitatives. ≈ 77 A100-h. Plan, justification des choix, commandes Narval et lecture prévue des résultats (fixée avant de les voir) : `documentation/revision_vague_a.md`. Code testé localement (63 tests ; entraînement de bout en bout sur données synthétiques avec les nouvelles cibles).
 
 ## 5. Risques qui pourraient invalider la comparaison
 

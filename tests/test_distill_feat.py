@@ -3,7 +3,7 @@
 1. `FeatureDistillLoss` : nulle quand le professeur vaut la sortie de l'adaptateur,
    ≈ 1 pour des features indépendantes, invariante à une échelle / un biais du
    professeur (LayerNorm sur les canaux), gradient vers l'élève ET l'adaptateur.
-2. `CSFMamba(return_encoder_feats)` : désactivé, sorties inchangées ; activé, les
+2. `DistilSCDStudent(return_encoder_feats)` : désactivé, sorties inchangées ; activé, les
    features exposées sont celles de l'encodeur.
 3. (si PERASCD_ROOT est défini) `OnlineTeacherEncoder` ViT-B aléatoire : 4 échelles
    aux tailles de l'élève, fp16, sans gradient, deux dates cohérentes avec un
@@ -15,8 +15,8 @@ import os
 
 import torch
 
-from csf_mamba.losses.distill import FeatureDistillLoss
-from csf_mamba.model import CSFMamba
+from distilscd.losses.distill import FeatureDistillLoss
+from distilscd.model import DistilSCDStudent
 
 CH = (96, 192, 384, 768)
 
@@ -52,7 +52,7 @@ def test_feature_loss_properties():
 
 def test_model_encoder_feats_flag():
     torch.manual_seed(0)
-    m = CSFMamba(num_semantic_classes=7, encoder="conv", backend="ref").eval()
+    m = DistilSCDStudent(num_semantic_classes=7, encoder="conv", backend="ref").eval()
     a, b = torch.rand(1, 3, 64, 64), torch.rand(1, 3, 64, 64)
     with torch.no_grad():
         o0 = m(a, b)
@@ -72,7 +72,7 @@ def test_online_teacher_vitb():
     if not root:
         print("  (PERASCD_ROOT absent : test du professeur en ligne sauté)")
         return
-    from csf_mamba.distill.online_teacher import OnlineTeacherEncoder
+    from distilscd.distill.online_teacher import OnlineTeacherEncoder
     t = OnlineTeacherEncoder(root, "none", arch="ViT-B/16", msda="pytorch")
     a, b = torch.rand(2, 3, 64, 64), torch.rand(2, 3, 64, 64)
     f1, f2 = t(a, b)
